@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx vue-tsc *)",
+      "Bash(npm install *)",
+      "Bash(docker compose *)",
+      "Bash(ls /c/php*)",
+      "Read(//mnt/**)",
+      "Bash(curl -s -X POST http://localhost:8000/api/auth/login -H \"Content-Type: application/json\" -H \"Origin: http://localhost:5173\" -d '{\"email\":\"admin@umag.cl\",\"password\":\"admin123\"}')",
+      "Bash(node -e ' *)",
+      "Bash(curl -s -w '\\\\nHTTP %{http_code}\\\\n' -X POST http://localhost:8000/api/usuarios -H 'Authorization: Bearer 2|T6KnciREUdBeZO3egRuLrtzhM1T1njzmeNKF1fNye219eb20' -H 'Accept: application/json' -H 'Content-Type: application/json' -d '{\"rut\":\"12.345.678-9\",\"nombre\":\"Bad\",\"apellido\":\"Rut\",\"tipo\":\"estudiante\"}')",
+      "Bash(curl -s http://localhost:8000/api/usuarios -H 'Authorization: Bearer 2|T6KnciREUdBeZO3egRuLrtzhM1T1njzmeNKF1fNye219eb20' -H 'Accept: application/json')",
+      "Bash(npx playwright *)",
+      "Bash(npm init *)",
+      "Bash(node test_usuarios.js)"
+    ]
+  }
+}
