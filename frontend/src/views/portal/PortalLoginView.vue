@@ -1,16 +1,21 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
+import { useUsuarioAuthStore } from '@/stores/usuarioAuth'
+import { formatRut } from '@/composables/useRut'
 
-const email = ref('admin@umag.cl')
+const rut = ref('')
 const password = ref('')
-const auth = useAuthStore()
+const auth = useUsuarioAuthStore()
 const router = useRouter()
 
+function onRutInput(event: Event) {
+  rut.value = formatRut((event.target as HTMLInputElement).value)
+}
+
 async function onSubmit() {
-  const ok = await auth.login(email.value, password.value)
-  if (ok) router.push({ name: 'dashboard' })
+  const ok = await auth.login(rut.value, password.value)
+  if (ok) router.push({ name: 'portal-home' })
 }
 </script>
 
@@ -25,20 +30,22 @@ async function onSubmit() {
           B
         </div>
         <h1 class="text-2xl font-serif font-semibold text-biblioteca-900">Biblioteca UMAG</h1>
-        <p class="mt-1 text-sm text-biblioteca-600">Panel de administración</p>
+        <p class="mt-1 text-sm text-biblioteca-600">Portal del usuario</p>
       </div>
 
       <form @submit.prevent="onSubmit" class="bg-white border border-biblioteca-200 rounded-xl shadow-sm p-6 sm:p-8 space-y-5">
         <div>
-          <label for="email" class="block text-sm font-medium text-biblioteca-800 mb-1.5">Correo institucional</label>
+          <label for="rut" class="block text-sm font-medium text-biblioteca-800 mb-1.5">RUT</label>
           <input
-            id="email"
-            v-model="email"
-            type="email"
+            id="rut"
+            :value="rut"
+            @input="onRutInput"
+            type="text"
             required
+            maxlength="12"
             autocomplete="username"
             class="w-full rounded-lg border border-biblioteca-200 bg-biblioteca-50/50 px-3.5 py-2.5 text-sm text-biblioteca-900 placeholder:text-biblioteca-400 focus:outline-none focus:ring-2 focus:ring-biblioteca-500 focus:border-transparent"
-            placeholder="nombre@umag.cl"
+            placeholder="12.345.678-5"
           />
         </div>
 
@@ -72,8 +79,8 @@ async function onSubmit() {
         Sistema interno · Universidad de Magallanes
       </p>
       <p class="mt-3 text-center text-sm">
-        <router-link :to="{ name: 'portal-login' }" class="text-acento-600 hover:text-acento-500 font-medium hover:underline">
-          ¿Eres estudiante, docente o funcionario? Ingresa aquí
+        <router-link :to="{ name: 'login' }" class="text-acento-600 hover:text-acento-500 font-medium hover:underline">
+          ¿Eres personal de biblioteca? Ingresa aquí
         </router-link>
       </p>
     </div>

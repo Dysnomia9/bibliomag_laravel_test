@@ -14,7 +14,17 @@ class Libro extends Model
     protected $fillable = [
         'codigo_barras',
         'titulo',
+        'autor',
+        'categoria',
+        'disponible',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'disponible' => 'boolean',
+        ];
+    }
 
     public function reservas()
     {

@@ -65,18 +65,42 @@ class SeedMockupData extends Command
         'Producción Animal',
     ];
 
-    /** Catálogo con código de barras — usado para la reserva de libros por escaneo */
-    private array $librosConCodigo = [
-        '9789561228351' => 'Introducción a la Programación en Python',
-        '9789706868824' => 'Cálculo Diferencial e Integral - Stewart',
-        '9786073237826' => 'Física Universitaria - Sears & Zemansky',
-        '9786071509789' => 'Álgebra Lineal - Grossman',
-        '9786071513939' => 'Química General - Chang',
-        '9789563160215' => 'Historia de la Patagonia',
-        '9789562827164' => 'Botánica Austral',
-        '9789561224100' => 'Derecho Constitucional Chileno',
-        '9789562014533' => 'Enfermería Comunitaria',
-        '9789561420311' => 'Ecología y Medio Ambiente',
+    /** Catálogo completo de biblioteca (título/autor/área) para el portal de usuario — adaptado de DEPRECATED/catalogo/page.tsx */
+    private array $catalogoLibros = [
+        ['codigo' => '9789561228351', 'titulo' => 'Introducción a la Programación en Python', 'autor' => 'John V. Guttag', 'categoria' => 'Computación'],
+        ['codigo' => '9789706868824', 'titulo' => 'Cálculo Diferencial e Integral - Stewart', 'autor' => 'James Stewart', 'categoria' => 'Matemáticas'],
+        ['codigo' => '9786073237826', 'titulo' => 'Física Universitaria - Sears & Zemansky', 'autor' => 'Hugh D. Young', 'categoria' => 'Física'],
+        ['codigo' => '9786071509789', 'titulo' => 'Álgebra Lineal - Grossman', 'autor' => 'Stanley Grossman', 'categoria' => 'Matemáticas'],
+        ['codigo' => '9786071513939', 'titulo' => 'Química General - Chang', 'autor' => 'Raymond Chang', 'categoria' => 'Química'],
+        ['codigo' => '9789563160215', 'titulo' => 'Historia de la Patagonia', 'autor' => 'Mateo Martinic', 'categoria' => 'Historia'],
+        ['codigo' => '9789562827164', 'titulo' => 'Botánica Austral', 'autor' => 'Carlos Zöllner', 'categoria' => 'Biología'],
+        ['codigo' => '9789561224100', 'titulo' => 'Derecho Constitucional Chileno', 'autor' => 'Humberto Nogueira', 'categoria' => 'Derecho'],
+        ['codigo' => '9789562014533', 'titulo' => 'Enfermería Comunitaria', 'autor' => 'Marcia Padilla', 'categoria' => 'Enfermería'],
+        ['codigo' => '9789561420311', 'titulo' => 'Ecología y Medio Ambiente', 'autor' => 'Eugene Odum', 'categoria' => 'Biología'],
+        ['titulo' => 'Estructuras de Datos y Algoritmos', 'autor' => 'Robert Sedgewick', 'categoria' => 'Computación'],
+        ['titulo' => 'Redes de Computadores', 'autor' => 'Andrew Tanenbaum', 'categoria' => 'Computación'],
+        ['titulo' => 'Ingeniería de Software', 'autor' => 'Ian Sommerville', 'categoria' => 'Computación'],
+        ['titulo' => 'Bases de Datos', 'autor' => 'Abraham Silberschatz', 'categoria' => 'Computación'],
+        ['titulo' => 'Cálculo I', 'autor' => 'Michael Spivak', 'categoria' => 'Matemáticas'],
+        ['titulo' => 'Probabilidad y Estadística', 'autor' => 'Ronald Walpole', 'categoria' => 'Matemáticas'],
+        ['titulo' => 'Macroeconomía', 'autor' => 'Gregory Mankiw', 'categoria' => 'Economía'],
+        ['titulo' => 'Microeconomía Intermedia', 'autor' => 'Hal Varian', 'categoria' => 'Economía'],
+        ['titulo' => 'Contabilidad General', 'autor' => 'Charles Horngren', 'categoria' => 'Economía'],
+        ['titulo' => 'Introducción al Derecho Civil', 'autor' => 'Arturo Alessandri', 'categoria' => 'Derecho'],
+        ['titulo' => 'Derecho Procesal Penal', 'autor' => 'Cristian Maturana', 'categoria' => 'Derecho'],
+        ['titulo' => 'Anatomía y Fisiología', 'autor' => 'Gerard Tortora', 'categoria' => 'Enfermería'],
+        ['titulo' => 'Farmacología Clínica', 'autor' => 'Bertram Katzung', 'categoria' => 'Enfermería'],
+        ['titulo' => 'Fundamentos de Trabajo Social', 'autor' => 'Ezequiel Ander-Egg', 'categoria' => 'Trabajo Social'],
+        ['titulo' => 'Psicología Social', 'autor' => 'David Myers', 'categoria' => 'Psicología'],
+        ['titulo' => 'Didáctica General', 'autor' => 'Alicia Camilloni', 'categoria' => 'Educación'],
+        ['titulo' => 'Psicología del Desarrollo', 'autor' => 'Jean Piaget', 'categoria' => 'Educación'],
+        ['titulo' => 'Producción Animal', 'autor' => 'Ricardo Bocco', 'categoria' => 'Medicina Veterinaria'],
+        ['titulo' => 'Patología Veterinaria', 'autor' => 'M. Donald McGavin', 'categoria' => 'Medicina Veterinaria'],
+        ['titulo' => 'Resistencia de Materiales', 'autor' => 'Ferdinand Beer', 'categoria' => 'Construcción Civil'],
+        ['titulo' => 'Hormigón Armado', 'autor' => 'Jack McCormac', 'categoria' => 'Construcción Civil'],
+        ['titulo' => 'Historia de Chile Contemporáneo', 'autor' => 'Alfredo Jocelyn-Holt', 'categoria' => 'Historia'],
+        ['titulo' => 'Geografía de Magallanes', 'autor' => 'Mateo Martinic', 'categoria' => 'Historia'],
+        ['titulo' => 'Biología Molecular de la Célula', 'autor' => 'Bruce Alberts', 'categoria' => 'Biología'],
     ];
 
     public function handle(): int
@@ -139,6 +163,7 @@ class SeedMockupData extends Command
                 'nombre' => $nombre,
                 'apellido' => $apellido,
                 'email' => strtolower($nombre.'.'.$apellido.$i).'@umag.cl',
+                'password' => Hash::make('umag123'),
                 'tipo' => $this->tiposUsuario[array_rand($this->tiposUsuario)],
                 'carrera' => $this->carreras[array_rand($this->carreras)],
                 'anio_ingreso' => $this->aniosIngreso[array_rand($this->aniosIngreso)],
@@ -148,7 +173,7 @@ class SeedMockupData extends Command
             ]));
         }
 
-        $this->line("  · {$cantidad} usuarios creados (con carrera, año de ingreso y sexo)");
+        $this->line("  · {$cantidad} usuarios creados (con carrera, año de ingreso, sexo y clave de portal: umag123)");
 
         return $usuarios;
     }
@@ -274,14 +299,19 @@ class SeedMockupData extends Command
     {
         $libros = collect();
 
-        foreach ($this->librosConCodigo as $codigo => $titulo) {
+        foreach ($this->catalogoLibros as $i => $item) {
+            $codigo = $item['codigo'] ?? ('978'.str_pad((string) (900000000 + $i), 10, '0', STR_PAD_LEFT));
+
             $libros->push(Libro::create([
                 'codigo_barras' => $codigo,
-                'titulo' => $titulo,
+                'titulo' => $item['titulo'],
+                'autor' => $item['autor'],
+                'categoria' => $item['categoria'],
+                'disponible' => random_int(0, 100) < 78,
             ]));
         }
 
-        $this->line('  · '.$libros->count().' libros creados en el catálogo (con código de barras)');
+        $this->line('  · '.$libros->count().' libros creados en el catálogo (con autor, área y disponibilidad)');
 
         return $libros;
     }

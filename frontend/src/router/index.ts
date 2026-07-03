@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useUsuarioAuthStore } from '@/stores/usuarioAuth'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -9,6 +10,30 @@ const router = createRouter({
       name: 'login',
       component: () => import('@/views/LoginView.vue'),
       meta: { public: true },
+    },
+    {
+      path: '/portal/login',
+      name: 'portal-login',
+      component: () => import('@/views/portal/PortalLoginView.vue'),
+      meta: { public: true, portal: true },
+    },
+    {
+      path: '/portal',
+      name: 'portal-home',
+      component: () => import('@/views/portal/PortalHomeView.vue'),
+      meta: { portal: true },
+    },
+    {
+      path: '/portal/entrada',
+      name: 'portal-entrada',
+      component: () => import('@/views/portal/PortalEntradaView.vue'),
+      meta: { portal: true },
+    },
+    {
+      path: '/portal/catalogo',
+      name: 'portal-catalogo',
+      component: () => import('@/views/portal/PortalCatalogoView.vue'),
+      meta: { portal: true },
     },
     {
       path: '/',
@@ -48,6 +73,17 @@ const router = createRouter({
 })
 
 router.beforeEach((to) => {
+  if (to.meta.portal) {
+    const usuarioAuth = useUsuarioAuthStore()
+    if (!to.meta.public && !usuarioAuth.token) {
+      return { name: 'portal-login' }
+    }
+    if (to.name === 'portal-login' && usuarioAuth.token) {
+      return { name: 'portal-home' }
+    }
+    return
+  }
+
   const auth = useAuthStore()
   if (!to.meta.public && !auth.token) {
     return { name: 'login' }

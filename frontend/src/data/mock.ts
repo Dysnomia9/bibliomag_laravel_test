@@ -1,4 +1,4 @@
-import type { Entrada, Prestamo, Reserva, ReservaLibro, ResumenDashboard, Sala, Usuario } from '@/types'
+import type { Entrada, Libro, Prestamo, Reserva, ReservaLibro, ResumenDashboard, Sala, Usuario } from '@/types'
 
 export const resumenMock: ResumenDashboard = {
   usuariosActivos: 128,
@@ -35,7 +35,7 @@ export const prestamosMock: Prestamo[] = [
 ]
 
 export const reservasLibroMock: ReservaLibro[] = [
-  { id: 1, usuario_id: 1, libro_id: 1, fecha_reserva: new Date().toISOString().slice(0, 10), fecha_retiro: new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10), estado: 'pendiente', libro: { id: 1, codigo_barras: '9789563160215', titulo: 'Historia de la Patagonia' } },
+  { id: 1, usuario_id: 1, libro_id: 1, fecha_reserva: new Date().toISOString().slice(0, 10), fecha_retiro: new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10), estado: 'pendiente', libro: { id: 1, codigo_barras: '9789563160215', titulo: 'Historia de la Patagonia', autor: 'Mateo Martinic', categoria: 'Historia', disponible: true } },
 ]
 
 export const salasMock: Sala[] = Array.from({ length: 25 }, (_, i) => ({
@@ -44,6 +44,16 @@ export const salasMock: Sala[] = Array.from({ length: 25 }, (_, i) => ({
   capacidad: [2, 3, 4][i % 3],
   piso: '1er Piso',
 }))
+
+export const catalogoMock: Libro[] = [
+  { id: 1, codigo_barras: '9789561228351', titulo: 'Introducción a la Programación en Python', autor: 'John V. Guttag', categoria: 'Computación', disponible: true },
+  { id: 2, codigo_barras: '9789706868824', titulo: 'Cálculo Diferencial e Integral - Stewart', autor: 'James Stewart', categoria: 'Matemáticas', disponible: true },
+  { id: 3, codigo_barras: '9786073237826', titulo: 'Física Universitaria - Sears & Zemansky', autor: 'Hugh D. Young', categoria: 'Física', disponible: false },
+  { id: 4, codigo_barras: '9789561224100', titulo: 'Derecho Constitucional Chileno', autor: 'Humberto Nogueira', categoria: 'Derecho', disponible: false },
+  { id: 5, codigo_barras: '9789562014533', titulo: 'Enfermería Comunitaria', autor: 'Marcia Padilla', categoria: 'Enfermería', disponible: true },
+  { id: 6, codigo_barras: '9780000000006', titulo: 'Estructuras de Datos y Algoritmos', autor: 'Robert Sedgewick', categoria: 'Computación', disponible: true },
+  { id: 7, codigo_barras: '9780000000007', titulo: 'Biología Molecular de la Célula', autor: 'Bruce Alberts', categoria: 'Biología', disponible: true },
+]
 
 export const reservasSalasMock: Reserva[] = [
   { id: 1, sala_id: 1, usuario_id: 1, nombre_usuario: 'Carlos Muñoz', rut_usuario: '11.111.111-1', fecha: new Date().toISOString().slice(0, 10), hora_inicio: 8, hora_fin: 10, estado: 'activa' },

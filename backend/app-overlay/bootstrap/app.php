@@ -15,6 +15,10 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->api(prepend: [
             \Illuminate\Http\Middleware\HandleCors::class,
         ]);
+        $middleware->alias([
+            'staff' => \App\Http\Middleware\EnsureIsStaff::class,
+            'usuario' => \App\Http\Middleware\EnsureIsUsuario::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //

@@ -53,6 +53,15 @@ export type Libro = {
   id: number
   codigo_barras: string
   titulo: string
+  autor: string | null
+  categoria: string | null
+  disponible: boolean
+}
+
+export type EstadoPortal = {
+  usuario: Usuario
+  personasEnSala: number
+  capacidad: number
 }
 
 export type ReservaLibro = {
