@@ -28,9 +28,6 @@ Route::middleware(['auth:sanctum', 'staff'])->group(function () {
 
     Route::get('/usuarios', [UsuarioController::class, 'index']);
     Route::get('/usuarios/rut/{rut}', [UsuarioController::class, 'porRut']);
-    Route::post('/usuarios', [UsuarioController::class, 'store']);
-    Route::put('/usuarios/{usuario}', [UsuarioController::class, 'update']);
-    Route::patch('/usuarios/{usuario}/toggle-activo', [UsuarioController::class, 'toggleActivo']);
 
     Route::get('/entrada', [EntradaController::class, 'index']);
     Route::post('/entrada', [EntradaController::class, 'store']);

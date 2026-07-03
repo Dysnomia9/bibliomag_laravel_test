@@ -63,7 +63,7 @@ async function onLogout() {
 
     <!-- Navegación -->
     <nav class="flex-1 min-w-0 overflow-x-auto">
-      <div class="flex items-center gap-1.5">
+      <div class="flex items-center gap-1.5 w-full justify-start sm:justify-center">
         <router-link
           v-for="link in generalLinks"
           :key="link.name"

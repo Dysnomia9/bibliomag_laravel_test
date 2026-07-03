@@ -15,7 +15,14 @@ async function onSubmit() {
 </script>
 
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-biblioteca-50 px-4 py-12">
+  <div class="relative min-h-screen flex items-center justify-center bg-biblioteca-50 px-4 py-12">
+    <router-link
+      :to="{ name: 'login-v2' }"
+      class="absolute top-4 right-4 sm:top-6 sm:right-6 text-xs font-medium text-biblioteca-500 hover:text-acento-600 border border-biblioteca-200 hover:border-acento-300 rounded-full px-3 py-1.5 bg-white/70 backdrop-blur-sm transition-colors"
+    >
+      Versión 2
+    </router-link>
+
     <div class="w-full max-w-sm">
       <div class="text-center mb-8">
         <div

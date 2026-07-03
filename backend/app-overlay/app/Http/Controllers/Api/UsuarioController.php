@@ -3,11 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\StoreUsuarioRequest;
-use App\Http\Requests\UpdateUsuarioRequest;
 use App\Models\Usuario;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 
 class UsuarioController extends Controller
 {
@@ -44,30 +41,6 @@ class UsuarioController extends Controller
         if (! $usuario) {
             return response()->json(['message' => 'Usuario no encontrado'], 404);
         }
-
-        return response()->json($usuario);
-    }
-
-    public function store(StoreUsuarioRequest $request)
-    {
-        $usuario = Usuario::create([
-            ...$request->validated(),
-            'password' => Hash::make('umag123'),
-        ]);
-
-        return response()->json($usuario, 201);
-    }
-
-    public function update(UpdateUsuarioRequest $request, Usuario $usuario)
-    {
-        $usuario->update($request->validated());
-
-        return response()->json($usuario);
-    }
-
-    public function toggleActivo(Usuario $usuario)
-    {
-        $usuario->update(['activo' => ! $usuario->activo]);
 
         return response()->json($usuario);
     }

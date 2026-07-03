@@ -12,6 +12,12 @@ const router = createRouter({
       meta: { public: true },
     },
     {
+      path: '/login/v2',
+      name: 'login-v2',
+      component: () => import('@/views/LoginV2View.vue'),
+      meta: { public: true },
+    },
+    {
       path: '/portal/login',
       name: 'portal-login',
       component: () => import('@/views/portal/PortalLoginView.vue'),
