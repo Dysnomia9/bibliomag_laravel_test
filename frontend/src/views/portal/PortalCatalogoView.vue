@@ -44,67 +44,68 @@ onMounted(cargar)
 
 <template>
   <PortalLayout>
-    <div class="max-w-lg mx-auto">
-      <div class="flex items-center gap-3 mb-6">
-        <button
-          @click="router.push({ name: 'portal-home' })"
-          class="w-10 h-10 flex items-center justify-center rounded-lg bg-white shadow-md text-biblioteca-600 hover:text-biblioteca-800"
-        >
-          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-        <div>
-          <h1 class="text-xl font-serif font-bold text-biblioteca-900 flex items-center gap-2">
-            <svg class="w-5 h-5 text-biblioteca-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-            </svg>
-            Catálogo
-          </h1>
-          <p class="text-xs text-biblioteca-500">Consulta disponibilidad de libros</p>
-        </div>
+    <div class="max-w-2xl mx-auto">
+      <button
+        @click="router.push({ name: 'portal-home' })"
+        class="mb-5 flex items-center gap-2 text-sm text-gray-600 hover:text-indigo-700"
+      >
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+        </svg>
+        Volver al inicio
+      </button>
+
+      <div class="mb-5">
+        <h1 class="text-xl font-serif font-bold text-gray-900">Catálogo de biblioteca</h1>
+        <p class="text-sm text-gray-500 mt-0.5">Consulta la disponibilidad de libros por título, autor o área</p>
       </div>
 
       <p v-if="usingMock" class="mb-4 text-xs">
-        <span class="inline-flex items-center gap-1.5 bg-acento-500/10 text-acento-600 px-2.5 py-1 rounded-full">
-          <span class="h-1.5 w-1.5 rounded-full bg-acento-500"></span>
+        <span class="inline-flex items-center gap-1.5 bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full">
+          <span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
           Mostrando datos de ejemplo (API no disponible)
         </span>
       </p>
 
-      <div class="relative mb-4">
-        <svg class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-biblioteca-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <div class="relative mb-5">
+        <svg class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-gray-400" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
         </svg>
         <input
           v-model="busqueda"
-          placeholder="Buscar libro, autor o área..."
-          class="w-full pl-12 pr-4 py-4 bg-white rounded-xl shadow-md text-lg border-0 focus:ring-2 focus:ring-biblioteca-500 outline-none"
+          placeholder="Buscar por título, autor o área..."
+          class="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
         />
       </div>
 
-      <div class="space-y-3">
-        <div v-for="libro in libros" :key="libro.id" class="bg-white rounded-xl shadow-md p-4 flex items-center gap-4">
-          <div class="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" :class="libro.disponible ? 'bg-emerald-100' : 'bg-red-100'">
-            <svg v-if="libro.disponible" class="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <svg v-else class="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <div class="flex-1 min-w-0">
-            <p class="font-medium text-biblioteca-900 text-sm truncate">{{ libro.titulo }}</p>
-            <p class="text-xs text-biblioteca-500">{{ libro.autor }} · {{ libro.categoria }}</p>
-          </div>
-          <span
-            class="text-xs px-2 py-1 rounded-full font-medium shrink-0"
-            :class="libro.disponible ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'"
-          >
-            {{ libro.disponible ? 'Disponible' : 'Prestado' }}
-          </span>
+      <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+        <div class="hidden sm:grid grid-cols-[1fr_140px_100px] gap-4 px-4 py-2.5 bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-500 uppercase tracking-wide">
+          <span>Título / Autor</span>
+          <span>Área</span>
+          <span class="text-right">Estado</span>
         </div>
-        <div v-if="!cargando && !libros.length" class="text-center py-12 text-biblioteca-400">Sin resultados</div>
+        <div class="divide-y divide-gray-100">
+          <div v-for="libro in libros" :key="libro.id" class="grid grid-cols-1 sm:grid-cols-[1fr_140px_100px] gap-1 sm:gap-4 px-4 py-3 hover:bg-gray-50/60 transition-colors">
+            <div class="min-w-0">
+              <p class="font-medium text-gray-900 text-sm truncate">{{ libro.titulo }}</p>
+              <p class="text-xs text-gray-500 truncate">{{ libro.autor }}</p>
+            </div>
+            <div class="text-xs text-gray-600 flex items-center sm:block">
+              <span class="sm:hidden text-gray-400 mr-1">Área:</span>{{ libro.categoria }}
+            </div>
+            <div class="sm:text-right">
+              <span
+                class="inline-block text-xs font-medium px-2 py-0.5 rounded border"
+                :class="libro.disponible ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'"
+              >
+                {{ libro.disponible ? 'Disponible' : 'Prestado' }}
+              </span>
+            </div>
+          </div>
+          <div v-if="!cargando && !libros.length" class="px-4 py-10 text-center text-sm text-gray-400">
+            Sin resultados para tu búsqueda.
+          </div>
+        </div>
       </div>
     </div>
   </PortalLayout>

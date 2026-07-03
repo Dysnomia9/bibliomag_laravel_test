@@ -42,6 +42,12 @@ const router = createRouter({
       meta: { portal: true },
     },
     {
+      path: '/portal/salas',
+      name: 'portal-salas',
+      component: () => import('@/views/portal/PortalSalasView.vue'),
+      meta: { portal: true },
+    },
+    {
       path: '/',
       redirect: '/dashboard',
     },

@@ -69,7 +69,7 @@ frontend/
    lg:grid-cols-5`, etc.), igual que el Dashboard. Nada de tablas que rompan
    el layout en mobile — usar scroll horizontal contenido o cards apiladas.
 3. **Paleta:** usar los colores `biblioteca-*` y `acento-*` definidos en
-   `tailwind.config.js` (verdes/dorados académicos) — NO reintroducir los
+   `tailwind.config.js` 
    gradientes morados/índigo tipo SaaS del proyecto original.
 4. **Backend:** un Controller + rutas protegidas por `auth:sanctum` por
    módulo, siguiendo el patrón de `DashboardController`/`SalaController`.

@@ -53,4 +53,8 @@ Route::middleware(['auth:sanctum', 'usuario'])->group(function () {
     Route::get('/mi/estado', [PortalController::class, 'estado']);
     Route::post('/mi/entrada', [PortalController::class, 'registrarEntrada']);
     Route::get('/mi/catalogo', [PortalController::class, 'catalogo']);
+
+    Route::get('/mi/salas', [PortalController::class, 'salas']);
+    Route::post('/mi/reservas', [PortalController::class, 'reservarSala']);
+    Route::delete('/mi/reservas/{reserva}', [PortalController::class, 'cancelarReservaSala']);
 });

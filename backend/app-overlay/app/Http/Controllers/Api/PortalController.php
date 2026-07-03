@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Entrada;
 use App\Models\Libro;
+use App\Models\Reserva;
+use App\Models\Sala;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 
@@ -64,5 +66,64 @@ class PortalController extends Controller
         return response()->json(
             $query->orderBy('titulo')->get()
         );
+    }
+
+    public function salas(Request $request)
+    {
+        $fecha = $request->query('fecha', now()->toDateString());
+
+        $salas = Sala::orderBy('id')->get();
+        $reservas = Reserva::where('fecha', $fecha)->get();
+
+        return response()->json([
+            'fecha' => $fecha,
+            'salas' => $salas,
+            'reservas' => $reservas,
+        ]);
+    }
+
+    public function reservarSala(Request $request)
+    {
+        $data = $request->validate([
+            'sala_id' => ['required', 'exists:salas,id'],
+            'fecha' => ['required', 'date'],
+            'hora_inicio' => ['required', 'integer', 'min:0', 'max:23'],
+            'hora_fin' => ['required', 'integer', 'gt:hora_inicio'],
+        ]);
+
+        $usuario = $request->user();
+
+        $existe = Reserva::where('sala_id', $data['sala_id'])
+            ->where('fecha', $data['fecha'])
+            ->where('hora_inicio', $data['hora_inicio'])
+            ->exists();
+
+        if ($existe) {
+            return response()->json(['message' => 'Ese bloque ya se encuentra reservado'], 409);
+        }
+
+        $reserva = Reserva::create([
+            'sala_id' => $data['sala_id'],
+            'usuario_id' => $usuario->id,
+            'nombre_usuario' => "{$usuario->nombre} {$usuario->apellido}",
+            'rut_usuario' => $usuario->rut,
+            'fecha' => $data['fecha'],
+            'hora_inicio' => $data['hora_inicio'],
+            'hora_fin' => $data['hora_fin'],
+            'estado' => 'activa',
+        ]);
+
+        return response()->json($reserva, 201);
+    }
+
+    public function cancelarReservaSala(Request $request, Reserva $reserva)
+    {
+        if ($reserva->usuario_id !== $request->user()->id) {
+            return response()->json(['message' => 'Solo puedes cancelar tus propias reservas'], 403);
+        }
+
+        $reserva->delete();
+
+        return response()->json(null, 204);
     }
 }
