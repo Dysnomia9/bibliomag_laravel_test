@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\CodigoAccesoController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\EntradaController;
 use App\Http\Controllers\Api\LibroController;
@@ -44,6 +45,9 @@ Route::middleware(['auth:sanctum', 'staff'])->group(function () {
 
     Route::get('/reportes/opciones', [ReporteController::class, 'opciones']);
     Route::get('/reportes/resumen', [ReporteController::class, 'resumen']);
+
+    Route::get('/codigo-acceso', [CodigoAccesoController::class, 'show']);
+    Route::post('/codigo-acceso/regenerar', [CodigoAccesoController::class, 'regenerar']);
 });
 
 Route::middleware(['auth:sanctum', 'usuario'])->group(function () {

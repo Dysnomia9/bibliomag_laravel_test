@@ -119,3 +119,11 @@ export type ReporteOpciones = {
 
 export type Periodo = 'dia' | 'semana' | 'mes' | 'semestre' | 'anio'
 export type ReporteTab = 'prestamos' | 'ingresos' | 'logias'
+
+export type CodigoAcceso = {
+  id: number
+  codigo: string
+  generado_por: number | null
+  created_at: string
+  updated_at: string
+}

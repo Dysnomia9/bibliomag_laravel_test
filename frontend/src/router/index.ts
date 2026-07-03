@@ -81,6 +81,11 @@ const router = createRouter({
       name: 'reportes',
       component: () => import('@/views/ReportesView.vue'),
     },
+    {
+      path: '/codigo-qr',
+      name: 'codigo-qr',
+      component: () => import('@/views/CodigoQrView.vue'),
+    },
   ],
 })
 

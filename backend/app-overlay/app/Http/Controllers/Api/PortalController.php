@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\CodigoAcceso;
 use App\Models\Entrada;
 use App\Models\Libro;
 use App\Models\Reserva;
@@ -31,6 +32,7 @@ class PortalController extends Controller
     {
         $data = $request->validate([
             'rut' => ['sometimes', 'string'],
+            'codigo' => ['required_if:via,qr', 'string'],
             'via' => ['required', 'in:manual,qr'],
         ]);
 
@@ -38,6 +40,10 @@ class PortalController extends Controller
 
         if ($data['via'] === 'manual' && ($data['rut'] ?? null) !== $usuario->rut) {
             return response()->json(['message' => 'El RUT ingresado no coincide con tu cuenta'], 422);
+        }
+
+        if ($data['via'] === 'qr' && $data['codigo'] !== CodigoAcceso::vigente()->codigo) {
+            return response()->json(['message' => 'El código QR no es válido. Pide al personal que lo actualice.'], 422);
         }
 
         $entrada = Entrada::create([
