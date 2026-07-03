@@ -22,14 +22,12 @@ const router = createRouter({
     {
       path: '/entrada',
       name: 'entrada',
-      component: () => import('@/views/ProximamenteView.vue'),
-      props: { titulo: 'Entradas' },
+      component: () => import('@/views/EntradaView.vue'),
     },
     {
       path: '/prestamo',
       name: 'prestamo',
-      component: () => import('@/views/ProximamenteView.vue'),
-      props: { titulo: 'Préstamos' },
+      component: () => import('@/views/PrestamoView.vue'),
     },
     {
       path: '/usuarios',
@@ -39,14 +37,12 @@ const router = createRouter({
     {
       path: '/salas',
       name: 'salas',
-      component: () => import('@/views/ProximamenteView.vue'),
-      props: { titulo: 'Salas' },
+      component: () => import('@/views/SalasView.vue'),
     },
     {
       path: '/reportes',
       name: 'reportes',
-      component: () => import('@/views/ProximamenteView.vue'),
-      props: { titulo: 'Reportes' },
+      component: () => import('@/views/ReportesView.vue'),
     },
   ],
 })

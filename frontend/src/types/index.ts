@@ -48,3 +48,65 @@ export type ResumenDashboard = {
   ultimasEntradas: Entrada[]
   ultimosPrestamos: Prestamo[]
 }
+
+export type Libro = {
+  id: number
+  codigo_barras: string
+  titulo: string
+}
+
+export type ReservaLibro = {
+  id: number
+  usuario_id: number
+  libro_id: number
+  fecha_reserva: string
+  fecha_retiro: string
+  estado: 'pendiente' | 'retirado' | 'cancelado'
+  libro?: Libro
+}
+
+export type Sala = {
+  id: number
+  nombre: string
+  capacidad: number
+  piso: string
+}
+
+export type Reserva = {
+  id: number
+  sala_id: number
+  usuario_id: number | null
+  nombre_usuario: string
+  rut_usuario: string
+  fecha: string
+  hora_inicio: number
+  hora_fin: number
+  estado: string
+}
+
+export type SerieItem = {
+  label: string
+  value: number
+}
+
+export type ReporteResumen = {
+  total: number
+  promedioPorPeriodo: number
+  categoriaMasFrecuente: string
+  serie: SerieItem[]
+  porCarrera: SerieItem[]
+  porSexo: SerieItem[]
+  porAnioIngreso: SerieItem[]
+  porTipoUsuario: SerieItem[]
+  porHora: SerieItem[]
+}
+
+export type ReporteOpciones = {
+  carreras: string[]
+  aniosIngreso: number[]
+  sexos: string[]
+  tiposUsuario: string[]
+}
+
+export type Periodo = 'dia' | 'semana' | 'mes' | 'semestre' | 'anio'
+export type ReporteTab = 'prestamos' | 'ingresos' | 'logias'

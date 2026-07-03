@@ -36,6 +36,17 @@ class UsuarioController extends Controller
         );
     }
 
+    public function porRut(string $rut)
+    {
+        $usuario = Usuario::where('rut', $rut)->first();
+
+        if (! $usuario) {
+            return response()->json(['message' => 'Usuario no encontrado'], 404);
+        }
+
+        return response()->json($usuario);
+    }
+
     public function store(StoreUsuarioRequest $request)
     {
         $usuario = Usuario::create($request->validated());

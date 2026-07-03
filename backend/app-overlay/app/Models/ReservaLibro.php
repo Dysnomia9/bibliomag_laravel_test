@@ -5,33 +5,35 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class Prestamo extends Model
+class ReservaLibro extends Model
 {
     use HasFactory;
 
-    protected $table = 'prestamos';
+    protected $table = 'reservas_libro';
 
     protected $fillable = [
         'usuario_id',
-        'libro_titulo',
-        'codigo_barras',
-        'fecha_prestamo',
-        'fecha_devolucion',
-        'fecha_devolucion_real',
+        'libro_id',
+        'fecha_reserva',
+        'fecha_retiro',
         'estado',
     ];
 
     protected function casts(): array
     {
         return [
-            'fecha_prestamo' => 'datetime',
-            'fecha_devolucion' => 'datetime',
-            'fecha_devolucion_real' => 'datetime',
+            'fecha_reserva' => 'date',
+            'fecha_retiro' => 'date',
         ];
     }
 
     public function usuario()
     {
         return $this->belongsTo(Usuario::class);
+    }
+
+    public function libro()
+    {
+        return $this->belongsTo(Libro::class);
     }
 }

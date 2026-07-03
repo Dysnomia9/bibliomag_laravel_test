@@ -3,8 +3,10 @@
 namespace App\Console\Commands;
 
 use App\Models\Entrada;
+use App\Models\Libro;
 use App\Models\Prestamo;
 use App\Models\Reserva;
+use App\Models\ReservaLibro;
 use App\Models\Sala;
 use App\Models\Staff;
 use App\Models\Usuario;
@@ -63,10 +65,26 @@ class SeedMockupData extends Command
         'Producción Animal',
     ];
 
+    /** Catálogo con código de barras — usado para la reserva de libros por escaneo */
+    private array $librosConCodigo = [
+        '9789561228351' => 'Introducción a la Programación en Python',
+        '9789706868824' => 'Cálculo Diferencial e Integral - Stewart',
+        '9786073237826' => 'Física Universitaria - Sears & Zemansky',
+        '9786071509789' => 'Álgebra Lineal - Grossman',
+        '9786071513939' => 'Química General - Chang',
+        '9789563160215' => 'Historia de la Patagonia',
+        '9789562827164' => 'Botánica Austral',
+        '9789561224100' => 'Derecho Constitucional Chileno',
+        '9789562014533' => 'Enfermería Comunitaria',
+        '9789561420311' => 'Ecología y Medio Ambiente',
+    ];
+
     public function handle(): int
     {
         if ($this->option('fresh')) {
             $this->info('Eliminando datos de prueba existentes...');
+            DB::table('reservas_libro')->delete();
+            DB::table('libros')->delete();
             DB::table('reservas')->delete();
             DB::table('entradas')->delete();
             DB::table('prestamos')->delete();
@@ -85,6 +103,8 @@ class SeedMockupData extends Command
         $this->seedPrestamos($usuarios);
         $salas = $this->seedSalas();
         $this->seedReservas($salas, $usuarios);
+        $libros = $this->seedLibros();
+        $this->seedReservasLibro($libros, $usuarios);
 
         $this->info('Datos de prueba cargados correctamente.');
 
@@ -247,6 +267,45 @@ class SeedMockupData extends Command
         }
 
         $this->line("  · {$total} reservas de sala creadas (hoy)");
+    }
+
+    /** @return \Illuminate\Support\Collection<int, Libro> */
+    private function seedLibros()
+    {
+        $libros = collect();
+
+        foreach ($this->librosConCodigo as $codigo => $titulo) {
+            $libros->push(Libro::create([
+                'codigo_barras' => $codigo,
+                'titulo' => $titulo,
+            ]));
+        }
+
+        $this->line('  · '.$libros->count().' libros creados en el catálogo (con código de barras)');
+
+        return $libros;
+    }
+
+    private function seedReservasLibro($libros, $usuarios): void
+    {
+        $total = 0;
+
+        foreach ($libros->random(min(4, $libros->count())) as $libro) {
+            $usuario = $usuarios->random();
+            $fechaReserva = now()->subDays(random_int(0, 5));
+            $fechaRetiro = $fechaReserva->copy()->addDays(4);
+
+            ReservaLibro::create([
+                'usuario_id' => $usuario->id,
+                'libro_id' => $libro->id,
+                'fecha_reserva' => $fechaReserva->toDateString(),
+                'fecha_retiro' => $fechaRetiro->toDateString(),
+                'estado' => $fechaRetiro->isPast() ? 'retirado' : 'pendiente',
+            ]);
+            $total++;
+        }
+
+        $this->line("  · {$total} reservas de libro creadas");
     }
 
     /** Genera un RUT chileno válido con dígito verificador a partir de un número base */

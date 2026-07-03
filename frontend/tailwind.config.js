@@ -21,6 +21,23 @@ export default {
           500: '#b5852c',
           600: '#966d22',
         },
+        background: 'hsl(var(--background))',
+        foreground: 'hsl(var(--foreground))',
+        primary: {
+          DEFAULT: 'hsl(var(--primary))',
+          foreground: 'hsl(var(--primary-foreground))',
+        },
+        secondary: 'hsl(var(--secondary))',
+        muted: {
+          DEFAULT: 'hsl(var(--muted))',
+          foreground: 'hsl(var(--muted-foreground))',
+        },
+        accent: 'hsl(var(--accent))',
+        destructive: 'hsl(var(--destructive))',
+        border: 'hsl(var(--border))',
+      },
+      borderRadius: {
+        DEFAULT: 'var(--radius)',
       },
       fontFamily: {
         sans: ['"Source Sans 3"', 'system-ui', 'sans-serif'],

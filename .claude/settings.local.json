@@ -12,7 +12,13 @@
       "Bash(curl -s http://localhost:8000/api/usuarios -H 'Authorization: Bearer 2|T6KnciREUdBeZO3egRuLrtzhM1T1njzmeNKF1fNye219eb20' -H 'Accept: application/json')",
       "Bash(npx playwright *)",
       "Bash(npm init *)",
-      "Bash(node test_usuarios.js)"
+      "Bash(node test_usuarios.js)",
+      "Bash(npm run *)",
+      "Bash(npx vite *)",
+      "Skill(run)",
+      "Skill(run:*)",
+      "Bash(find . -maxdepth 4 -path '*/.claude/skills/*/SKILL.md')",
+      "Bash(which chromium-cli *)"
     ]
   }
 }
