@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import StaffLayout from '@/components/layout/StaffLayout.vue'
 import api from '@/services/api'
 import { resumenMock } from '@/data/mock'
+import { STAFF_SHORTCUTS } from '@/composables/useStaffShortcuts'
 import type { ResumenDashboard } from '@/types'
 
 const router = useRouter()
@@ -11,30 +12,9 @@ const resumen = ref<ResumenDashboard>(resumenMock)
 const usingMock = ref(false)
 const aforo = 220
 
-const shortcuts = [
-  { key: 'F1', label: 'Registrar Entrada', desc: 'Ingreso por RUT o QR', name: 'entrada', icon: 'M11 16l-4-4m0 0l4-4m-4 4h14M5 5v14' },
-  { key: 'F2', label: 'Préstamo Libro', desc: 'Préstamo y devolución', name: 'prestamo', icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253' },
-  { key: 'F3', label: 'Reservar Sala', desc: 'Salas y logias de estudio', name: 'salas', icon: 'M4 6h16M4 12h16M4 18h7' },
-  { key: 'F4', label: 'Usuario Externo', desc: 'Visitantes y comunidad', name: 'usuarios', icon: 'M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1a4 4 0 100-8 4 4 0 000 8zm6 3a4 4 0 00-3-3.87M9 12a4 4 0 100-8 4 4 0 000 8z' },
-] as const
-
-const shortcutMap: Record<string, string> = {
-  F1: 'entrada',
-  F2: 'prestamo',
-  F3: 'salas',
-  F4: 'usuarios',
-}
-
-function onKeyDown(event: KeyboardEvent) {
-  const destino = shortcutMap[event.key]
-  if (destino) {
-    event.preventDefault()
-    router.push({ name: destino })
-  }
-}
+const shortcuts = STAFF_SHORTCUTS
 
 onMounted(async () => {
-  window.addEventListener('keydown', onKeyDown)
   try {
     const { data } = await api.get<ResumenDashboard>('/dashboard/resumen')
     resumen.value = data
@@ -42,10 +22,6 @@ onMounted(async () => {
     usingMock.value = true
     resumen.value = resumenMock
   }
-})
-
-onUnmounted(() => {
-  window.removeEventListener('keydown', onKeyDown)
 })
 </script>
 

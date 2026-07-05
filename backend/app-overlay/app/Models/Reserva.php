@@ -14,8 +14,9 @@ class Reserva extends Model
     protected $fillable = [
         'sala_id',
         'usuario_id',
-        'nombre_usuario',
         'rut_usuario',
+        'cantidad_personas',
+        'ruts',
         'fecha',
         'hora_inicio',
         'hora_fin',
@@ -26,6 +27,7 @@ class Reserva extends Model
     {
         return [
             'fecha' => 'date',
+            'ruts' => 'array',
         ];
     }
 

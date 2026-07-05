@@ -181,6 +181,7 @@ class SeedMockupData extends Command
     private function seedEntradas($usuarios): void
     {
         $total = 0;
+        $horaActual = now()->hour;
 
         foreach ($usuarios as $i => $usuario) {
             // Cada usuario tiene entre 1 y 4 entradas distribuidas en los últimos 14 días
@@ -188,9 +189,9 @@ class SeedMockupData extends Command
 
             for ($j = 0; $j < $numEntradas; $j++) {
                 $diasAtras = random_int(0, 13);
-                $hora = $this->horaConSesgo();
+                $hora = $diasAtras === 0 ? random_int(8, max(8, $horaActual)) : $this->horaConSesgo();
                 $entrada = now()->subDays($diasAtras)->setTime($hora, random_int(0, 59));
-                $conSalida = random_int(0, 100) < 70;
+                $conSalida = $diasAtras > 0 && random_int(0, 100) < 70;
 
                 Entrada::create([
                     'usuario_id' => $usuario->id,
@@ -202,7 +203,22 @@ class SeedMockupData extends Command
             }
         }
 
-        $this->line("  · {$total} entradas creadas (últimos 14 días)");
+        // Garantiza una porción de entradas de hoy, para que "Registro de Entrada"
+        // no se vea vacío justo tras correr el seed en cualquier momento del día.
+        foreach ($usuarios->random(min(12, $usuarios->count())) as $usuario) {
+            $hora = random_int(8, max(8, $horaActual));
+            $entrada = now()->setTime($hora, random_int(0, 59));
+
+            Entrada::create([
+                'usuario_id' => $usuario->id,
+                'fecha_hora_entrada' => $entrada,
+                'fecha_hora_salida' => random_int(0, 100) < 60 ? $entrada->copy()->addMinutes(random_int(30, 180)) : null,
+                'via' => random_int(0, 100) < 35 ? 'qr' : 'manual',
+            ]);
+            $total++;
+        }
+
+        $this->line("  · {$total} entradas creadas (últimos 14 días, con refuerzo para hoy)");
     }
 
     private function seedPrestamos($usuarios): void
@@ -242,19 +258,19 @@ class SeedMockupData extends Command
     /** @return \Illuminate\Support\Collection<int, Sala> */
     private function seedSalas()
     {
-        // 25 salas de estudio, 1er piso — adaptado de app/staff/salas/page.tsx
+        // 25 logias de estudio repartidas en 2 pisos — adaptado de app/staff/salas/page.tsx
         $capacidades = [2, 3, 4, 2, 3, 4, 2, 3, 4, 2, 3, 4, 2, 3, 4, 2, 3, 4, 2, 3, 4, 2, 3, 4, 2];
         $salas = collect();
 
         for ($i = 0; $i < 25; $i++) {
             $salas->push(Sala::create([
-                'nombre' => 'Sala '.str_pad((string) ($i + 1), 2, '0', STR_PAD_LEFT),
+                'nombre' => 'Logia '.str_pad((string) ($i + 1), 2, '0', STR_PAD_LEFT),
                 'capacidad' => $capacidades[$i],
-                'piso' => '1er Piso',
+                'piso' => $i < 13 ? '1er Piso' : '2do Piso',
             ]));
         }
 
-        $this->line('  · 25 salas de estudio creadas');
+        $this->line('  · 25 logias de estudio creadas (1er y 2do piso)');
 
         return $salas;
     }
@@ -262,36 +278,46 @@ class SeedMockupData extends Command
     private function seedReservas($salas, $usuarios): void
     {
         $bloques = [
-            [8, 10], [10, 12], [12, 14], [14, 16], [16, 18], [18, 20],
+            [8, 10], [10, 12], [12, 14], [14, 16], [16, 18], [18, 20], [20, 21],
         ];
 
-        $hoy = now()->toDateString();
         $total = 0;
 
-        // Reservas de hoy: ~40% de los bloques ocupados, distribuidos en salas al azar
-        foreach ($salas as $sala) {
-            foreach ($bloques as [$inicio, $fin]) {
-                if (random_int(0, 100) > 40) {
-                    continue;
+        // Reservas para hoy y algunos días recientes (no solo "hoy"), para que la
+        // demo siga viéndose poblada aunque pasen días sin volver a correr el seed.
+        foreach (range(0, 3) as $diasAtras) {
+            $fecha = now()->subDays($diasAtras)->toDateString();
+
+            foreach ($salas as $sala) {
+                foreach ($bloques as [$inicio, $fin]) {
+                    if (random_int(0, 100) > 40) {
+                        continue;
+                    }
+
+                    $cantidadPersonas = random_int(2, 5);
+                    $ruts = $usuarios->random(min($cantidadPersonas, $usuarios->count()))
+                        ->pluck('rut')
+                        ->values()
+                        ->all();
+                    $usuario = Usuario::where('rut', $ruts[0])->first();
+
+                    Reserva::create([
+                        'sala_id' => $sala->id,
+                        'usuario_id' => $usuario?->id,
+                        'rut_usuario' => $ruts[0],
+                        'cantidad_personas' => $cantidadPersonas,
+                        'ruts' => $ruts,
+                        'fecha' => $fecha,
+                        'hora_inicio' => $inicio,
+                        'hora_fin' => $fin,
+                        'estado' => 'activa',
+                    ]);
+                    $total++;
                 }
-
-                $usuario = $usuarios->random();
-
-                Reserva::create([
-                    'sala_id' => $sala->id,
-                    'usuario_id' => $usuario->id,
-                    'nombre_usuario' => "{$usuario->nombre} {$usuario->apellido}",
-                    'rut_usuario' => $usuario->rut,
-                    'fecha' => $hoy,
-                    'hora_inicio' => $inicio,
-                    'hora_fin' => $fin,
-                    'estado' => 'activa',
-                ]);
-                $total++;
             }
         }
 
-        $this->line("  · {$total} reservas de sala creadas (hoy)");
+        $this->line("  · {$total} reservas de logia creadas (hoy y últimos 3 días)");
     }
 
     /** @return \Illuminate\Support\Collection<int, Libro> */
@@ -344,7 +370,7 @@ class SeedMockupData extends Command
         return Rut::formatear($numero);
     }
 
-    /** Horario biblioteca 8-20 hrs, más concurrido 10-13 y 15-18 (mismo sesgo que el mock original) */
+    /** Horario biblioteca 8-21 hrs, más concurrido 10-13 y 15-18 (mismo sesgo que el mock original) */
     private function horaConSesgo(): int
     {
         $r = random_int(0, 100) / 100;

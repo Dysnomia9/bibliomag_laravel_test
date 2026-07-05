@@ -93,8 +93,8 @@ class PortalController extends Controller
         $data = $request->validate([
             'sala_id' => ['required', 'exists:salas,id'],
             'fecha' => ['required', 'date'],
-            'hora_inicio' => ['required', 'integer', 'min:0', 'max:23'],
-            'hora_fin' => ['required', 'integer', 'gt:hora_inicio'],
+            'hora_inicio' => ['required', 'integer', 'min:8', 'max:20'],
+            'hora_fin' => ['required', 'integer', 'gt:hora_inicio', 'max:21'],
         ]);
 
         $usuario = $request->user();
@@ -111,8 +111,9 @@ class PortalController extends Controller
         $reserva = Reserva::create([
             'sala_id' => $data['sala_id'],
             'usuario_id' => $usuario->id,
-            'nombre_usuario' => "{$usuario->nombre} {$usuario->apellido}",
             'rut_usuario' => $usuario->rut,
+            'cantidad_personas' => 1,
+            'ruts' => [$usuario->rut],
             'fecha' => $data['fecha'],
             'hora_inicio' => $data['hora_inicio'],
             'hora_fin' => $data['hora_fin'],

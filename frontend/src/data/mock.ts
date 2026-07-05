@@ -40,9 +40,9 @@ export const reservasLibroMock: ReservaLibro[] = [
 
 export const salasMock: Sala[] = Array.from({ length: 25 }, (_, i) => ({
   id: i + 1,
-  nombre: `Sala ${String(i + 1).padStart(2, '0')}`,
+  nombre: `Logia ${String(i + 1).padStart(2, '0')}`,
   capacidad: [2, 3, 4][i % 3],
-  piso: '1er Piso',
+  piso: i < 13 ? '1er Piso' : '2do Piso',
 }))
 
 export const catalogoMock: Libro[] = [
@@ -56,6 +56,37 @@ export const catalogoMock: Libro[] = [
 ]
 
 export const reservasSalasMock: Reserva[] = [
-  { id: 1, sala_id: 1, usuario_id: 1, nombre_usuario: 'Carlos Muñoz', rut_usuario: '11.111.111-1', fecha: new Date().toISOString().slice(0, 10), hora_inicio: 8, hora_fin: 10, estado: 'activa' },
-  { id: 2, sala_id: 3, usuario_id: 2, nombre_usuario: 'Luisa Fernández', rut_usuario: '44.444.444-4', fecha: new Date().toISOString().slice(0, 10), hora_inicio: 10, hora_fin: 12, estado: 'activa' },
+  {
+    id: 1,
+    sala_id: 1,
+    usuario_id: 1,
+    rut_usuario: '11.111.111-1',
+    cantidad_personas: 2,
+    ruts: ['11.111.111-1', '22.222.222-2'],
+    personas: [
+      { rut: '11.111.111-1', nombre: 'Carlos Muñoz' },
+      { rut: '22.222.222-2', nombre: 'Luisa Fernández' },
+    ],
+    fecha: new Date().toISOString().slice(0, 10),
+    hora_inicio: 8,
+    hora_fin: 10,
+    estado: 'activa',
+  },
+  {
+    id: 2,
+    sala_id: 3,
+    usuario_id: 2,
+    rut_usuario: '44.444.444-4',
+    cantidad_personas: 3,
+    ruts: ['44.444.444-4', '55.555.555-5', '66.666.666-6'],
+    personas: [
+      { rut: '44.444.444-4', nombre: 'Ignacio Contreras' },
+      { rut: '55.555.555-5', nombre: null },
+      { rut: '66.666.666-6', nombre: null },
+    ],
+    fecha: new Date().toISOString().slice(0, 10),
+    hora_inicio: 10,
+    hora_fin: 12,
+    estado: 'activa',
+  },
 ]

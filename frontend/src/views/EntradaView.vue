@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import StaffLayout from '@/components/layout/StaffLayout.vue'
 import api from '@/services/api'
 import { useToast } from '@/composables/useToast'
@@ -9,11 +9,14 @@ import type { Entrada } from '@/types'
 
 const toast = useToast()
 
+const hoy = new Date().toISOString().slice(0, 10)
+
 const rut = ref('')
 const entradas = ref<Entrada[]>([])
 const personasEnSala = ref(0)
 const usingMock = ref(false)
 const registrando = ref(false)
+const selectedDate = ref(hoy)
 
 const VIA_LABELS: Record<string, string> = {
   qr: 'QR Móvil',
@@ -31,7 +34,7 @@ function formatHora(iso: string) {
 
 async function cargar() {
   try {
-    const { data } = await api.get('/entrada')
+    const { data } = await api.get('/entrada', { params: { fecha: selectedDate.value } })
     entradas.value = data.entradas
     personasEnSala.value = data.personasEnSala
     usingMock.value = false
@@ -43,6 +46,11 @@ async function cargar() {
 }
 
 onMounted(cargar)
+watch(selectedDate, cargar)
+
+function formatFechaLarga(fecha: string) {
+  return fecha === hoy ? 'hoy' : new Date(`${fecha}T12:00:00`).toLocaleDateString('es-CL')
+}
 
 async function registrarEntrada(via: 'manual' | 'qr' = 'manual') {
   if (!rut.value.trim()) {
@@ -65,14 +73,6 @@ async function registrarEntrada(via: 'manual' | 'qr' = 'manual') {
 
 function onRutInput(event: Event) {
   rut.value = formatRut((event.target as HTMLInputElement).value)
-}
-
-function handleQrScan() {
-  const codigo = window.prompt('Simulación de escáner QR: ingrese el RUT leído')
-  if (codigo) {
-    rut.value = formatRut(codigo)
-    registrarEntrada('qr')
-  }
 }
 </script>
 
@@ -132,22 +132,19 @@ function handleQrScan() {
               </svg>
               Registrar Entrada
             </button>
-            <button
-              @click="handleQrScan"
-              class="flex items-center gap-2 px-5 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
-            >
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M4 4h6v6H4V4zm10 0h6v6h-6V4zM4 14h6v6H4v-6zm10 3h3m3 0h-3m0 0v3m0-3v-3" />
-              </svg>
-              Escanear QR
-            </button>
           </div>
         </div>
       </div>
 
       <div class="bg-[#FCFBF8] rounded-xl shadow-md border border-stone-200 overflow-hidden">
-        <div class="px-6 py-4 border-b border-stone-200 bg-white">
-          <h3 class="font-serif font-semibold text-gray-900">Historial de hoy</h3>
+        <div class="px-6 py-4 border-b border-stone-200 bg-white flex items-center justify-between flex-wrap gap-3">
+          <h3 class="font-serif font-semibold text-gray-900">Historial de {{ formatFechaLarga(selectedDate) }}</h3>
+          <input
+            v-model="selectedDate"
+            type="date"
+            :max="hoy"
+            class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+          />
         </div>
         <div class="overflow-x-auto">
           <table class="w-full border-collapse">
@@ -178,7 +175,7 @@ function handleQrScan() {
                 </td>
               </tr>
               <tr v-if="!entradas.length">
-                <td colspan="4" class="px-6 py-8 text-center text-sm text-gray-400">Sin registros de entrada hoy.</td>
+                <td colspan="4" class="px-6 py-8 text-center text-sm text-gray-400">Sin registros de entrada para {{ formatFechaLarga(selectedDate) }}.</td>
               </tr>
             </tbody>
           </table>

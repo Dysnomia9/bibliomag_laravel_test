@@ -1,15 +1,20 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import StaffLayout from '@/components/layout/StaffLayout.vue'
 import BarChart from '@/components/reportes/BarChart.vue'
 import BreakdownList from '@/components/reportes/BreakdownList.vue'
+import ReporteTabla from '@/components/reportes/ReporteTabla.vue'
 import api from '@/services/api'
+import { useToast } from '@/composables/useToast'
+import { construirCsv, descargarCsv } from '@/utils/csv'
 import type { Periodo, ReporteOpciones, ReporteResumen, ReporteTab } from '@/types'
 
+const toast = useToast()
 const usingMock = ref(false)
 
 const tab = ref<ReporteTab>('prestamos')
 const periodo = ref<Periodo>('mes')
+const vista = ref<'grafico' | 'tabla'>('grafico')
 
 const filtros = reactive({
   carrera: '',
@@ -51,6 +56,37 @@ const PERIODOS: { id: Periodo; label: string }[] = [
 
 const colorBar: Record<ReporteTab, string> = { prestamos: '#4338CA', ingresos: '#059669', logias: '#D97706' }
 const tabTitulo: Record<ReporteTab, string> = { prestamos: 'Total préstamos', ingresos: 'Total ingresos', logias: 'Total usos de logias' }
+
+const PERIODO_ADJETIVO: Record<Periodo, string> = {
+  dia: 'diaria',
+  semana: 'semanal',
+  mes: 'mensual',
+  semestre: 'semestral',
+  anio: 'anual',
+}
+
+// Paleta categórica fija (orden estable) — cada carrera queda ligada a un color
+// según su posición en el listado de opciones, no según su valor en el reporte
+// actual, para que el color de una carrera no cambie al cambiar filtros.
+const PALETA_CATEGORICA = ['#2a78d6', '#1baf7a', '#eda100', '#008300', '#4a3aa7', '#e34948', '#e87ba4', '#eb6834']
+const COLOR_NEUTRO = '#898781'
+const COLORES_SEXO: Record<string, string> = { Femenino: '#e87ba4', Masculino: '#2a78d6' }
+
+const carreraColorMap = computed(() => {
+  const map: Record<string, string> = {}
+  opciones.value.carreras.forEach((c, i) => {
+    map[c] = PALETA_CATEGORICA[i % PALETA_CATEGORICA.length]
+  })
+  return map
+})
+
+function colorCarrera(label: string) {
+  return carreraColorMap.value[label] ?? COLOR_NEUTRO
+}
+
+function colorSexo(label: string) {
+  return COLORES_SEXO[label] ?? COLOR_NEUTRO
+}
 
 async function cargarOpciones() {
   try {
@@ -95,6 +131,83 @@ onMounted(async () => {
 })
 
 watch([tab, periodo, filtros], cargarResumen, { deep: true })
+
+const exportModalOpen = ref(false)
+
+const descripcionFiltros = computed(() => {
+  const partes: string[] = []
+  if (filtros.carrera) partes.push(`carrera "${filtros.carrera}"`)
+  if (filtros.anio_ingreso) partes.push(`año de ingreso ${filtros.anio_ingreso}`)
+  if (filtros.sexo) partes.push(`sexo ${filtros.sexo}`)
+  if (filtros.tipo_usuario) partes.push(`tipo de usuario "${filtros.tipo_usuario}"`)
+  return partes.length ? partes.join(', ') : 'del total (sin filtros de carrera, sexo, año o tipo de usuario)'
+})
+
+const descripcionExportacion = computed(() => {
+  const tabLabel = TABS.find((t) => t.id === tab.value)?.label ?? ''
+  const adjetivo = PERIODO_ADJETIVO[periodo.value]
+  return `Se va a exportar la tabla de "${tabLabel}" con vista ${adjetivo}, ${descripcionFiltros.value}.`
+})
+
+function porcentaje(valor: number, total: number) {
+  return total ? Math.round((valor / total) * 100) : 0
+}
+
+function confirmarExportar() {
+  const tabLabel = TABS.find((t) => t.id === tab.value)?.label ?? tab.value
+  const periodoLabel = PERIODOS.find((p) => p.id === periodo.value)?.label ?? periodo.value
+  const total = resumen.value.total
+
+  const csv = construirCsv([
+    {
+      titulo: 'Resumen del reporte',
+      columnas: ['Campo', 'Valor'],
+      filas: [
+        ['Reporte', tabLabel],
+        ['Periodo', periodoLabel],
+        ['Filtros aplicados', descripcionFiltros.value],
+        ['Total', total],
+        ['Promedio por periodo', resumen.value.promedioPorPeriodo],
+        ['Categoría más frecuente', resumen.value.categoriaMasFrecuente],
+      ],
+    },
+    {
+      titulo: `Serie temporal (${periodoLabel.toLowerCase()})`,
+      columnas: ['Periodo', 'Cantidad'],
+      filas: resumen.value.serie.map((d) => [d.label, d.value]),
+    },
+    {
+      titulo: 'Por carrera',
+      columnas: ['Carrera', 'Cantidad', '%'],
+      filas: resumen.value.porCarrera.map((d) => [d.label, d.value, porcentaje(d.value, total)]),
+    },
+    {
+      titulo: 'Por sexo',
+      columnas: ['Sexo', 'Cantidad', '%'],
+      filas: resumen.value.porSexo.map((d) => [d.label, d.value, porcentaje(d.value, total)]),
+    },
+    {
+      titulo: 'Por año de ingreso',
+      columnas: ['Año de ingreso', 'Cantidad', '%'],
+      filas: resumen.value.porAnioIngreso.map((d) => [d.label, d.value, porcentaje(d.value, total)]),
+    },
+    {
+      titulo: 'Por tipo de usuario',
+      columnas: ['Tipo de usuario', 'Cantidad', '%'],
+      filas: resumen.value.porTipoUsuario.map((d) => [d.label, d.value, porcentaje(d.value, total)]),
+    },
+    {
+      titulo: 'Por hora del día',
+      columnas: ['Hora', 'Cantidad', '%'],
+      filas: resumen.value.porHora.map((d) => [d.label, d.value, porcentaje(d.value, total)]),
+    },
+  ])
+
+  const fecha = new Date().toISOString().slice(0, 10)
+  descargarCsv(`reporte-${tab.value}-${periodo.value}-${fecha}.csv`, csv)
+  exportModalOpen.value = false
+  toast.success('Reporte exportado')
+}
 </script>
 
 <template>
@@ -128,17 +241,47 @@ watch([tab, periodo, filtros], cargarResumen, { deep: true })
         </button>
       </div>
 
-      <div class="flex items-center gap-2 mb-4 flex-wrap">
-        <span class="text-xs font-medium text-gray-500 mr-1">Periodo:</span>
-        <button
-          v-for="p in PERIODOS"
-          :key="p.id"
-          @click="periodo = p.id"
-          class="px-3 py-1.5 rounded-full text-xs font-medium transition-colors"
-          :class="periodo === p.id ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
-        >
-          {{ p.label }}
-        </button>
+      <div class="flex items-center gap-2 mb-4 flex-wrap justify-between">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="text-xs font-medium text-gray-500 mr-1">Periodo:</span>
+          <button
+            v-for="p in PERIODOS"
+            :key="p.id"
+            @click="periodo = p.id"
+            class="px-3 py-1.5 rounded-full text-xs font-medium transition-colors"
+            :class="periodo === p.id ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
+          >
+            {{ p.label }}
+          </button>
+        </div>
+
+        <div class="flex items-center gap-2 flex-wrap">
+          <div class="flex gap-1 bg-gray-100 rounded-full p-1">
+            <button
+              @click="vista = 'grafico'"
+              class="px-3 py-1.5 rounded-full text-xs font-medium transition-colors"
+              :class="vista === 'grafico' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'"
+            >
+              Gráfico
+            </button>
+            <button
+              @click="vista = 'tabla'"
+              class="px-3 py-1.5 rounded-full text-xs font-medium transition-colors"
+              :class="vista === 'tabla' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'"
+            >
+              Tabla
+            </button>
+          </div>
+          <button
+            @click="exportModalOpen = true"
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-700 transition-colors"
+          >
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2-8H8a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V8l-4-4z" />
+            </svg>
+            Exportar a Excel
+          </button>
+        </div>
       </div>
 
       <div class="bg-white rounded-xl shadow-md p-4 mb-6">
@@ -197,37 +340,70 @@ watch([tab, periodo, filtros], cargarResumen, { deep: true })
           {{ TABS.find((t) => t.id === tab)?.label }} — {{ PERIODOS.find((p) => p.id === periodo)?.label }}
         </h3>
         <p class="text-xs text-gray-400 mb-4">Mostrando los últimos {{ resumen.serie.length }} periodos según filtros aplicados</p>
-        <div class="h-72">
+        <div v-if="vista === 'grafico'" class="h-72">
           <BarChart :data="resumen.serie" :color="colorBar[tab]" />
         </div>
+        <ReporteTabla v-else :data="resumen.serie" :total="resumen.total" columna="Periodo" />
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div class="bg-white rounded-xl shadow-md p-6">
           <h3 class="font-medium text-gray-900 mb-4">Por carrera</h3>
-          <BreakdownList :data="resumen.porCarrera" :total="resumen.total" :color="tab === 'prestamos' ? 'indigo' : tab === 'ingresos' ? 'emerald' : 'amber'" />
+          <BreakdownList v-if="vista === 'grafico'" :data="resumen.porCarrera" :total="resumen.total" :item-color="colorCarrera" />
+          <ReporteTabla v-else :data="resumen.porCarrera" :total="resumen.total" columna="Carrera" :item-color="colorCarrera" />
         </div>
 
         <div class="bg-white rounded-xl shadow-md p-6">
           <h3 class="font-medium text-gray-900 mb-4">Por sexo</h3>
-          <BreakdownList :data="resumen.porSexo" :total="resumen.total" color="blue" />
+          <BreakdownList v-if="vista === 'grafico'" :data="resumen.porSexo" :total="resumen.total" :item-color="colorSexo" />
+          <ReporteTabla v-else :data="resumen.porSexo" :total="resumen.total" columna="Sexo" :item-color="colorSexo" />
         </div>
 
         <div class="bg-white rounded-xl shadow-md p-6">
           <h3 class="font-medium text-gray-900 mb-4">Por año de ingreso</h3>
-          <BreakdownList :data="resumen.porAnioIngreso" :total="resumen.total" color="purple" />
+          <BreakdownList v-if="vista === 'grafico'" :data="resumen.porAnioIngreso" :total="resumen.total" color="purple" />
+          <ReporteTabla v-else :data="resumen.porAnioIngreso" :total="resumen.total" columna="Año de ingreso" />
         </div>
 
         <div class="bg-white rounded-xl shadow-md p-6">
           <h3 class="font-medium text-gray-900 mb-4">Por tipo de usuario</h3>
-          <BreakdownList :data="resumen.porTipoUsuario" :total="resumen.total" :color="tab === 'ingresos' ? 'emerald' : 'amber'" />
+          <BreakdownList v-if="vista === 'grafico'" :data="resumen.porTipoUsuario" :total="resumen.total" :color="tab === 'ingresos' ? 'emerald' : 'amber'" />
+          <ReporteTabla v-else :data="resumen.porTipoUsuario" :total="resumen.total" columna="Tipo de usuario" />
         </div>
 
         <div class="bg-white rounded-xl shadow-md p-6 md:col-span-2">
           <h3 class="font-medium text-gray-900 mb-1">Distribución por hora del día</h3>
           <p class="text-xs text-gray-400 mb-4">Cantidad de registros por hora (00:00 – 23:00)</p>
-          <div class="h-64">
+          <div v-if="vista === 'grafico'" class="h-64">
             <BarChart :data="resumen.porHora" :color="colorBar[tab]" />
+          </div>
+          <ReporteTabla v-else :data="resumen.porHora" :total="resumen.total" columna="Hora" />
+        </div>
+      </div>
+
+      <div
+        v-if="exportModalOpen"
+        class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        @click.self="exportModalOpen = false"
+      >
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
+          <h3 class="text-lg font-bold text-gray-900 mb-1">Confirmar exportación</h3>
+          <p class="text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 mb-5">
+            {{ descripcionExportacion }}
+          </p>
+          <div class="flex gap-3">
+            <button
+              @click="exportModalOpen = false"
+              class="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors font-medium text-sm"
+            >
+              Cancelar
+            </button>
+            <button
+              @click="confirmarExportar"
+              class="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium text-sm"
+            >
+              Confirmar y exportar
+            </button>
           </div>
         </div>
       </div>

@@ -17,6 +17,22 @@ class SalaController extends Controller
         $salas = Sala::orderBy('id')->get();
         $reservas = Reserva::where('fecha', $fecha)->get();
 
+        $ruts = $reservas->flatMap(fn ($r) => $r->ruts ?? [])->unique()->values();
+        $usuariosPorRut = Usuario::whereIn('rut', $ruts)->get()->keyBy('rut');
+
+        $reservas = $reservas->map(function ($r) use ($usuariosPorRut) {
+            $r->personas = collect($r->ruts ?? [])->map(function ($rut) use ($usuariosPorRut) {
+                $usuario = $usuariosPorRut->get($rut);
+
+                return [
+                    'rut' => $rut,
+                    'nombre' => $usuario ? "{$usuario->nombre} {$usuario->apellido}" : null,
+                ];
+            })->values();
+
+            return $r;
+        });
+
         return response()->json([
             'fecha' => $fecha,
             'salas' => $salas,
@@ -29,11 +45,16 @@ class SalaController extends Controller
         $data = $request->validate([
             'sala_id' => ['required', 'exists:salas,id'],
             'fecha' => ['required', 'date'],
-            'hora_inicio' => ['required', 'integer', 'min:0', 'max:23'],
-            'hora_fin' => ['required', 'integer', 'gt:hora_inicio'],
-            'rut_usuario' => ['required', 'string'],
-            'nombre_usuario' => ['required', 'string'],
+            'hora_inicio' => ['required', 'integer', 'min:8', 'max:20'],
+            'hora_fin' => ['required', 'integer', 'gt:hora_inicio', 'max:21'],
+            'cantidad_personas' => ['required', 'integer', 'min:2', 'max:5'],
+            'ruts' => ['required', 'array'],
+            'ruts.*' => ['required', 'string'],
         ]);
+
+        if (count($data['ruts']) !== $data['cantidad_personas']) {
+            return response()->json(['message' => 'Debe ingresar un RUT por cada persona indicada'], 422);
+        }
 
         $existe = Reserva::where('sala_id', $data['sala_id'])
             ->where('fecha', $data['fecha'])
@@ -44,13 +65,14 @@ class SalaController extends Controller
             return response()->json(['message' => 'Ese bloque ya se encuentra reservado'], 409);
         }
 
-        $usuario = Usuario::where('rut', $data['rut_usuario'])->first();
+        $usuario = Usuario::where('rut', $data['ruts'][0])->first();
 
         $reserva = Reserva::create([
             'sala_id' => $data['sala_id'],
             'usuario_id' => $usuario?->id,
-            'nombre_usuario' => $data['nombre_usuario'],
-            'rut_usuario' => $data['rut_usuario'],
+            'rut_usuario' => $data['ruts'][0],
+            'cantidad_personas' => $data['cantidad_personas'],
+            'ruts' => $data['ruts'],
             'fecha' => $data['fecha'],
             'hora_inicio' => $data['hora_inicio'],
             'hora_fin' => $data['hora_fin'],

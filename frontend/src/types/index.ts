@@ -85,8 +85,10 @@ export type Reserva = {
   id: number
   sala_id: number
   usuario_id: number | null
-  nombre_usuario: string
   rut_usuario: string
+  cantidad_personas: number
+  ruts: string[]
+  personas?: { rut: string; nombre: string | null }[]
   fecha: string
   hora_inicio: number
   hora_fin: number

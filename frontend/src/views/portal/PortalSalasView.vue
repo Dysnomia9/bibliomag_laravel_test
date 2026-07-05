@@ -21,6 +21,7 @@ const horariosBloques = [
   { inicio: 14, fin: 16, label: '14:00 – 16:00' },
   { inicio: 16, fin: 18, label: '16:00 – 18:00' },
   { inicio: 18, fin: 20, label: '18:00 – 20:00' },
+  { inicio: 20, fin: 21, label: '20:00 – 21:00' },
 ]
 
 const salas = ref<Sala[]>([])
@@ -122,7 +123,7 @@ function formatFechaLarga(fecha: string) {
         style="background: linear-gradient(135deg, #2D1B69 0%, #3B28A3 30%, #4338CA 60%, #4F46E5 100%);"
       >
         <div class="px-6 py-5">
-          <h1 class="text-2xl font-serif font-bold tracking-tight text-white">Reservar Sala de Estudio</h1>
+          <h1 class="text-2xl font-serif font-bold tracking-tight text-white">Reservar Logia de Estudio</h1>
           <p class="text-sm text-white/60 mt-1">Puedes solicitar un bloque libre y cancelar únicamente tus propias reservas</p>
         </div>
       </div>
@@ -140,7 +141,7 @@ function formatFechaLarga(fecha: string) {
           <input
             v-model="busqueda"
             type="text"
-            placeholder="Ej: Sala 03"
+            placeholder="Ej: Logia 03"
             class="w-full px-3.5 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none text-sm"
           />
         </div>

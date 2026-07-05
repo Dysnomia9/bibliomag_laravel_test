@@ -26,7 +26,7 @@ const acciones = [
   },
   {
     to: 'portal-salas',
-    titulo: 'Reservar sala',
+    titulo: 'Reservar logia',
     detalle: 'Solicita un bloque de estudio y gestiona tus reservas',
     icon: 'M4 6h16M4 12h16M4 18h7',
   },

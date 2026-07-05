@@ -80,12 +80,12 @@ async function crearPrestamo() {
       libro_titulo: nuevoLibro.value,
       dias_prestamo: diasPrestamo.value,
     })
-    toast.success('Préstamo registrado')
+    toast.success('Reserva registrada')
     nuevoLibro.value = ''
     showForm.value = false
     await cargarPrestamosYReservas()
   } catch {
-    toast.error('No se pudo registrar el préstamo')
+    toast.error('No se pudo crear la reserva')
   }
 }
 
@@ -131,7 +131,7 @@ async function crearReserva() {
       fecha_reserva: fechaReserva.value,
       fecha_retiro: fechaRetiro.value,
     })
-    toast.success(`Reserva creada: "${libroEncontrado.value}"`)
+    toast.success(`Préstamo registrado: "${libroEncontrado.value}"`)
     codigoBarras.value = ''
     libroEncontrado.value = ''
     fechaReserva.value = ''
@@ -139,7 +139,7 @@ async function crearReserva() {
     showReservaForm.value = false
     await cargarPrestamosYReservas()
   } catch {
-    toast.error('No se pudo crear la reserva')
+    toast.error('No se pudo registrar el préstamo')
   }
 }
 
@@ -231,27 +231,27 @@ function formatFecha(iso: string) {
             <div class="flex gap-2">
               <button
                 @click="showReservaForm = !showReservaForm; showForm = false"
-                class="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
+                class="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium"
               >
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                 </svg>
-                Reservar Libro
+                Nuevo Préstamo
               </button>
               <button
                 @click="showForm = !showForm; showReservaForm = false"
-                class="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium"
+                class="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
               >
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
                 </svg>
-                Nuevo Préstamo
+                Reservar Libro
               </button>
             </div>
           </div>
 
           <div v-if="showForm" class="mt-4 pt-4 border-t border-gray-100">
-            <h4 class="text-sm font-semibold text-gray-700 mb-3">Registrar Préstamo</h4>
+            <h4 class="text-sm font-semibold text-gray-700 mb-3">Reservar Libro</h4>
             <div class="flex gap-3 flex-wrap">
               <input
                 v-model="nuevoLibro"
@@ -274,10 +274,10 @@ function formatFecha(iso: string) {
 
           <div v-if="showReservaForm" class="mt-4 pt-4 border-t border-gray-100">
             <h4 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-              <svg class="w-4 h-4 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <svg class="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h7" />
               </svg>
-              Reservar Libro por Código de Barras
+              Nuevo Préstamo por Código de Barras
             </h4>
             <div class="space-y-3">
               <div class="flex gap-3 flex-wrap">
@@ -289,7 +289,7 @@ function formatFecha(iso: string) {
                     :value="codigoBarras"
                     @input="buscarLibroPorCodigo(($event.target as HTMLInputElement).value)"
                     placeholder="Escanear o ingresar código de barras"
-                    class="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none font-mono"
+                    class="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none font-mono"
                   />
                 </div>
               </div>
@@ -305,12 +305,12 @@ function formatFecha(iso: string) {
               </div>
               <div class="flex gap-3 flex-wrap items-end">
                 <div class="flex-1 min-w-[180px]">
-                  <label class="block text-xs font-medium text-gray-600 mb-1">Fecha de reserva</label>
+                  <label class="block text-xs font-medium text-gray-600 mb-1">Fecha de préstamo</label>
                   <input
                     v-model="fechaReserva"
                     type="date"
                     :min="today"
-                    class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
+                    class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
                   />
                 </div>
                 <div class="flex-1 min-w-[180px]">
@@ -319,15 +319,15 @@ function formatFecha(iso: string) {
                     v-model="fechaRetiro"
                     type="date"
                     :min="fechaReserva || today"
-                    class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
+                    class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
                   />
                 </div>
                 <button
                   @click="crearReserva"
                   :disabled="!libroEncontrado || !fechaReserva || !fechaRetiro"
-                  class="px-5 py-2.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="px-5 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Confirmar Reserva
+                  Confirmar Préstamo
                 </button>
               </div>
             </div>
@@ -338,16 +338,16 @@ function formatFecha(iso: string) {
           <button
             @click="activeTab = 'prestamos'"
             class="flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-colors"
-            :class="activeTab === 'prestamos' ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'"
+            :class="activeTab === 'prestamos' ? 'bg-purple-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'"
           >
-            Préstamos ({{ prestamos.length }})
+            Reservas ({{ prestamos.length }})
           </button>
           <button
             @click="activeTab = 'reservas'"
             class="flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-colors"
-            :class="activeTab === 'reservas' ? 'bg-purple-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'"
+            :class="activeTab === 'reservas' ? 'bg-emerald-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'"
           >
-            Reservas ({{ reservas.length }})
+            Préstamos ({{ reservas.length }})
           </button>
         </div>
 
@@ -384,7 +384,7 @@ function formatFecha(iso: string) {
                   </td>
                 </tr>
                 <tr v-if="!prestamos.length">
-                  <td colspan="5" class="px-6 py-8 text-center text-sm text-gray-400">Sin préstamos registrados.</td>
+                  <td colspan="5" class="px-6 py-8 text-center text-sm text-gray-400">Sin reservas registradas.</td>
                 </tr>
               </tbody>
             </table>
@@ -426,7 +426,7 @@ function formatFecha(iso: string) {
                   </td>
                 </tr>
                 <tr v-if="!reservas.length">
-                  <td colspan="6" class="px-6 py-8 text-center text-sm text-gray-400">Sin reservas registradas.</td>
+                  <td colspan="6" class="px-6 py-8 text-center text-sm text-gray-400">Sin préstamos registrados.</td>
                 </tr>
               </tbody>
             </table>
