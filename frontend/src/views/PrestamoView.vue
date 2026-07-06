@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import StaffLayout from '@/components/layout/StaffLayout.vue'
 import api from '@/services/api'
 import { useToast } from '@/composables/useToast'
@@ -28,6 +28,13 @@ const libroEncontrado = ref('')
 const fechaReserva = ref('')
 const fechaRetiro = ref('')
 const today = new Date().toISOString().slice(0, 10)
+
+const prestamosLibros = computed(() => prestamos.value.filter((p) => p.tipo_item === 'libro' || !p.tipo_item))
+const prestamosAudifonos = computed(() => prestamos.value.filter((p) => p.tipo_item === 'audifonos'))
+const prestamosNotebooks = computed(() => prestamos.value.filter((p) => p.tipo_item === 'notebook'))
+
+const codigoAudifonos = ref('')
+const codigoNotebook = ref('')
 
 function onRutInput(event: Event) {
   rut.value = formatRut((event.target as HTMLInputElement).value)
@@ -99,6 +106,27 @@ async function devolverPrestamo(prestamo: Prestamo) {
   }
 }
 
+async function crearPrestamoEquipo(tipo: 'audifonos' | 'notebook') {
+  const codigo = tipo === 'audifonos' ? codigoAudifonos : codigoNotebook
+
+  if (!codigo.value.trim()) {
+    toast.error(`Ingrese el código del ${tipo === 'audifonos' ? 'audífono' : 'notebook'}`)
+    return
+  }
+  try {
+    await api.post('/prestamos', {
+      usuario_id: usuario.value!.id,
+      libro_titulo: codigo.value,
+      tipo_item: tipo,
+    })
+    toast.success('Préstamo de equipo registrado')
+    codigo.value = ''
+    await cargarPrestamosYReservas()
+  } catch {
+    toast.error('No se pudo registrar el préstamo del equipo')
+  }
+}
+
 let buscarLibroTimer: ReturnType<typeof setTimeout> | undefined
 function buscarLibroPorCodigo(valor: string) {
   codigoBarras.value = valor.replace(/\D/g, '')
@@ -155,6 +183,9 @@ async function cancelarReserva(reserva: ReservaLibro) {
 
 function getBadge(p: Prestamo) {
   if (p.estado === 'devuelto') return { label: 'Devuelto', cls: 'bg-gray-100 text-gray-700' }
+  // Los equipos (audífonos, notebooks) no tienen fecha de vencimiento: se devuelven
+  // al término de la estadía en la biblioteca, así que nunca quedan "atrasados".
+  if (!p.fecha_devolucion) return { label: 'En uso', cls: 'bg-indigo-100 text-indigo-700' }
   const fechaDevolucion = new Date(p.fecha_devolucion)
   const ahora = new Date()
   if (p.estado === 'atrasado' || fechaDevolucion < ahora) return { label: 'Atrasado', cls: 'bg-red-100 text-red-700' }
@@ -169,8 +200,8 @@ const reservaBadges: Record<string, { label: string; cls: string }> = {
   cancelado: { label: 'Cancelado', cls: 'bg-gray-100 text-gray-700' },
 }
 
-function formatFecha(iso: string) {
-  return new Date(iso).toLocaleDateString('es-CL')
+function formatFecha(iso: string | null) {
+  return iso ? new Date(iso).toLocaleDateString('es-CL') : '—'
 }
 </script>
 
@@ -340,7 +371,7 @@ function formatFecha(iso: string) {
             class="flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-colors"
             :class="activeTab === 'prestamos' ? 'bg-purple-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'"
           >
-            Reservas ({{ prestamos.length }})
+            Reservas ({{ prestamosLibros.length }})
           </button>
           <button
             @click="activeTab = 'reservas'"
@@ -364,7 +395,7 @@ function formatFecha(iso: string) {
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-100">
-                <tr v-for="p in prestamos" :key="p.id" class="hover:bg-gray-50">
+                <tr v-for="p in prestamosLibros" :key="p.id" class="hover:bg-gray-50">
                   <td class="px-6 py-3 text-sm text-gray-900">{{ p.libro_titulo }}</td>
                   <td class="px-6 py-3 text-sm font-mono text-gray-600">{{ formatFecha(p.fecha_prestamo) }}</td>
                   <td class="px-6 py-3 text-sm font-mono text-gray-600">{{ formatFecha(p.fecha_devolucion) }}</td>
@@ -383,7 +414,7 @@ function formatFecha(iso: string) {
                     </button>
                   </td>
                 </tr>
-                <tr v-if="!prestamos.length">
+                <tr v-if="!prestamosLibros.length">
                   <td colspan="5" class="px-6 py-8 text-center text-sm text-gray-400">Sin reservas registradas.</td>
                 </tr>
               </tbody>
@@ -430,6 +461,94 @@ function formatFecha(iso: string) {
                 </tr>
               </tbody>
             </table>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+          <div class="bg-white rounded-xl shadow-md p-6">
+            <h4 class="font-semibold text-gray-900 mb-1 flex items-center gap-2">
+              <svg class="w-4 h-4 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 18V5l12-2v13M9 18a3 3 0 11-6 0 3 3 0 016 0zm12-2a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              Préstamo de Audífonos
+            </h4>
+            <p class="text-xs text-gray-400 mb-4">Se identifican por código de inventario · se devuelven al término de la estadía</p>
+            <div class="flex gap-2 flex-wrap mb-4">
+              <input
+                v-model="codigoAudifonos"
+                placeholder="Código (ej: AUD-003)"
+                class="flex-1 min-w-[160px] px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
+              />
+              <button
+                @click="crearPrestamoEquipo('audifonos')"
+                class="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium"
+              >
+                Pedir
+              </button>
+            </div>
+            <div class="space-y-2">
+              <div
+                v-for="p in prestamosAudifonos"
+                :key="p.id"
+                class="flex items-center justify-between text-sm border-t border-gray-100 pt-2 first:border-t-0 first:pt-0"
+              >
+                <span class="text-gray-900 font-mono">{{ p.libro_titulo }}</span>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs px-2 py-0.5 rounded-full font-medium" :class="getBadge(p).cls">{{ getBadge(p).label }}</span>
+                  <button
+                    v-if="p.estado !== 'devuelto'"
+                    @click="devolverPrestamo(p)"
+                    class="text-xs text-indigo-700 hover:text-indigo-800 font-medium"
+                  >
+                    Devolver
+                  </button>
+                </div>
+              </div>
+              <p v-if="!prestamosAudifonos.length" class="text-xs text-gray-400 text-center py-2">Sin préstamos de audífonos.</p>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-xl shadow-md p-6">
+            <h4 class="font-semibold text-gray-900 mb-1 flex items-center gap-2">
+              <svg class="w-4 h-4 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+              Préstamo de Notebooks
+            </h4>
+            <p class="text-xs text-gray-400 mb-4">Se identifican por código de inventario · se devuelven al término de la estadía</p>
+            <div class="flex gap-2 flex-wrap mb-4">
+              <input
+                v-model="codigoNotebook"
+                placeholder="Código (ej: NB-012)"
+                class="flex-1 min-w-[160px] px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
+              />
+              <button
+                @click="crearPrestamoEquipo('notebook')"
+                class="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium"
+              >
+                Pedir
+              </button>
+            </div>
+            <div class="space-y-2">
+              <div
+                v-for="p in prestamosNotebooks"
+                :key="p.id"
+                class="flex items-center justify-between text-sm border-t border-gray-100 pt-2 first:border-t-0 first:pt-0"
+              >
+                <span class="text-gray-900 font-mono">{{ p.libro_titulo }}</span>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs px-2 py-0.5 rounded-full font-medium" :class="getBadge(p).cls">{{ getBadge(p).label }}</span>
+                  <button
+                    v-if="p.estado !== 'devuelto'"
+                    @click="devolverPrestamo(p)"
+                    class="text-xs text-indigo-700 hover:text-indigo-800 font-medium"
+                  >
+                    Devolver
+                  </button>
+                </div>
+              </div>
+              <p v-if="!prestamosNotebooks.length" class="text-xs text-gray-400 text-center py-2">Sin préstamos de notebooks.</p>
+            </div>
           </div>
         </div>
       </div>

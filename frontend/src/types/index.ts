@@ -21,7 +21,9 @@ export type Usuario = {
 
 export type Entrada = {
   id: number
-  usuario_id: number
+  usuario_id: number | null
+  rut_externo: string | null
+  nombre_externo: string | null
   fecha_hora_entrada: string
   fecha_hora_salida: string | null
   via: 'manual' | 'qr'
@@ -32,8 +34,9 @@ export type Prestamo = {
   id: number
   usuario_id: number
   libro_titulo: string
+  tipo_item: 'libro' | 'audifonos' | 'notebook'
   fecha_prestamo: string
-  fecha_devolucion: string
+  fecha_devolucion: string | null
   fecha_devolucion_real: string | null
   estado: 'activo' | 'atrasado' | 'devuelto'
   usuario?: Pick<Usuario, 'id' | 'nombre' | 'apellido' | 'rut'>

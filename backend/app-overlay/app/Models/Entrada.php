@@ -13,6 +13,8 @@ class Entrada extends Model
 
     protected $fillable = [
         'usuario_id',
+        'rut_externo',
+        'nombre_externo',
         'fecha_hora_entrada',
         'fecha_hora_salida',
         'via',

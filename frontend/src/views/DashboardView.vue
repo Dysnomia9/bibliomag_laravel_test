@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import StaffLayout from '@/components/layout/StaffLayout.vue'
 import api from '@/services/api'
@@ -14,6 +14,11 @@ const aforo = 220
 
 const shortcuts = STAFF_SHORTCUTS
 
+const fechaHoy = computed(() => {
+  const str = new Date().toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+  return str.charAt(0).toUpperCase() + str.slice(1)
+})
+
 onMounted(async () => {
   try {
     const { data } = await api.get<ResumenDashboard>('/dashboard/resumen')
@@ -27,53 +32,94 @@ onMounted(async () => {
 
 <template>
   <StaffLayout>
-    <div class="flex min-h-[calc(100vh-8.5rem)] items-center px-2 sm:px-6 py-10">
-      <div class="mx-auto flex w-full max-w-[1080px] flex-col justify-center">
-        <div class="mb-12 flex justify-center">
-          <div class="flex items-center gap-4 rounded-xl border border-gray-200 bg-white px-8 py-4 shadow-sm">
-            <div class="h-3 w-3 animate-pulse rounded-full bg-emerald-500" />
-            <div class="text-center">
-              <div class="text-[11px] font-medium uppercase tracking-widest text-gray-500">Personas en biblioteca</div>
-              <div class="mt-1 flex items-baseline justify-center gap-1">
-                <span class="text-4xl font-semibold tabular-nums">{{ resumen.personasEnSala }}</span>
-                <span class="text-lg text-gray-400">/ {{ aforo }}</span>
+    <div class="max-w-6xl mx-auto min-h-[calc(100vh-7rem)] flex flex-col">
+      <!-- Hero -->
+      <div class="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-purple-50/60 p-6 sm:p-8 mb-6">
+        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+          <div>
+            <h1 class="text-2xl sm:text-3xl font-serif font-bold text-gray-900 mb-2">Menú Inicio</h1>
+            <p class="text-sm text-gray-500 mb-4 max-w-md">
+              Desde aquí puedes gestionar los módulos principales de la Biblioteca UMAG.
+            </p>
+            <div class="flex items-center gap-2 text-sm font-medium text-indigo-700">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              {{ fechaHoy }}
+            </div>
+          </div>
+
+          <div class="flex flex-wrap gap-4">
+            <div class="flex items-center gap-3 bg-white rounded-xl border border-gray-100 shadow-sm px-5 py-4">
+              <div class="h-11 w-11 shrink-0 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1a4 4 0 100-8 4 4 0 000 8zm6 3a4 4 0 00-3-3.87M9 12a4 4 0 100-8 4 4 0 000 8z" />
+                </svg>
+              </div>
+              <div>
+                <p class="text-[11px] font-medium uppercase tracking-wide text-gray-400 flex items-center gap-1.5">
+                  <span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Personas en Biblioteca
+                </p>
+                <p class="text-2xl font-bold text-gray-900 tabular-nums">
+                  {{ resumen.personasEnSala }} <span class="text-sm font-normal text-gray-400">/ {{ aforo }}</span>
+                </p>
               </div>
             </div>
-            <div class="mx-2 h-12 w-px bg-gray-200" />
-            <div class="text-center">
-              <div class="text-[11px] font-medium uppercase tracking-widest text-gray-500">Entradas hoy</div>
-              <div class="mt-1 text-4xl font-semibold tabular-nums">{{ resumen.entradasHoy }}</div>
+
+            <div class="flex items-center gap-3 bg-white rounded-xl border border-gray-100 shadow-sm px-5 py-4">
+              <div class="h-11 w-11 shrink-0 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M11 16l-4-4m0 0l4-4m-4 4h14M5 5v14" />
+                </svg>
+              </div>
+              <div>
+                <p class="text-[11px] font-medium uppercase tracking-wide text-gray-400">Entradas hoy</p>
+                <p class="text-2xl font-bold text-gray-900 tabular-nums">{{ resumen.entradasHoy }}</p>
+              </div>
             </div>
           </div>
         </div>
+      </div>
 
-        <p v-if="usingMock" class="mb-6 text-center text-xs">
-          <span class="inline-flex items-center gap-1.5 bg-acento-500/10 text-acento-600 px-2.5 py-1 rounded-full">
-            <span class="h-1.5 w-1.5 rounded-full bg-acento-500"></span>
-            Mostrando datos de ejemplo (API no disponible)
-          </span>
-        </p>
+      <p v-if="usingMock" class="mb-6 text-center text-xs">
+        <span class="inline-flex items-center gap-1.5 bg-acento-500/10 text-acento-600 px-2.5 py-1 rounded-full">
+          <span class="h-1.5 w-1.5 rounded-full bg-acento-500"></span>
+          Mostrando datos de ejemplo (API no disponible)
+        </span>
+      </p>
+
+      <!-- Accesos rápidos -->
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-6">
+        <div class="flex items-center gap-3 mb-1">
+          <span class="w-1 h-6 rounded-full bg-indigo-600 shrink-0"></span>
+          <h2 class="text-lg font-bold text-gray-900">Accesos rápidos</h2>
+        </div>
+        <p class="text-sm text-gray-400 mb-6 ml-4">Selecciona un módulo para comenzar</p>
 
         <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
           <button
             v-for="shortcut in shortcuts"
             :key="shortcut.key"
             @click="router.push({ name: shortcut.name })"
-            class="group flex min-h-[260px] flex-col items-center justify-center rounded-xl border-2 border-gray-200 bg-white p-8 transition-all hover:border-indigo-600 hover:bg-indigo-50/30 hover:shadow-lg active:scale-[0.98]"
+            class="group flex flex-col items-center rounded-xl border border-gray-200 bg-white p-6 text-center transition-all hover:border-indigo-400 hover:shadow-md active:scale-[0.98]"
           >
-            <div class="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 transition-colors group-hover:bg-indigo-600 group-hover:text-white">
-              <svg class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+            <div class="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 transition-colors group-hover:bg-indigo-600 group-hover:text-white">
+              <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
                 <path stroke-linecap="round" stroke-linejoin="round" :d="shortcut.icon" />
               </svg>
             </div>
-            <div class="text-center text-[17px] font-semibold text-gray-900">{{ shortcut.label }}</div>
-            <div class="mt-1 text-center text-[12px] text-gray-500">{{ shortcut.desc }}</div>
+            <div class="text-[15px] font-semibold text-gray-900">{{ shortcut.label }}</div>
             <kbd class="mt-4 rounded border border-gray-200 bg-gray-100 px-2.5 py-1 text-[11px] font-semibold text-gray-500">
               {{ shortcut.key }}
             </kbd>
           </button>
         </div>
       </div>
+
+      <p class="text-center text-xs text-gray-400 mt-auto pt-6 pb-2">
+        © {{ new Date().getFullYear() }} Biblioteca UMAG - Universidad de Magallanes. Todos los derechos reservados.
+      </p>
     </div>
   </StaffLayout>
 </template>

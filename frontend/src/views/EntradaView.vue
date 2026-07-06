@@ -18,6 +18,11 @@ const usingMock = ref(false)
 const registrando = ref(false)
 const selectedDate = ref(hoy)
 
+const externoModalOpen = ref(false)
+const rutExterno = ref('')
+const nombreExterno = ref('')
+const registrandoExterno = ref(false)
+
 const VIA_LABELS: Record<string, string> = {
   qr: 'QR Móvil',
   manual: 'Manual',
@@ -73,6 +78,38 @@ async function registrarEntrada(via: 'manual' | 'qr' = 'manual') {
 
 function onRutInput(event: Event) {
   rut.value = formatRut((event.target as HTMLInputElement).value)
+}
+
+function abrirModalExterno() {
+  rutExterno.value = ''
+  nombreExterno.value = ''
+  externoModalOpen.value = true
+}
+
+function onRutExternoInput(event: Event) {
+  rutExterno.value = formatRut((event.target as HTMLInputElement).value)
+}
+
+async function registrarExterno() {
+  if (!rutExterno.value.trim()) {
+    toast.error('Ingrese el RUT del visitante')
+    return
+  }
+
+  registrandoExterno.value = true
+  try {
+    await api.post('/entrada/externo', {
+      rut: rutExterno.value,
+      nombre: nombreExterno.value.trim() || undefined,
+    })
+    toast.success('Entrada de externo registrada')
+    externoModalOpen.value = false
+    await cargar()
+  } catch (e: any) {
+    toast.error(e?.response?.data?.message ?? 'No se pudo registrar la entrada')
+  } finally {
+    registrandoExterno.value = false
+  }
 }
 </script>
 
@@ -132,6 +169,15 @@ function onRutInput(event: Event) {
               </svg>
               Registrar Entrada
             </button>
+            <button
+              @click="abrirModalExterno"
+              class="flex items-center gap-2 px-5 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+            >
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1a4 4 0 100-8 4 4 0 000 8zm6 3a4 4 0 00-3-3.87M9 12a4 4 0 100-8 4 4 0 000 8z" />
+              </svg>
+              Externo
+            </button>
           </div>
         </div>
       </div>
@@ -166,8 +212,14 @@ function onRutInput(event: Event) {
                 <td class="px-6 py-3 text-sm font-mono text-stone-500 border-r border-stone-100">
                   {{ formatHora(e.fecha_hora_entrada) }}
                 </td>
-                <td class="px-6 py-3 text-sm font-mono text-gray-900 border-r border-stone-100">{{ e.usuario?.rut }}</td>
-                <td class="px-6 py-3 text-sm text-gray-900 border-r border-stone-100">{{ e.usuario?.nombre }} {{ e.usuario?.apellido }}</td>
+                <td class="px-6 py-3 text-sm font-mono text-gray-900 border-r border-stone-100">{{ e.usuario?.rut ?? e.rut_externo }}</td>
+                <td class="px-6 py-3 text-sm text-gray-900 border-r border-stone-100">
+                  <span v-if="e.usuario">{{ e.usuario.nombre }} {{ e.usuario.apellido }}</span>
+                  <span v-else class="flex items-center gap-1.5">
+                    {{ e.nombre_externo || 'Sin nombre' }}
+                    <span class="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-amber-50 text-amber-700 border border-amber-200">Externo</span>
+                  </span>
+                </td>
                 <td class="px-6 py-3">
                   <span class="text-xs px-2.5 py-1 rounded-full font-medium" :class="VIA_STYLES[e.via]">
                     {{ VIA_LABELS[e.via] }}
@@ -179,6 +231,60 @@ function onRutInput(event: Event) {
               </tr>
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <div
+        v-if="externoModalOpen"
+        class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        @click.self="externoModalOpen = false"
+      >
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+          <h3 class="text-lg font-bold text-gray-900 mb-1">Registrar visitante externo</h3>
+          <p class="text-sm text-gray-500 mb-5">
+            Para personas que no están en el sistema institucional. Se guarda directamente con los datos que declaren.
+          </p>
+
+          <div class="space-y-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">RUT</label>
+              <input
+                :value="rutExterno"
+                @input="onRutExternoInput"
+                type="text"
+                placeholder="12.345.678-5"
+                maxlength="12"
+                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                @keydown.enter="registrarExterno"
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Nombre (opcional)</label>
+              <input
+                v-model="nombreExterno"
+                type="text"
+                placeholder="Nombre (opcional)"
+                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                @keydown.enter="registrarExterno"
+              />
+            </div>
+          </div>
+
+          <div class="flex gap-3 mt-6">
+            <button
+              @click="externoModalOpen = false"
+              class="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors font-medium text-sm"
+            >
+              Cancelar
+            </button>
+            <button
+              @click="registrarExterno"
+              :disabled="registrandoExterno"
+              class="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm disabled:opacity-60"
+            >
+              {{ registrandoExterno ? 'Registrando…' : 'Registrar' }}
+            </button>
+          </div>
         </div>
       </div>
     </div>

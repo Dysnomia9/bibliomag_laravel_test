@@ -55,4 +55,23 @@ class EntradaController extends Controller
 
         return response()->json($entrada, 201);
     }
+
+    public function storeExterno(Request $request)
+    {
+        $data = $request->validate([
+            'rut' => ['required', 'string'],
+            'nombre' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        // Visitantes externos no están en la base de datos institucional: se
+        // registran directamente con el RUT (y nombre opcional) que declaran,
+        // sin validar contra la tabla de usuarios.
+        $entrada = Entrada::create([
+            'rut_externo' => $data['rut'],
+            'nombre_externo' => $data['nombre'] ?? null,
+            'via' => 'manual',
+        ]);
+
+        return response()->json($entrada, 201);
+    }
 }

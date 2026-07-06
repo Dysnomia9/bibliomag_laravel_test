@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import logoUmag from '@/assets/logo-umag.png'
@@ -19,24 +18,8 @@ const moduleLinks = [
   { name: 'salas', label: 'Logias', icon: 'M4 6h16M4 12h16M4 18h7', shortcut: '5' },
   { name: 'reportes', label: 'Reportes', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z', shortcut: '6' },
   { name: 'codigo-qr', label: 'Código QR', icon: 'M4 4h6v6H4V4zm10 0h6v6h-6V4zM4 14h6v6H4v-6zm10 3h3m3 0h-3m0 0v3m0-3v-3', shortcut: '7' },
+  { name: 'listado-prestamos', label: 'Listado Préstamos', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4', shortcut: '8' },
 ]
-
-const now = ref(new Date())
-let intervalId: ReturnType<typeof setInterval> | undefined
-
-onMounted(() => {
-  intervalId = setInterval(() => { now.value = new Date() }, 1000)
-})
-onUnmounted(() => {
-  if (intervalId) clearInterval(intervalId)
-})
-
-const fechaLabel = computed(() =>
-  now.value.toLocaleDateString('es-CL', { weekday: 'short', day: '2-digit', month: 'short' })
-)
-const horaLabel = computed(() =>
-  now.value.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-)
 
 async function onLogout() {
   await auth.logout()
@@ -80,8 +63,8 @@ async function onLogout() {
           </svg>
           {{ link.label }}
           <kbd
-            class="text-[10px] leading-none rounded px-1 py-0.5 font-mono"
-            :class="route.name === link.name ? 'bg-[#1a2430]/15 text-[#1a2430]' : 'bg-white/5 text-slate-500'"
+            class="text-[10px] leading-none rounded-md border px-1.5 py-0.5 font-bold"
+            :class="route.name === link.name ? 'border-[#1a2430]/30 bg-[#1a2430]/15 text-[#1a2430]' : 'border-white/30 bg-white/10 text-white'"
           >{{ link.shortcut }}</kbd>
         </router-link>
 
@@ -102,23 +85,12 @@ async function onLogout() {
           </svg>
           {{ link.label }}
           <kbd
-            class="text-[10px] leading-none rounded px-1 py-0.5 font-mono"
-            :class="route.name === link.name ? 'bg-[#1a2430]/15 text-[#1a2430]' : 'bg-white/5 text-slate-500'"
+            class="text-[10px] leading-none rounded-md border px-1.5 py-0.5 font-bold"
+            :class="route.name === link.name ? 'border-[#1a2430]/30 bg-[#1a2430]/15 text-[#1a2430]' : 'border-white/30 bg-white/10 text-white'"
           >{{ link.shortcut }}</kbd>
         </router-link>
       </div>
     </nav>
-
-    <div class="h-6 w-px bg-white/10 shrink-0 hidden lg:block" />
-
-    <!-- Reloj -->
-    <div class="hidden lg:flex items-center gap-1.5 text-[13px] text-slate-300 shrink-0">
-      <svg class="h-3.5 w-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-      <span class="capitalize">{{ fechaLabel }}</span>
-      <span class="tabular-nums">{{ horaLabel }}</span>
-    </div>
 
     <div class="h-6 w-px bg-white/10 shrink-0" />
 

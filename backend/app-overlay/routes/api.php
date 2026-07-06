@@ -32,6 +32,7 @@ Route::middleware(['auth:sanctum', 'staff'])->group(function () {
 
     Route::get('/entrada', [EntradaController::class, 'index']);
     Route::post('/entrada', [EntradaController::class, 'store']);
+    Route::post('/entrada/externo', [EntradaController::class, 'storeExterno']);
 
     Route::get('/prestamos', [PrestamoController::class, 'index']);
     Route::post('/prestamos', [PrestamoController::class, 'store']);

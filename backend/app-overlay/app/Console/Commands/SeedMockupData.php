@@ -224,6 +224,7 @@ class SeedMockupData extends Command
     private function seedPrestamos($usuarios): void
     {
         $total = 0;
+        $horaActual = now()->hour;
 
         foreach ($usuarios as $i => $usuario) {
             if (random_int(0, 100) > 60) {
@@ -234,7 +235,8 @@ class SeedMockupData extends Command
 
             for ($j = 0; $j < $numPrestamos; $j++) {
                 $diasAtras = random_int(0, 20);
-                $fechaPrestamo = now()->subDays($diasAtras);
+                $hora = $diasAtras === 0 ? random_int(8, max(8, $horaActual)) : $this->horaConSesgo();
+                $fechaPrestamo = now()->subDays($diasAtras)->setTime($hora, random_int(0, 59));
                 $fechaDevolucion = $fechaPrestamo->copy()->addDays(7);
 
                 $devuelto = random_int(0, 100) < 40;
@@ -252,7 +254,34 @@ class SeedMockupData extends Command
             }
         }
 
-        $this->line("  · {$total} préstamos creados");
+        // Préstamos de equipos (audífonos y notebooks): se identifican por código de
+        // inventario, no por nombre, y no tienen fecha de vencimiento — se devuelven
+        // al término de la estadía en la biblioteca.
+        $equipos = [
+            'audifonos' => ['AUD-001', 'AUD-002', 'AUD-003', 'AUD-004'],
+            'notebook' => ['NB-001', 'NB-002', 'NB-003'],
+        ];
+
+        foreach ($usuarios->random(min(10, $usuarios->count())) as $usuario) {
+            $tipo = random_int(0, 1) === 0 ? 'audifonos' : 'notebook';
+            $diasAtras = random_int(0, 5);
+            $hora = $diasAtras === 0 ? random_int(8, max(8, $horaActual)) : $this->horaConSesgo();
+            $fechaPrestamo = now()->subDays($diasAtras)->setTime($hora, random_int(0, 59));
+            $devuelto = $diasAtras > 0 || random_int(0, 100) < 50;
+
+            Prestamo::create([
+                'usuario_id' => $usuario->id,
+                'libro_titulo' => $equipos[$tipo][array_rand($equipos[$tipo])],
+                'tipo_item' => $tipo,
+                'fecha_prestamo' => $fechaPrestamo,
+                'fecha_devolucion' => null,
+                'fecha_devolucion_real' => $devuelto ? $fechaPrestamo->copy()->addHours(random_int(1, 6)) : null,
+                'estado' => $devuelto ? 'devuelto' : 'activo',
+            ]);
+            $total++;
+        }
+
+        $this->line("  · {$total} préstamos creados (libros y equipos)");
     }
 
     /** @return \Illuminate\Support\Collection<int, Sala> */

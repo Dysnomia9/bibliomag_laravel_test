@@ -20,6 +20,10 @@ class PrestamoController extends Controller
             $query->where('estado', $estado);
         }
 
+        if ($tipoItem = $request->query('tipo_item')) {
+            $query->where('tipo_item', $tipoItem);
+        }
+
         return response()->json(
             $query->latest('fecha_prestamo')->get()
         );
@@ -30,14 +34,22 @@ class PrestamoController extends Controller
         $data = $request->validate([
             'usuario_id' => ['required', 'exists:usuarios,id'],
             'libro_titulo' => ['required', 'string', 'max:255'],
+            'tipo_item' => ['sometimes', 'in:libro,audifonos,notebook'],
             'dias_prestamo' => ['sometimes', 'integer', 'in:7,14,30'],
         ]);
+
+        $tipoItem = $data['tipo_item'] ?? 'libro';
+        // Los equipos tecnológicos (audífonos, notebooks) se prestan por código de
+        // inventario y se devuelven al término de la estadía en la biblioteca, sin
+        // una fecha de vencimiento fija como los libros.
+        $esEquipo = $tipoItem !== 'libro';
 
         $prestamo = Prestamo::create([
             'usuario_id' => $data['usuario_id'],
             'libro_titulo' => $data['libro_titulo'],
+            'tipo_item' => $tipoItem,
             'fecha_prestamo' => now(),
-            'fecha_devolucion' => now()->addDays($data['dias_prestamo'] ?? 14),
+            'fecha_devolucion' => $esEquipo ? null : now()->addDays($data['dias_prestamo'] ?? 14),
             'estado' => 'activo',
         ]);
 
