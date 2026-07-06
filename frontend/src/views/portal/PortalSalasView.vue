@@ -5,6 +5,7 @@ import PortalLayout from '@/components/layout/PortalLayout.vue'
 import apiUsuario from '@/services/apiUsuario'
 import { useToast } from '@/composables/useToast'
 import { useUsuarioAuthStore } from '@/stores/usuarioAuth'
+import { formatRut } from '@/composables/useRut'
 import { reservasSalasMock, salasMock } from '@/data/mock'
 import type { Reserva, Sala } from '@/types'
 
@@ -30,10 +31,24 @@ const usingMock = ref(false)
 const selectedDate = ref(hoy)
 const busqueda = ref('')
 
+const CANTIDAD_MIN = 2
+const CANTIDAD_MAX = 5
+
 const modalOpen = ref(false)
 const selectedSala = ref<Sala | null>(null)
 const selectedBloque = ref<(typeof horariosBloques)[number] | null>(null)
 const enviando = ref(false)
+const cantidadPersonas = ref(CANTIDAD_MIN)
+const rutsReserva = ref<string[]>(Array.from({ length: CANTIDAD_MIN }, () => ''))
+
+watch(cantidadPersonas, (nueva) => {
+  const actuales = rutsReserva.value.length
+  if (nueva > actuales) {
+    rutsReserva.value.push(...Array.from({ length: nueva - actuales }, () => ''))
+  } else if (nueva < actuales) {
+    rutsReserva.value.splice(nueva)
+  }
+})
 
 async function cargar() {
   try {
@@ -67,11 +82,30 @@ function esMia(reserva: Reserva) {
 function openReservaModal(sala: Sala, bloque: (typeof horariosBloques)[number]) {
   selectedSala.value = sala
   selectedBloque.value = bloque
+  cantidadPersonas.value = CANTIDAD_MIN
+  rutsReserva.value = Array.from({ length: CANTIDAD_MIN }, () => '')
   modalOpen.value = true
+}
+
+function onRutInput(index: number, event: Event) {
+  rutsReserva.value[index] = formatRut((event.target as HTMLInputElement).value)
+}
+
+function primerMensajeError(e: any): string | undefined {
+  const errores = e?.response?.data?.errors
+  if (errores) {
+    const primero = Object.values(errores)[0]
+    if (Array.isArray(primero) && typeof primero[0] === 'string') return primero[0]
+  }
+  return e?.response?.data?.message
 }
 
 async function confirmarReserva() {
   if (!selectedSala.value || !selectedBloque.value) return
+  if (rutsReserva.value.some((r) => !r.trim())) {
+    toast.error('Complete el RUT de cada persona')
+    return
+  }
   enviando.value = true
   try {
     await apiUsuario.post('/mi/reservas', {
@@ -79,12 +113,14 @@ async function confirmarReserva() {
       fecha: selectedDate.value,
       hora_inicio: selectedBloque.value.inicio,
       hora_fin: selectedBloque.value.fin,
+      cantidad_personas: cantidadPersonas.value,
+      ruts: rutsReserva.value,
     })
     toast.success(`${selectedSala.value.nombre} reservada de ${selectedBloque.value.label}`)
     modalOpen.value = false
     await cargar()
   } catch (e: any) {
-    toast.error(e?.response?.data?.message ?? 'No se pudo crear la reserva')
+    toast.error(primerMensajeError(e) ?? 'No se pudo crear la reserva')
   } finally {
     enviando.value = false
   }
@@ -226,9 +262,35 @@ function formatFechaLarga(fecha: string) {
           <p class="text-sm text-gray-500 mb-5">
             {{ selectedSala.nombre }} · {{ selectedBloque.label }} · {{ formatFechaLarga(selectedDate) }}
           </p>
-          <p class="text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 mb-5">
-            Se reservará a nombre de <strong>{{ auth.usuario?.nombre }} {{ auth.usuario?.apellido }}</strong>
-          </p>
+
+          <div class="space-y-4 mb-5">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Cantidad de personas</label>
+              <select
+                v-model.number="cantidadPersonas"
+                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+              >
+                <option v-for="n in CANTIDAD_MAX - CANTIDAD_MIN + 1" :key="n" :value="CANTIDAD_MIN + n - 1">
+                  {{ CANTIDAD_MIN + n - 1 }} personas
+                </option>
+              </select>
+            </div>
+            <div class="space-y-2">
+              <label class="block text-sm font-medium text-gray-700">RUT de cada persona</label>
+              <p class="text-xs text-gray-400 -mt-1 mb-1">Deben ser RUT de usuarios registrados en el sistema</p>
+              <input
+                v-for="(_, idx) in rutsReserva"
+                :key="idx"
+                :value="rutsReserva[idx]"
+                @input="onRutInput(idx, $event)"
+                type="text"
+                :placeholder="`RUT persona ${idx + 1}`"
+                maxlength="12"
+                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+              />
+            </div>
+          </div>
+
           <div class="flex gap-3">
             <button
               @click="modalOpen = false"

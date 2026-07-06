@@ -110,9 +110,15 @@ class ReporteController extends Controller
         $porAnioIngreso = $groupBy('anioIngreso')->sortBy('label')->values();
         $porTipoUsuario = $groupBy('tipoUsuario');
 
-        $horaMap = array_fill(0, 24, 0);
+        // La biblioteca abre de 08:00 a 21:00 — no tiene sentido mostrar horas
+        // fuera de ese rango como si funcionara las 24 horas.
+        $horaApertura = 8;
+        $horaCierre = 21;
+        $horaMap = array_fill_keys(range($horaApertura, $horaCierre), 0);
         foreach ($registros as $r) {
-            $horaMap[$r['hora']]++;
+            if ($r['hora'] >= $horaApertura && $r['hora'] <= $horaCierre) {
+                $horaMap[$r['hora']]++;
+            }
         }
         $porHora = collect($horaMap)->map(fn ($value, $hora) => [
             'label' => str_pad((string) $hora, 2, '0', STR_PAD_LEFT).'h',

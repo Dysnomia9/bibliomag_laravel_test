@@ -6,7 +6,7 @@ import BreakdownList from '@/components/reportes/BreakdownList.vue'
 import ReporteTabla from '@/components/reportes/ReporteTabla.vue'
 import api from '@/services/api'
 import { useToast } from '@/composables/useToast'
-import { construirCsv, descargarCsv } from '@/utils/csv'
+import { descargarExcel } from '@/utils/excel'
 import type { Periodo, ReporteOpciones, ReporteResumen, ReporteTab } from '@/types'
 
 const toast = useToast()
@@ -158,7 +158,7 @@ function confirmarExportar() {
   const periodoLabel = PERIODOS.find((p) => p.id === periodo.value)?.label ?? periodo.value
   const total = resumen.value.total
 
-  const csv = construirCsv([
+  const secciones = [
     {
       titulo: 'Resumen del reporte',
       columnas: ['Campo', 'Valor'],
@@ -201,10 +201,10 @@ function confirmarExportar() {
       columnas: ['Hora', 'Cantidad', '%'],
       filas: resumen.value.porHora.map((d) => [d.label, d.value, porcentaje(d.value, total)]),
     },
-  ])
+  ]
 
   const fecha = new Date().toISOString().slice(0, 10)
-  descargarCsv(`reporte-${tab.value}-${periodo.value}-${fecha}.csv`, csv)
+  descargarExcel(`reporte-${tab.value}-${periodo.value}-${fecha}.xlsx`, secciones)
   exportModalOpen.value = false
   toast.success('Reporte exportado')
 }
@@ -376,7 +376,7 @@ function confirmarExportar() {
 
         <div class="bg-white rounded-xl shadow-md p-6 md:col-span-2">
           <h3 class="font-medium text-gray-900 mb-1">Distribución por hora del día</h3>
-          <p class="text-xs text-gray-400 mb-4">Cantidad de registros por hora (00:00 – 23:00)</p>
+          <p class="text-xs text-gray-400 mb-4">Cantidad de registros por hora (08:00 – 21:00, horario de biblioteca)</p>
           <div v-if="vista === 'grafico'" class="h-64">
             <BarChart :data="resumen.porHora" :color="colorBar[tab]" />
           </div>

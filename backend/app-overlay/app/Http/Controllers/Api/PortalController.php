@@ -95,7 +95,18 @@ class PortalController extends Controller
             'fecha' => ['required', 'date'],
             'hora_inicio' => ['required', 'integer', 'min:8', 'max:20'],
             'hora_fin' => ['required', 'integer', 'gt:hora_inicio', 'max:21'],
+            'cantidad_personas' => ['required', 'integer', 'min:2', 'max:5'],
+            'ruts' => ['required', 'array'],
+            // A diferencia del registro de entrada externo, aquí los RUT deben
+            // pertenecer a usuarios ya registrados: no se admiten visitantes externos.
+            'ruts.*' => ['required', 'string', 'exists:usuarios,rut'],
+        ], [
+            'ruts.*.exists' => 'Uno de los RUT ingresados no corresponde a un usuario registrado en el sistema.',
         ]);
+
+        if (count($data['ruts']) !== $data['cantidad_personas']) {
+            return response()->json(['message' => 'Debe ingresar un RUT por cada persona indicada'], 422);
+        }
 
         $usuario = $request->user();
 
@@ -111,9 +122,9 @@ class PortalController extends Controller
         $reserva = Reserva::create([
             'sala_id' => $data['sala_id'],
             'usuario_id' => $usuario->id,
-            'rut_usuario' => $usuario->rut,
-            'cantidad_personas' => 1,
-            'ruts' => [$usuario->rut],
+            'rut_usuario' => $data['ruts'][0],
+            'cantidad_personas' => $data['cantidad_personas'],
+            'ruts' => $data['ruts'],
             'fecha' => $data['fecha'],
             'hora_inicio' => $data['hora_inicio'],
             'hora_fin' => $data['hora_fin'],

@@ -21,10 +21,10 @@ async function onLogout() {
 </script>
 
 <template>
-  <div class="min-h-screen flex flex-col bg-biblioteca-50">
+  <div class="min-h-screen flex flex-col">
     <header
-      class="h-16 shrink-0 flex items-center px-4 sm:px-8 gap-3"
-      style="background: linear-gradient(135deg, #2D1B69 0%, #3B28A3 30%, #4338CA 60%, #4F46E5 100%); border-bottom: 1px solid rgba(255,255,255,0.1);"
+      class="shrink-0 flex items-center px-4 sm:px-8 gap-3 pb-3"
+      style="background: linear-gradient(135deg, #2D1B69 0%, #3B28A3 30%, #4338CA 60%, #4F46E5 100%); border-bottom: 1px solid rgba(255,255,255,0.1); padding-top: max(1rem, calc(env(safe-area-inset-top) + 0.5rem)); min-height: 4.5rem;"
     >
       <router-link :to="{ name: 'portal-home' }" class="flex items-center gap-2.5 shrink-0">
         <div class="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/5 overflow-hidden">
@@ -63,7 +63,7 @@ async function onLogout() {
           <p class="text-[13px] font-medium text-slate-100">{{ auth.usuario?.nombre }} {{ auth.usuario?.apellido }}</p>
           <p class="text-[11px] text-slate-400 capitalize">{{ auth.usuario?.tipo }}</p>
         </div>
-        <div class="h-9 w-9 rounded-full bg-white/10 flex items-center justify-center text-slate-100 font-medium text-sm">
+        <div class="h-10 w-10 rounded-full bg-white/10 border border-white/10 flex items-center justify-center text-slate-100 font-medium text-sm">
           {{ (auth.usuario?.nombre ?? 'U').charAt(0) }}
         </div>
         <button
@@ -78,7 +78,7 @@ async function onLogout() {
         </button>
       </div>
     </header>
-    <main class="flex-1 p-6">
+    <main class="flex-1 p-6" style="background: linear-gradient(180deg, #F7F8FC 0%, #ffffff 60%);">
       <slot />
     </main>
   </div>

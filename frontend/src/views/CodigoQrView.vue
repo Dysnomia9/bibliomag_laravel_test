@@ -13,6 +13,7 @@ const cargando = ref(true)
 const regenerando = ref(false)
 const error = ref(false)
 const canvas = ref<HTMLCanvasElement | null>(null)
+const confirmRegenerarOpen = ref(false)
 
 async function pintarQr() {
   if (!codigo.value) return
@@ -27,20 +28,28 @@ async function cargar() {
   try {
     const { data } = await api.get<CodigoAcceso>('/codigo-acceso')
     codigo.value = data
+    // Se baja "cargando" antes de dibujar: el <canvas> solo existe en el DOM
+    // cuando cargando=false, así que si se dibuja antes de este punto el ref
+    // todavía apunta a null y el QR queda en blanco (bug al remontar la vista).
+    cargando.value = false
     await pintarQr()
   } catch {
     error.value = true
-    toast.error('No se pudo obtener el código QR. Verifica tu conexión con el servidor.')
-  } finally {
     cargando.value = false
+    toast.error('No se pudo obtener el código QR. Verifica tu conexión con el servidor.')
   }
 }
 
-async function regenerar() {
+function pedirConfirmacionRegenerar() {
+  confirmRegenerarOpen.value = true
+}
+
+async function confirmarRegenerar() {
   regenerando.value = true
   try {
     const { data } = await api.post<CodigoAcceso>('/codigo-acceso/regenerar')
     codigo.value = data
+    confirmRegenerarOpen.value = false
     await pintarQr()
     toast.success('Código QR regenerado. El anterior ya no funcionará.')
   } catch {
@@ -48,6 +57,16 @@ async function regenerar() {
   } finally {
     regenerando.value = false
   }
+}
+
+function descargarPng() {
+  if (!canvas.value) return
+  const link = document.createElement('a')
+  link.href = canvas.value.toDataURL('image/png')
+  link.download = 'codigo-qr-biblioteca-umag.png'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
 }
 
 onMounted(cargar)
@@ -85,23 +104,57 @@ onMounted(cargar)
             Generado {{ new Date(codigo.updated_at).toLocaleString('es-CL') }}
           </p>
 
-          <div class="mt-6 text-left bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-600">
-            Muestra este código en una pantalla o imprímelo en la entrada de la biblioteca. Es el mismo para todos los
-            usuarios y sigue funcionando para cualquier cantidad de escaneos hasta que lo regeneres.
+          <div class="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <button
+              @click="descargarPng"
+              class="inline-flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg font-medium text-sm transition-colors"
+            >
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2-8H8a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V8l-4-4z" />
+              </svg>
+              Descargar PNG
+            </button>
+            <button
+              @click="pedirConfirmacionRegenerar"
+              :disabled="regenerando"
+              class="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white rounded-lg font-medium text-sm transition-colors"
+            >
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {{ regenerando ? 'Regenerando…' : 'Regenerar código' }}
+            </button>
           </div>
-
-          <button
-            @click="regenerar"
-            :disabled="regenerando"
-            class="mt-6 inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white rounded-lg font-medium text-sm transition-colors"
-          >
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            {{ regenerando ? 'Regenerando…' : 'Regenerar código' }}
-          </button>
-          <p class="mt-2 text-xs text-red-500">Al regenerar, el código anterior deja de ser válido de inmediato.</p>
         </template>
+      </div>
+    </div>
+
+    <div
+      v-if="confirmRegenerarOpen"
+      class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      @click.self="confirmRegenerarOpen = false"
+    >
+      <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+        <h3 class="text-lg font-bold text-gray-900 mb-1">¿Regenerar código QR?</h3>
+        <p class="text-sm text-gray-500 mb-6">
+          Se anulará el código anterior de inmediato — cualquier pantalla o impresión con el QR actual dejará de funcionar
+          y habrá que reemplazarla por el nuevo.
+        </p>
+        <div class="flex gap-3">
+          <button
+            @click="confirmRegenerarOpen = false"
+            class="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors font-medium text-sm"
+          >
+            Cancelar
+          </button>
+          <button
+            @click="confirmarRegenerar"
+            :disabled="regenerando"
+            class="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm disabled:opacity-60"
+          >
+            {{ regenerando ? 'Regenerando…' : 'Sí, regenerar' }}
+          </button>
+        </div>
       </div>
     </div>
   </StaffLayout>
