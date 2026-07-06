@@ -7,6 +7,7 @@ import ReporteTabla from '@/components/reportes/ReporteTabla.vue'
 import api from '@/services/api'
 import { useToast } from '@/composables/useToast'
 import { descargarExcel } from '@/utils/excel'
+import { construirCsv, descargarCsv } from '@/utils/csv'
 import type { Periodo, ReporteOpciones, ReporteResumen, ReporteTab } from '@/types'
 
 const toast = useToast()
@@ -133,6 +134,13 @@ onMounted(async () => {
 watch([tab, periodo, filtros], cargarResumen, { deep: true })
 
 const exportModalOpen = ref(false)
+const exportando = ref(false)
+const formatoExportar = ref<'excel' | 'csv'>('excel')
+
+function abrirModalExportar(formato: 'excel' | 'csv') {
+  formatoExportar.value = formato
+  exportModalOpen.value = true
+}
 
 const descripcionFiltros = computed(() => {
   const partes: string[] = []
@@ -146,14 +154,15 @@ const descripcionFiltros = computed(() => {
 const descripcionExportacion = computed(() => {
   const tabLabel = TABS.find((t) => t.id === tab.value)?.label ?? ''
   const adjetivo = PERIODO_ADJETIVO[periodo.value]
-  return `Se va a exportar la tabla de "${tabLabel}" con vista ${adjetivo}, ${descripcionFiltros.value}.`
+  const formatoLabel = formatoExportar.value === 'excel' ? 'Excel (.xlsx)' : 'CSV'
+  return `Se va a exportar en formato ${formatoLabel} la tabla de "${tabLabel}" con vista ${adjetivo}, ${descripcionFiltros.value}.`
 })
 
 function porcentaje(valor: number, total: number) {
   return total ? Math.round((valor / total) * 100) : 0
 }
 
-function confirmarExportar() {
+async function confirmarExportar() {
   const tabLabel = TABS.find((t) => t.id === tab.value)?.label ?? tab.value
   const periodoLabel = PERIODOS.find((p) => p.id === periodo.value)?.label ?? periodo.value
   const total = resumen.value.total
@@ -204,9 +213,20 @@ function confirmarExportar() {
   ]
 
   const fecha = new Date().toISOString().slice(0, 10)
-  descargarExcel(`reporte-${tab.value}-${periodo.value}-${fecha}.xlsx`, secciones)
-  exportModalOpen.value = false
-  toast.success('Reporte exportado')
+  exportando.value = true
+  try {
+    if (formatoExportar.value === 'excel') {
+      await descargarExcel(`reporte-${tab.value}-${periodo.value}-${fecha}.xlsx`, secciones)
+    } else {
+      descargarCsv(`reporte-${tab.value}-${periodo.value}-${fecha}.csv`, construirCsv(secciones))
+    }
+    exportModalOpen.value = false
+    toast.success('Reporte exportado')
+  } catch {
+    toast.error(formatoExportar.value === 'excel' ? 'No se pudo generar el archivo Excel' : 'No se pudo generar el archivo CSV')
+  } finally {
+    exportando.value = false
+  }
 }
 </script>
 
@@ -276,13 +296,22 @@ function confirmarExportar() {
             </button>
           </div>
           <button
-            @click="exportModalOpen = true"
+            @click="abrirModalExportar('excel')"
             class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-700 transition-colors"
           >
             <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2-8H8a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V8l-4-4z" />
             </svg>
             Exportar a Excel
+          </button>
+          <button
+            @click="abrirModalExportar('csv')"
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2-8H8a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V8l-4-4z" />
+            </svg>
+            Exportar a CSV
           </button>
         </div>
       </div>
@@ -403,9 +432,10 @@ function confirmarExportar() {
             </button>
             <button
               @click="confirmarExportar"
-              class="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium text-sm"
+              :disabled="exportando"
+              class="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium text-sm disabled:opacity-60"
             >
-              Confirmar y exportar
+              {{ exportando ? 'Generando…' : 'Confirmar y exportar' }}
             </button>
           </div>
         </div>
