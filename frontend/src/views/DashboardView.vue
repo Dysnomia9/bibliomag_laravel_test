@@ -39,9 +39,9 @@ onMounted(async () => {
 
 <template>
   <StaffLayout>
-    <div class="max-w-6xl mx-auto min-h-[calc(100vh-7rem)] flex flex-col">
+    <div class="max-w-6xl mx-auto min-h-[calc(100vh-8rem)] flex flex-col">
       <!-- Hero -->
-      <div class="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-purple-50/60 p-6 sm:p-8 mb-6">
+      <div class="rounded-2xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50 via-white to-purple-50/60 p-6 sm:p-8 mb-6">
         <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
           <div>
             <h1 class="text-2xl sm:text-3xl font-serif font-bold text-gray-900 mb-2">Menú Inicio</h1>
@@ -97,7 +97,7 @@ onMounted(async () => {
       </p>
 
       <!-- Accesos rápidos -->
-      <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-6">
+      <div class="bg-white rounded-2xl border-2 border-gray-200 shadow-sm p-6 mb-6">
         <div class="flex items-center gap-3 mb-1">
           <span class="w-1 h-6 rounded-full bg-indigo-600 shrink-0"></span>
           <h2 class="text-lg font-bold text-gray-900">Accesos rápidos</h2>

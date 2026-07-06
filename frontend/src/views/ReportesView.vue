@@ -41,7 +41,7 @@ const resumen = ref<ReporteResumen>({ ...resumenVacio })
 const cargando = ref(true)
 
 const TABS: { id: ReporteTab; label: string; color: string }[] = [
-  { id: 'prestamos', label: 'Número de Préstamos', color: 'indigo' },
+  { id: 'prestamos', label: 'Número de Préstamos', color: 'emerald' },
   { id: 'ingresos', label: 'Ingresos a Biblioteca', color: 'emerald' },
   { id: 'logias', label: 'Uso de Logias', color: 'amber' },
 ]
@@ -54,7 +54,7 @@ const PERIODOS: { id: Periodo; label: string }[] = [
   { id: 'anio', label: 'Año' },
 ]
 
-const colorBar: Record<ReporteTab, string> = { prestamos: '#4338CA', ingresos: '#059669', logias: '#D97706' }
+const colorBar: Record<ReporteTab, string> = { prestamos: '#065F46', ingresos: '#059669', logias: '#D97706' }
 const tabTitulo: Record<ReporteTab, string> = { prestamos: 'Total préstamos', ingresos: 'Total ingresos', logias: 'Total usos de logias' }
 
 const PERIODO_ADJETIVO: Record<Periodo, string> = {
@@ -218,12 +218,7 @@ function confirmarExportar() {
         style="background: linear-gradient(135deg, #2D1B69 0%, #3B28A3 30%, #4338CA 60%, #4F46E5 100%);"
       >
         <div class="px-6 py-5">
-          <h1 class="text-2xl font-serif font-bold tracking-tight text-white flex items-center gap-2">
-            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-            Reportes
-          </h1>
+          <h1 class="text-2xl font-serif font-bold tracking-tight text-white">Reportes</h1>
           <p class="text-sm text-white/60 mt-1">Estadísticas y métricas de la biblioteca</p>
         </div>
       </div>
@@ -351,7 +346,7 @@ function confirmarExportar() {
         <div v-if="vista === 'grafico'" class="h-72">
           <BarChart :data="resumen.serie" :color="colorBar[tab]" />
         </div>
-        <ReporteTabla v-else :data="resumen.serie" :total="resumen.total" columna="Periodo" />
+        <ReporteTabla v-else :data="resumen.serie" :total="resumen.total" columna="Periodo" :item-color="() => colorBar[tab]" />
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -370,13 +365,13 @@ function confirmarExportar() {
         <div class="bg-white rounded-xl shadow-md p-6">
           <h3 class="font-medium text-gray-900 mb-4">Por año de ingreso</h3>
           <BreakdownList v-if="vista === 'grafico'" :data="resumen.porAnioIngreso" :total="resumen.total" color="purple" />
-          <ReporteTabla v-else :data="resumen.porAnioIngreso" :total="resumen.total" columna="Año de ingreso" />
+          <ReporteTabla v-else :data="resumen.porAnioIngreso" :total="resumen.total" columna="Año de ingreso" :item-color="() => '#a855f7'" />
         </div>
 
         <div class="bg-white rounded-xl shadow-md p-6">
           <h3 class="font-medium text-gray-900 mb-4">Por tipo de usuario</h3>
           <BreakdownList v-if="vista === 'grafico'" :data="resumen.porTipoUsuario" :total="resumen.total" :color="tab === 'ingresos' ? 'emerald' : 'amber'" />
-          <ReporteTabla v-else :data="resumen.porTipoUsuario" :total="resumen.total" columna="Tipo de usuario" />
+          <ReporteTabla v-else :data="resumen.porTipoUsuario" :total="resumen.total" columna="Tipo de usuario" :item-color="() => (tab === 'ingresos' ? '#10b981' : '#f59e0b')" />
         </div>
 
         <div class="bg-white rounded-xl shadow-md p-6 md:col-span-2">
@@ -385,7 +380,7 @@ function confirmarExportar() {
           <div v-if="vista === 'grafico'" class="h-64">
             <BarChart :data="resumen.porHora" :color="colorBar[tab]" />
           </div>
-          <ReporteTabla v-else :data="resumen.porHora" :total="resumen.total" columna="Hora" />
+          <ReporteTabla v-else :data="resumen.porHora" :total="resumen.total" columna="Hora" :item-color="() => colorBar[tab]" />
         </div>
       </div>
 

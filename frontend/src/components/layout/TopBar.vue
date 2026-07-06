@@ -29,7 +29,7 @@ async function onLogout() {
 
 <template>
   <header
-    class="h-16 shrink-0 flex items-center px-4 sm:px-8 gap-4"
+    class="h-20 shrink-0 flex items-center px-4 sm:px-8 gap-4"
     style="background: linear-gradient(135deg, #2D1B69 0%, #3B28A3 30%, #4338CA 60%, #4F46E5 100%); border-bottom: 1px solid rgba(255,255,255,0.1);"
   >
     <!-- Logo -->

@@ -136,22 +136,27 @@ const filtrados = computed(() => prestamos.value)
         </div>
       </div>
 
-      <div class="bg-white rounded-xl shadow-md overflow-hidden">
+      <div class="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
         <div class="overflow-x-auto">
           <table class="w-full">
             <thead>
-              <tr class="bg-gray-50">
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Usuario</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ítem / Código</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Préstamo</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Devolución</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acción</th>
+              <tr class="bg-gray-100 border-b-2 border-gray-200">
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Usuario</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Ítem / Código</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Tipo</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Préstamo</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Devolución</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Estado</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Acción</th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-gray-100">
-              <tr v-for="p in filtrados" :key="p.id" class="hover:bg-gray-50">
+            <tbody class="divide-y divide-gray-200">
+              <tr
+                v-for="(p, idx) in filtrados"
+                :key="p.id"
+                class="hover:bg-indigo-50/40 transition-colors"
+                :class="idx % 2 === 0 ? 'bg-white' : 'bg-slate-100'"
+              >
                 <td class="px-6 py-3 text-sm text-gray-900">
                   <div class="font-medium">{{ p.usuario?.nombre }} {{ p.usuario?.apellido }}</div>
                   <div class="text-xs font-mono text-gray-500">{{ p.usuario?.rut }}</div>
