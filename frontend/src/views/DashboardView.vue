@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import StaffLayout from '@/components/layout/StaffLayout.vue'
 import api from '@/services/api'
 import { resumenMock } from '@/data/mock'
-import { STAFF_SHORTCUTS } from '@/composables/useStaffShortcuts'
+import { STAFF_SHORTCUTS, type StaffShortcutColor } from '@/composables/useStaffShortcuts'
 import type { ResumenDashboard } from '@/types'
 
 const router = useRouter()
@@ -13,6 +13,13 @@ const usingMock = ref(false)
 const aforo = 220
 
 const shortcuts = STAFF_SHORTCUTS
+
+const SHORTCUT_COLORS: Record<StaffShortcutColor, { icon: string; iconHover: string; border: string; topBorder: string }> = {
+  emerald: { icon: 'bg-emerald-50 text-emerald-600', iconHover: 'group-hover:bg-emerald-600', border: 'hover:border-emerald-300', topBorder: 'border-t-emerald-400' },
+  indigo: { icon: 'bg-indigo-50 text-indigo-600', iconHover: 'group-hover:bg-indigo-600', border: 'hover:border-indigo-300', topBorder: 'border-t-indigo-400' },
+  amber: { icon: 'bg-amber-50 text-amber-600', iconHover: 'group-hover:bg-amber-600', border: 'hover:border-amber-300', topBorder: 'border-t-amber-400' },
+  violet: { icon: 'bg-violet-50 text-violet-600', iconHover: 'group-hover:bg-violet-600', border: 'hover:border-violet-300', topBorder: 'border-t-violet-400' },
+}
 
 const fechaHoy = computed(() => {
   const str = new Date().toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
@@ -50,8 +57,8 @@ onMounted(async () => {
           </div>
 
           <div class="flex flex-wrap gap-4">
-            <div class="flex items-center gap-3 bg-white rounded-xl border border-gray-100 shadow-sm px-5 py-4">
-              <div class="h-11 w-11 shrink-0 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600">
+            <div class="flex items-center gap-3 bg-white rounded-xl border border-gray-100 border-l-4 border-l-emerald-400 shadow-sm px-5 py-4">
+              <div class="h-11 w-11 shrink-0 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600">
                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1a4 4 0 100-8 4 4 0 000 8zm6 3a4 4 0 00-3-3.87M9 12a4 4 0 100-8 4 4 0 000 8z" />
                 </svg>
@@ -67,8 +74,8 @@ onMounted(async () => {
               </div>
             </div>
 
-            <div class="flex items-center gap-3 bg-white rounded-xl border border-gray-100 shadow-sm px-5 py-4">
-              <div class="h-11 w-11 shrink-0 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600">
+            <div class="flex items-center gap-3 bg-white rounded-xl border border-gray-100 border-l-4 border-l-indigo-400 shadow-sm px-5 py-4">
+              <div class="h-11 w-11 shrink-0 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600">
                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M11 16l-4-4m0 0l4-4m-4 4h14M5 5v14" />
                 </svg>
@@ -102,9 +109,13 @@ onMounted(async () => {
             v-for="shortcut in shortcuts"
             :key="shortcut.key"
             @click="router.push({ name: shortcut.name })"
-            class="group flex flex-col items-center rounded-xl border border-gray-200 bg-white p-6 text-center transition-all hover:border-indigo-400 hover:shadow-md active:scale-[0.98]"
+            class="group flex flex-col items-center rounded-xl border border-t-4 border-gray-200 bg-white p-6 text-center transition-all hover:shadow-md active:scale-[0.98]"
+            :class="[SHORTCUT_COLORS[shortcut.color].border, SHORTCUT_COLORS[shortcut.color].topBorder]"
           >
-            <div class="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 transition-colors group-hover:bg-indigo-600 group-hover:text-white">
+            <div
+              class="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl transition-colors group-hover:text-white"
+              :class="[SHORTCUT_COLORS[shortcut.color].icon, SHORTCUT_COLORS[shortcut.color].iconHover]"
+            >
               <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
                 <path stroke-linecap="round" stroke-linejoin="round" :d="shortcut.icon" />
               </svg>

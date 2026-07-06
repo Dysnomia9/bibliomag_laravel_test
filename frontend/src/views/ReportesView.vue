@@ -213,21 +213,27 @@ function confirmarExportar() {
 <template>
   <StaffLayout>
     <div class="max-w-6xl mx-auto">
-      <div class="mb-6">
-        <h1 class="text-2xl font-serif font-bold tracking-tight text-gray-900 flex items-center gap-2">
-          <svg class="w-6 h-6 text-indigo-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-          </svg>
-          Reportes
-        </h1>
-        <p class="text-sm text-gray-500 mt-1">Estadísticas y métricas de la biblioteca</p>
-        <p v-if="usingMock" class="mt-2 text-xs">
-          <span class="inline-flex items-center gap-1.5 bg-acento-500/10 text-acento-600 px-2.5 py-1 rounded-full">
-            <span class="h-1.5 w-1.5 rounded-full bg-acento-500"></span>
-            No se pudo cargar el reporte (API no disponible)
-          </span>
-        </p>
+      <div
+        class="rounded-xl shadow-md mb-6 overflow-hidden"
+        style="background: linear-gradient(135deg, #2D1B69 0%, #3B28A3 30%, #4338CA 60%, #4F46E5 100%);"
+      >
+        <div class="px-6 py-5">
+          <h1 class="text-2xl font-serif font-bold tracking-tight text-white flex items-center gap-2">
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            Reportes
+          </h1>
+          <p class="text-sm text-white/60 mt-1">Estadísticas y métricas de la biblioteca</p>
+        </div>
       </div>
+
+      <p v-if="usingMock" class="mb-4 text-xs">
+        <span class="inline-flex items-center gap-1.5 bg-acento-500/10 text-acento-600 px-2.5 py-1 rounded-full">
+          <span class="h-1.5 w-1.5 rounded-full bg-acento-500"></span>
+          No se pudo cargar el reporte (API no disponible)
+        </span>
+      </p>
 
       <div class="flex gap-2 mb-6 border-b border-gray-200">
         <button
@@ -244,15 +250,17 @@ function confirmarExportar() {
       <div class="flex items-center gap-2 mb-4 flex-wrap justify-between">
         <div class="flex items-center gap-2 flex-wrap">
           <span class="text-xs font-medium text-gray-500 mr-1">Periodo:</span>
-          <button
-            v-for="p in PERIODOS"
-            :key="p.id"
-            @click="periodo = p.id"
-            class="px-3 py-1.5 rounded-full text-xs font-medium transition-colors"
-            :class="periodo === p.id ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
-          >
-            {{ p.label }}
-          </button>
+          <div class="flex gap-1 bg-gray-100 rounded-full p-1 shadow-sm">
+            <button
+              v-for="p in PERIODOS"
+              :key="p.id"
+              @click="periodo = p.id"
+              class="px-3 py-1.5 rounded-full text-xs font-medium transition-colors"
+              :class="periodo === p.id ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'"
+            >
+              {{ p.label }}
+            </button>
+          </div>
         </div>
 
         <div class="flex items-center gap-2 flex-wrap">

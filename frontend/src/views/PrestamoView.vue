@@ -96,13 +96,25 @@ async function crearPrestamo() {
   }
 }
 
-async function devolverPrestamo(prestamo: Prestamo) {
+const devolucionPendiente = ref<Prestamo | null>(null)
+const devolviendo = ref(false)
+
+function pedirConfirmacionDevolucion(prestamo: Prestamo) {
+  devolucionPendiente.value = prestamo
+}
+
+async function confirmarDevolucion() {
+  if (!devolucionPendiente.value) return
+  devolviendo.value = true
   try {
-    await api.patch(`/prestamos/${prestamo.id}/devolver`)
+    await api.patch(`/prestamos/${devolucionPendiente.value.id}/devolver`)
     toast.success('Devolución registrada')
+    devolucionPendiente.value = null
     await cargarPrestamosYReservas()
   } catch {
     toast.error('No se pudo registrar la devolución')
+  } finally {
+    devolviendo.value = false
   }
 }
 
@@ -407,7 +419,7 @@ function formatFecha(iso: string | null) {
                   <td class="px-6 py-3">
                     <button
                       v-if="p.estado !== 'devuelto'"
-                      @click="devolverPrestamo(p)"
+                      @click="pedirConfirmacionDevolucion(p)"
                       class="flex items-center gap-1 text-sm text-indigo-700 hover:text-indigo-800 font-medium"
                     >
                       Devolver
@@ -497,7 +509,7 @@ function formatFecha(iso: string | null) {
                   <span class="text-xs px-2 py-0.5 rounded-full font-medium" :class="getBadge(p).cls">{{ getBadge(p).label }}</span>
                   <button
                     v-if="p.estado !== 'devuelto'"
-                    @click="devolverPrestamo(p)"
+                    @click="pedirConfirmacionDevolucion(p)"
                     class="text-xs text-indigo-700 hover:text-indigo-800 font-medium"
                   >
                     Devolver
@@ -540,7 +552,7 @@ function formatFecha(iso: string | null) {
                   <span class="text-xs px-2 py-0.5 rounded-full font-medium" :class="getBadge(p).cls">{{ getBadge(p).label }}</span>
                   <button
                     v-if="p.estado !== 'devuelto'"
-                    @click="devolverPrestamo(p)"
+                    @click="pedirConfirmacionDevolucion(p)"
                     class="text-xs text-indigo-700 hover:text-indigo-800 font-medium"
                   >
                     Devolver
@@ -549,6 +561,34 @@ function formatFecha(iso: string | null) {
               </div>
               <p v-if="!prestamosNotebooks.length" class="text-xs text-gray-400 text-center py-2">Sin préstamos de notebooks.</p>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div
+        v-if="devolucionPendiente"
+        class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        @click.self="devolucionPendiente = null"
+      >
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+          <h3 class="text-lg font-bold text-gray-900 mb-1">¿Confirmar devolución?</h3>
+          <p class="text-sm text-gray-500 mb-6">
+            Se registrará la devolución de <strong class="font-mono">{{ devolucionPendiente.libro_titulo }}</strong>.
+          </p>
+          <div class="flex gap-3">
+            <button
+              @click="devolucionPendiente = null"
+              class="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors font-medium text-sm"
+            >
+              Cancelar
+            </button>
+            <button
+              @click="confirmarDevolucion"
+              :disabled="devolviendo"
+              class="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm disabled:opacity-60"
+            >
+              {{ devolviendo ? 'Confirmando…' : 'Sí, devolver' }}
+            </button>
           </div>
         </div>
       </div>
