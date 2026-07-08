@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import StaffLayout from '@/components/layout/StaffLayout.vue'
+import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import BarChart from '@/components/reportes/BarChart.vue'
 import BreakdownList from '@/components/reportes/BreakdownList.vue'
 import ReporteTabla from '@/components/reportes/ReporteTabla.vue'
@@ -11,7 +12,7 @@ import { construirCsv, descargarCsv } from '@/utils/csv'
 import type { Periodo, ReporteOpciones, ReporteResumen, ReporteTab } from '@/types'
 
 const toast = useToast()
-const usingMock = ref(false)
+const apiError = ref(false)
 
 const tab = ref<ReporteTab>('prestamos')
 const periodo = ref<Periodo>('mes')
@@ -94,12 +95,7 @@ async function cargarOpciones() {
     const { data } = await api.get<ReporteOpciones>('/reportes/opciones')
     opciones.value = data
   } catch {
-    opciones.value = {
-      carreras: ['Ingeniería Civil Informática', 'Ingeniería Comercial', 'Derecho', 'Enfermería'],
-      aniosIngreso: [2021, 2022, 2023, 2024, 2025, 2026],
-      sexos: ['Femenino', 'Masculino'],
-      tiposUsuario: ['estudiante', 'docente', 'funcionario'],
-    }
+    apiError.value = true
   }
 }
 
@@ -117,9 +113,9 @@ async function cargarResumen() {
       },
     })
     resumen.value = data
-    usingMock.value = false
+    apiError.value = false
   } catch {
-    usingMock.value = true
+    apiError.value = true
     resumen.value = { ...resumenVacio }
   } finally {
     cargando.value = false
@@ -243,12 +239,7 @@ async function confirmarExportar() {
         </div>
       </div>
 
-      <p v-if="usingMock" class="mb-4 text-xs">
-        <span class="inline-flex items-center gap-1.5 bg-acento-500/10 text-acento-600 px-2.5 py-1 rounded-full">
-          <span class="h-1.5 w-1.5 rounded-full bg-acento-500"></span>
-          No se pudo cargar el reporte (API no disponible)
-        </span>
-      </p>
+      <ApiErrorBanner v-if="apiError" />
 
       <div class="flex gap-2 mb-6 border-b border-gray-200">
         <button

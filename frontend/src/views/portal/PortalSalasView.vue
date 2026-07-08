@@ -2,11 +2,11 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import PortalLayout from '@/components/layout/PortalLayout.vue'
+import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import apiUsuario from '@/services/apiUsuario'
 import { useToast } from '@/composables/useToast'
 import { useUsuarioAuthStore } from '@/stores/usuarioAuth'
 import { formatRut } from '@/composables/useRut'
-import { reservasSalasMock, salasMock } from '@/data/mock'
 import type { Reserva, Sala } from '@/types'
 
 const toast = useToast()
@@ -27,7 +27,7 @@ const horariosBloques = [
 
 const salas = ref<Sala[]>([])
 const reservas = ref<Reserva[]>([])
-const usingMock = ref(false)
+const apiError = ref(false)
 const selectedDate = ref(hoy)
 const busqueda = ref('')
 
@@ -55,11 +55,11 @@ async function cargar() {
     const { data } = await apiUsuario.get('/mi/salas', { params: { fecha: selectedDate.value } })
     salas.value = data.salas
     reservas.value = data.reservas
-    usingMock.value = false
+    apiError.value = false
   } catch {
-    usingMock.value = true
-    salas.value = salasMock
-    reservas.value = reservasSalasMock
+    apiError.value = true
+    salas.value = []
+    reservas.value = []
   }
 }
 
@@ -164,12 +164,7 @@ function formatFechaLarga(fecha: string) {
         </div>
       </div>
 
-      <p v-if="usingMock" class="mb-4 text-xs">
-        <span class="inline-flex items-center gap-1.5 bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full">
-          <span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
-          Mostrando datos de ejemplo (API no disponible)
-        </span>
-      </p>
+      <ApiErrorBanner v-if="apiError" />
 
       <div class="bg-white border border-gray-200 rounded-lg p-4 mb-5 flex flex-col sm:flex-row gap-3 sm:items-end">
         <div class="flex-1">

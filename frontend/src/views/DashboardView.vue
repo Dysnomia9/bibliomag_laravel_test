@@ -2,14 +2,23 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import StaffLayout from '@/components/layout/StaffLayout.vue'
+import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import api from '@/services/api'
-import { resumenMock } from '@/data/mock'
 import { STAFF_SHORTCUTS, type StaffShortcutColor } from '@/composables/useStaffShortcuts'
 import type { ResumenDashboard } from '@/types'
 
 const router = useRouter()
-const resumen = ref<ResumenDashboard>(resumenMock)
-const usingMock = ref(false)
+const resumenVacio: ResumenDashboard = {
+  usuariosActivos: 0,
+  entradasHoy: 0,
+  personasEnSala: 0,
+  prestamosActivos: 0,
+  prestamosAtrasados: 0,
+  ultimasEntradas: [],
+  ultimosPrestamos: [],
+}
+const resumen = ref<ResumenDashboard>({ ...resumenVacio })
+const apiError = ref(false)
 const aforo = 220
 
 const shortcuts = STAFF_SHORTCUTS
@@ -30,9 +39,10 @@ onMounted(async () => {
   try {
     const { data } = await api.get<ResumenDashboard>('/dashboard/resumen')
     resumen.value = data
+    apiError.value = false
   } catch {
-    usingMock.value = true
-    resumen.value = resumenMock
+    apiError.value = true
+    resumen.value = { ...resumenVacio }
   }
 })
 </script>
@@ -89,12 +99,7 @@ onMounted(async () => {
         </div>
       </div>
 
-      <p v-if="usingMock" class="mb-6 text-center text-xs">
-        <span class="inline-flex items-center gap-1.5 bg-acento-500/10 text-acento-600 px-2.5 py-1 rounded-full">
-          <span class="h-1.5 w-1.5 rounded-full bg-acento-500"></span>
-          Mostrando datos de ejemplo (API no disponible)
-        </span>
-      </p>
+      <ApiErrorBanner v-if="apiError" />
 
       <!-- Accesos rápidos -->
       <div class="bg-white rounded-2xl border-2 border-gray-200 shadow-sm p-6 mb-6">

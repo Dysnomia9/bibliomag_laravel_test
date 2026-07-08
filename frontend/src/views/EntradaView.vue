@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
 import StaffLayout from '@/components/layout/StaffLayout.vue'
+import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import api from '@/services/api'
 import { useToast } from '@/composables/useToast'
 import { formatRut } from '@/composables/useRut'
-import { entradasMock } from '@/data/mock'
 import type { Entrada } from '@/types'
 
 const toast = useToast()
@@ -14,7 +14,7 @@ const hoy = new Date().toISOString().slice(0, 10)
 const rut = ref('')
 const entradas = ref<Entrada[]>([])
 const personasEnSala = ref(0)
-const usingMock = ref(false)
+const apiError = ref(false)
 const registrando = ref(false)
 const selectedDate = ref(hoy)
 
@@ -42,11 +42,11 @@ async function cargar() {
     const { data } = await api.get('/entrada', { params: { fecha: selectedDate.value } })
     entradas.value = data.entradas
     personasEnSala.value = data.personasEnSala
-    usingMock.value = false
+    apiError.value = false
   } catch {
-    usingMock.value = true
-    entradas.value = entradasMock
-    personasEnSala.value = entradasMock.length
+    apiError.value = true
+    entradas.value = []
+    personasEnSala.value = 0
   }
 }
 
@@ -132,12 +132,7 @@ async function registrarExterno() {
         </div>
       </div>
 
-      <p v-if="usingMock" class="mb-4 text-xs">
-        <span class="inline-flex items-center gap-1.5 bg-acento-500/10 text-acento-600 px-2.5 py-1 rounded-full">
-          <span class="h-1.5 w-1.5 rounded-full bg-acento-500"></span>
-          Mostrando datos de ejemplo (API no disponible)
-        </span>
-      </p>
+      <ApiErrorBanner v-if="apiError" />
 
       <div class="bg-white rounded-xl shadow-md p-6 mb-6">
         <div class="flex gap-4 flex-wrap">

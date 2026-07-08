@@ -54,7 +54,7 @@ frontend/
     services/api.ts Cliente axios (interceptor agrega Bearer token)
     router/index.ts Rutas + guard de auth
     types/index.ts  Tipos TS que reflejan los modelos de Laravel
-    data/mock.ts    Fallback local si la API no responde
+    components/ApiErrorBanner.vue  Aviso "no se pudo conectar" — NO hay fallback a datos ficticios
 ```
 
 ## Convenciones a seguir en los módulos nuevos
@@ -62,9 +62,11 @@ frontend/
 1. **Capa Vue:** cada módulo es una vista en `src/views/`, envuelta en
    `<StaffLayout>`, con su propio store en Pinia si maneja estado propio de CRUD.
    Seguir el patrón de `DashboardView.vue`: `onMounted` llama a la API real vía
-   `api.ts`, y si falla cae a datos mock locales con un badge visible
-   ("Mostrando datos de ejemplo") — nunca dejar la pantalla en blanco si el
-   backend no responde.
+   `api.ts`; si falla, muestra `<ApiErrorBanner />` ("No se pudo conectar con
+   el servidor. No se están mostrando datos.") y dejar los datos vacíos —
+   **nunca** mostrar datos ficticios/mock como si fueran reales. Este patrón
+   se usó antes (fallback a `data/mock.ts`) y se eliminó a propósito porque
+   confundía a los usuarios; no lo reintroduzcas.
 2. **Responsive:** mobile-first con Tailwind (`grid-cols-2 sm:grid-cols-3
    lg:grid-cols-5`, etc.), igual que el Dashboard. Nada de tablas que rompan
    el layout en mobile — usar scroll horizontal contenido o cards apiladas.
@@ -183,7 +185,7 @@ frontend/
 ## Checklist antes de dar un módulo por terminado
 
 - [ ] Responsive real probado en mobile (no solo con dev tools, si es posible)
-- [ ] La vista tiene fallback a mockup si la API falla (patrón del Dashboard)
+- [ ] La vista muestra `<ApiErrorBanner />` si la API falla — sin datos ficticios
 - [ ] Las rutas nuevas del backend están protegidas con `auth:sanctum`
 - [ ] Si hay migración nueva, es un archivo nuevo (no editaste una existente)
 - [ ] El link del sidebar y la ruta en `router/index.ts` quedaron conectados

@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import StaffLayout from '@/components/layout/StaffLayout.vue'
+import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import api from '@/services/api'
 import { useToast } from '@/composables/useToast'
-import { prestamosListadoMock } from '@/data/mock'
 import type { Prestamo } from '@/types'
 
 const toast = useToast()
 
 const prestamos = ref<Prestamo[]>([])
 const cargando = ref(true)
-const usingMock = ref(false)
+const apiError = ref(false)
 
 const filtros = reactive({
   tipo_item: '',
@@ -39,10 +39,10 @@ async function cargar() {
       },
     })
     prestamos.value = data
-    usingMock.value = false
+    apiError.value = false
   } catch {
-    usingMock.value = true
-    prestamos.value = prestamosListadoMock
+    apiError.value = true
+    prestamos.value = []
   } finally {
     cargando.value = false
   }
@@ -100,12 +100,7 @@ const filtrados = computed(() => prestamos.value)
         </div>
       </div>
 
-      <p v-if="usingMock" class="mb-4 text-xs">
-        <span class="inline-flex items-center gap-1.5 bg-acento-500/10 text-acento-600 px-2.5 py-1 rounded-full">
-          <span class="h-1.5 w-1.5 rounded-full bg-acento-500"></span>
-          Mostrando datos de ejemplo (API no disponible)
-        </span>
-      </p>
+      <ApiErrorBanner v-if="apiError" />
 
       <div class="bg-white rounded-xl shadow-md p-4 mb-6 flex flex-wrap gap-3">
         <div>

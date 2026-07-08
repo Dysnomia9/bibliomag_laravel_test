@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import StaffLayout from '@/components/layout/StaffLayout.vue'
+import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import api from '@/services/api'
-import { usuariosMock } from '@/data/mock'
 import type { Usuario } from '@/types'
 
 const usuarios = ref<Usuario[]>([])
 const loading = ref(true)
-const usingMock = ref(false)
+const apiError = ref(false)
 
 const filtros = reactive({
   q: '',
@@ -16,17 +16,6 @@ const filtros = reactive({
 })
 
 let debounceTimer: ReturnType<typeof setTimeout> | undefined
-
-function filtrarMock(): Usuario[] {
-  const q = filtros.q.trim().toLowerCase()
-
-  return usuariosMock.filter((u) => {
-    const matchQ = !q || `${u.nombre} ${u.apellido} ${u.rut} ${u.carrera ?? ''}`.toLowerCase().includes(q)
-    const matchTipo = !filtros.tipo || u.tipo === filtros.tipo
-    const matchActivo = filtros.activo === '' || String(u.activo) === filtros.activo
-    return matchQ && matchTipo && matchActivo
-  })
-}
 
 async function cargarUsuarios() {
   loading.value = true
@@ -39,10 +28,10 @@ async function cargarUsuarios() {
       },
     })
     usuarios.value = data
-    usingMock.value = false
+    apiError.value = false
   } catch {
-    usingMock.value = true
-    usuarios.value = filtrarMock()
+    apiError.value = true
+    usuarios.value = []
   } finally {
     loading.value = false
   }
@@ -77,11 +66,9 @@ const hayResultados = computed(() => usuarios.value.length > 0)
       <p class="text-sm text-biblioteca-500 mt-0.5">
         Información de usuarios registrados en el sistema institucional (solo lectura)
       </p>
-      <p v-if="usingMock" class="mt-2 text-xs inline-flex items-center gap-1.5 bg-acento-500/10 text-acento-600 px-2.5 py-1 rounded-full">
-        <span class="h-1.5 w-1.5 rounded-full bg-acento-500"></span>
-        Mostrando datos de ejemplo (API no disponible)
-      </p>
     </div>
+
+    <ApiErrorBanner v-if="apiError" />
 
     <!-- Filtros -->
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">

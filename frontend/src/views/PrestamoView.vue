@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import StaffLayout from '@/components/layout/StaffLayout.vue'
+import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import api from '@/services/api'
 import { useToast } from '@/composables/useToast'
 import { formatRut } from '@/composables/useRut'
-import { prestamosMock, reservasLibroMock } from '@/data/mock'
 import type { Prestamo, ReservaLibro, Usuario } from '@/types'
 
 const toast = useToast()
@@ -12,7 +12,7 @@ const toast = useToast()
 const rut = ref('')
 const usuario = ref<Usuario | null>(null)
 const buscando = ref(false)
-const usingMock = ref(false)
+const apiError = ref(false)
 
 const prestamos = ref<Prestamo[]>([])
 const reservas = ref<ReservaLibro[]>([])
@@ -49,11 +49,11 @@ async function cargarPrestamosYReservas() {
     ])
     prestamos.value = p
     reservas.value = r
-    usingMock.value = false
+    apiError.value = false
   } catch {
-    usingMock.value = true
-    prestamos.value = prestamosMock
-    reservas.value = reservasLibroMock
+    apiError.value = true
+    prestamos.value = []
+    reservas.value = []
   }
 }
 
@@ -257,12 +257,7 @@ function formatFecha(iso: string | null) {
         </div>
       </div>
 
-      <p v-if="usingMock" class="mb-4 text-xs">
-        <span class="inline-flex items-center gap-1.5 bg-acento-500/10 text-acento-600 px-2.5 py-1 rounded-full">
-          <span class="h-1.5 w-1.5 rounded-full bg-acento-500"></span>
-          Mostrando datos de ejemplo (API no disponible)
-        </span>
-      </p>
+      <ApiErrorBanner v-if="apiError" />
 
       <div v-if="usuario">
         <div class="bg-white rounded-xl shadow-md p-6 mb-6">

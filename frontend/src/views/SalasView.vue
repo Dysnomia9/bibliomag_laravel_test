@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import StaffLayout from '@/components/layout/StaffLayout.vue'
+import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import api from '@/services/api'
 import { useToast } from '@/composables/useToast'
 import { formatRut } from '@/composables/useRut'
-import { reservasSalasMock, salasMock } from '@/data/mock'
 import type { Reserva, Sala } from '@/types'
 
 const toast = useToast()
@@ -26,7 +26,7 @@ const CANTIDAD_MAX = 5
 
 const salas = ref<Sala[]>([])
 const reservas = ref<Reserva[]>([])
-const usingMock = ref(false)
+const apiError = ref(false)
 const selectedDate = ref(hoy)
 const busqueda = ref('')
 const pisoSeleccionado = ref('')
@@ -60,11 +60,11 @@ async function cargar() {
     const { data } = await api.get('/salas', { params: { fecha: selectedDate.value } })
     salas.value = data.salas
     reservas.value = data.reservas
-    usingMock.value = false
+    apiError.value = false
   } catch {
-    usingMock.value = true
-    salas.value = salasMock
-    reservas.value = reservasSalasMock
+    apiError.value = true
+    salas.value = []
+    reservas.value = []
   }
 }
 
@@ -191,12 +191,7 @@ function formatFechaLarga(fecha: string) {
         </div>
       </div>
 
-      <p v-if="usingMock" class="mb-4 text-xs">
-        <span class="inline-flex items-center gap-1.5 bg-acento-500/10 text-acento-600 px-2.5 py-1 rounded-full">
-          <span class="h-1.5 w-1.5 rounded-full bg-acento-500"></span>
-          Mostrando datos de ejemplo (API no disponible)
-        </span>
-      </p>
+      <ApiErrorBanner v-if="apiError" />
 
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <div class="bg-white rounded-xl shadow-md p-5">

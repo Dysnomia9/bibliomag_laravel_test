@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import PortalLayout from '@/components/layout/PortalLayout.vue'
+import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import apiUsuario from '@/services/apiUsuario'
 import { useUsuarioAuthStore } from '@/stores/usuarioAuth'
 import type { EstadoPortal } from '@/types'
@@ -9,7 +10,7 @@ const auth = useUsuarioAuthStore()
 
 const personasEnSala = ref(0)
 const capacidad = ref(220)
-const usingMock = ref(false)
+const apiError = ref(false)
 
 const acciones = [
   {
@@ -37,11 +38,10 @@ async function cargar() {
     const { data } = await apiUsuario.get<EstadoPortal>('/mi/estado')
     personasEnSala.value = data.personasEnSala
     capacidad.value = data.capacidad
-    usingMock.value = false
+    apiError.value = false
   } catch {
-    usingMock.value = true
-    personasEnSala.value = 47
-    capacidad.value = 220
+    apiError.value = true
+    personasEnSala.value = 0
   }
 }
 
@@ -81,12 +81,7 @@ onMounted(cargar)
         </div>
       </div>
 
-      <p v-if="usingMock" class="mb-4 text-xs text-center">
-        <span class="inline-flex items-center gap-1.5 bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full">
-          <span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
-          Mostrando datos de ejemplo (API no disponible)
-        </span>
-      </p>
+      <ApiErrorBanner v-if="apiError" />
 
       <div class="space-y-3">
         <router-link

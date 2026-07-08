@@ -2,15 +2,15 @@
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import PortalLayout from '@/components/layout/PortalLayout.vue'
+import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import apiUsuario from '@/services/apiUsuario'
-import { catalogoMock } from '@/data/mock'
 import type { Libro } from '@/types'
 
 const router = useRouter()
 
 const busqueda = ref('')
 const libros = ref<Libro[]>([])
-const usingMock = ref(false)
+const apiError = ref(false)
 const cargando = ref(false)
 
 async function cargar() {
@@ -18,15 +18,10 @@ async function cargar() {
   try {
     const { data } = await apiUsuario.get<Libro[]>('/mi/catalogo', { params: busqueda.value ? { q: busqueda.value } : {} })
     libros.value = data
-    usingMock.value = false
+    apiError.value = false
   } catch {
-    usingMock.value = true
-    const q = busqueda.value.toLowerCase()
-    libros.value = q
-      ? catalogoMock.filter(
-          (l) => l.titulo.toLowerCase().includes(q) || (l.autor ?? '').toLowerCase().includes(q) || (l.categoria ?? '').toLowerCase().includes(q)
-        )
-      : catalogoMock
+    apiError.value = true
+    libros.value = []
   } finally {
     cargando.value = false
   }
@@ -60,12 +55,7 @@ onMounted(cargar)
         <p class="text-sm text-gray-500 mt-0.5">Consulta la disponibilidad de libros por título, autor o área</p>
       </div>
 
-      <p v-if="usingMock" class="mb-4 text-xs">
-        <span class="inline-flex items-center gap-1.5 bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full">
-          <span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
-          Mostrando datos de ejemplo (API no disponible)
-        </span>
-      </p>
+      <ApiErrorBanner v-if="apiError" />
 
       <div class="relative mb-5">
         <svg class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-gray-400" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
