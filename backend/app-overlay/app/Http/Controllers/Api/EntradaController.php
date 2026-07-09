@@ -46,6 +46,14 @@ class EntradaController extends Controller
             return response()->json(['message' => 'El usuario se encuentra inactivo'], 403);
         }
 
+        $tieneEntradaActiva = Entrada::where('usuario_id', $usuario->id)
+            ->whereNull('fecha_hora_salida')
+            ->exists();
+
+        if ($tieneEntradaActiva) {
+            return response()->json(['message' => 'El usuario ya tiene una entrada activa registrada'], 409);
+        }
+
         $entrada = Entrada::create([
             'usuario_id' => $usuario->id,
             'via' => $data['via'] ?? 'manual',
@@ -63,6 +71,14 @@ class EntradaController extends Controller
             'nombre' => ['nullable', 'string', 'max:255'],
         ]);
 
+        $tieneEntradaActiva = Entrada::where('rut_externo', $data['rut'])
+            ->whereNull('fecha_hora_salida')
+            ->exists();
+
+        if ($tieneEntradaActiva) {
+            return response()->json(['message' => 'Ese visitante ya tiene una entrada activa registrada'], 409);
+        }
+
         // Visitantes externos no están en la base de datos institucional: se
         // registran directamente con el RUT (y nombre opcional) que declaran,
         // sin validar contra la tabla de usuarios.
@@ -73,5 +89,18 @@ class EntradaController extends Controller
         ]);
 
         return response()->json($entrada, 201);
+    }
+
+    public function marcarSalida(Entrada $entrada)
+    {
+        if ($entrada->fecha_hora_salida !== null) {
+            return response()->json(['message' => 'Esta entrada ya tiene una salida registrada'], 409);
+        }
+
+        $entrada->update(['fecha_hora_salida' => now()]);
+
+        $entrada->load('usuario:id,nombre,apellido,rut');
+
+        return response()->json($entrada);
     }
 }

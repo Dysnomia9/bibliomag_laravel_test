@@ -3,10 +3,33 @@
 Migración del sistema original (Next.js + React) a **Vue 3 + Tailwind** (frontend)
 y **Laravel + PostgreSQL** (backend API), 100% dockerizado.
 
-Este primer entregable incluye el módulo **Login + Dashboard**, con datos mockup
-generados por el comando `php artisan mockup:datos`. El resto de los módulos
-(`entrada`, `prestamo`, `usuarios`, `salas`, `reportes`) están como rutas
-placeholder ("Próximamente") listas para migrarse en los siguientes sprints.
+## Estado actual
+
+Todos los módulos principales están implementados y conectados end-to-end
+(no quedan placeholders "Próximamente" en el sidebar):
+
+| Módulo | Ruta staff | Backend |
+|---|---|---|
+| Dashboard | `/dashboard` | `DashboardController` |
+| Usuarios | `/usuarios` | `UsuarioController` |
+| Entrada | `/entrada` | `EntradaController` |
+| Préstamos | `/prestamo`, `/prestamos/listado` | `PrestamoController` |
+| Salas | `/salas` | `SalaController` |
+| Reportes | `/reportes` | `ReporteController` |
+| Código QR de acceso | `/codigo-qr` | `CodigoAccesoController` |
+
+Además existe un **portal de autoservicio para usuarios** (no staff), con su
+propio login y guard de rutas (`/portal/*`): marcar entrada/salida (RUT o
+escaneo de QR con la cámara), consultar el catálogo de libros y reservar
+salas de estudio.
+
+Y un catálogo de libros incipiente, separado de los préstamos "texto libre":
+`LibroController` (búsqueda por código de barras) y `ReservaLibroController`
+(reservar un libro del catálogo para retiro).
+
+Auth: dos guards de Sanctum independientes — `staff` (bibliotecarios, vía
+`AuthController`) y `usuario` (portal, vía `UsuarioAuthController`) —
+implementados como middlewares (`EnsureIsStaff`, `EnsureIsUsuario`).
 
 ## Estructura
 
@@ -51,6 +74,10 @@ Esto levanta:
 y Composer dentro del contenedor. Verás el log `>> Creando proyecto Laravel base...`.
 Arranques siguientes son casi instantáneos.
 
+> Este `docker-compose.yml` es un entorno de **desarrollo** (bind mount del
+> frontend, credenciales de Postgres hardcodeadas en el propio archivo). No
+> está pensado como configuración de despliegue en producción.
+
 ### Credenciales de prueba
 
 ```
@@ -74,18 +101,10 @@ Este comando (`app/Console/Commands/SeedMockupData.php`) genera:
 
 - 1 usuario `staff` (admin)
 - 30 `usuarios` con RUT válido (con dígito verificador calculado), carrera (de las
-  8 carreras UMAG), año de ingreso y sexo — igual que `lib/mock-reportes.ts` del
-  proyecto original
-- Entradas y préstamos distribuidos en los últimos días, con el mismo sesgo horario
-  del mock original (más tráfico 10–13h y 15–18h)
-- 25 salas de estudio (1er piso, capacidades variables) y reservas del día —
-  adaptado de `app/staff/salas/page.tsx`
-
-## Reiniciar la base de datos con datos mockup frescos
-
-```bash
-docker compose exec backend php artisan mockup:datos --fresh
-```
+  8 carreras UMAG), año de ingreso y sexo
+- Entradas y préstamos distribuidos en los últimos días, con sesgo horario
+  (más tráfico 10–13h y 15–18h)
+- 25 salas de estudio (1er piso, capacidades variables) y reservas del día
 
 Si necesitas empezar completamente de cero (esquema incluido):
 
@@ -103,20 +122,12 @@ cp .env.example .env
 npm run dev
 ```
 
-## Salas (API lista, vista pendiente)
+## Deuda técnica conocida
 
-`GET /api/salas?fecha=YYYY-MM-DD` devuelve las 25 salas y las reservas de ese día.
-La vista Vue de este módulo sigue pendiente (por ahora está como "Próximamente"
-en el sidebar).
-
-## Próximos módulos a migrar
-
-- [ ] Entradas (registro manual + QR, vista `kiosko`)
-- [ ] Préstamos (creación, devolución, atrasos)
-- [ ] Usuarios (CRUD, validación de RUT chileno)
-- [ ] Salas (reservas)
-- [ ] Reportes (equivalente a `lib/mock-reportes.ts` del sistema original)
-
-Cada uno seguirá el mismo patrón: `app-overlay/` (Model + Controller + rutas) en
-Laravel, y una vista Vue con su propio store en Pinia, consumiendo la API real con
-fallback a mockup si el backend no responde (igual que el Dashboard).
+No hay una suite de tests automatizados en el repo. Algunos puntos del modelo
+de datos y de la capa de autorización quedan pendientes de endurecer (por
+ejemplo: los préstamos siguen guardando `libro_titulo` como texto libre en
+vez de referenciar el catálogo de libros/ejemplares, y las reservas de sala
+guardan los RUT de los participantes como un array JSON en vez de una tabla
+relacional). Antes de asumir que algo "falta" o "está roto", revisa el
+código real en `app-overlay/` — este README se puede desactualizar.

@@ -4,13 +4,17 @@ import PortalLayout from '@/components/layout/PortalLayout.vue'
 import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import apiUsuario from '@/services/apiUsuario'
 import { useUsuarioAuthStore } from '@/stores/usuarioAuth'
+import { useToast } from '@/composables/useToast'
 import type { EstadoPortal } from '@/types'
 
 const auth = useUsuarioAuthStore()
+const toast = useToast()
 
 const personasEnSala = ref(0)
 const capacidad = ref(220)
 const apiError = ref(false)
+const entradaActiva = ref(false)
+const registrandoSalida = ref(false)
 
 const acciones = [
   {
@@ -38,10 +42,24 @@ async function cargar() {
     const { data } = await apiUsuario.get<EstadoPortal>('/mi/estado')
     personasEnSala.value = data.personasEnSala
     capacidad.value = data.capacidad
+    entradaActiva.value = data.entradaActiva
     apiError.value = false
   } catch {
     apiError.value = true
     personasEnSala.value = 0
+  }
+}
+
+async function marcarSalida() {
+  registrandoSalida.value = true
+  try {
+    await apiUsuario.post('/mi/salida')
+    toast.success('Salida registrada')
+    await cargar()
+  } catch (e: any) {
+    toast.error(e?.response?.data?.message ?? 'No se pudo registrar la salida')
+  } finally {
+    registrandoSalida.value = false
   }
 }
 
@@ -82,6 +100,23 @@ onMounted(cargar)
       </div>
 
       <ApiErrorBanner v-if="apiError" />
+
+      <button
+        v-if="entradaActiva"
+        @click="marcarSalida"
+        :disabled="registrandoSalida"
+        class="w-full flex items-center gap-4 p-4 mb-3 bg-white border border-amber-200 rounded-2xl shadow-sm hover:border-amber-300 hover:shadow-md transition-all disabled:opacity-60"
+      >
+        <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-50 text-amber-600 shrink-0">
+          <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+          </svg>
+        </div>
+        <div class="text-left min-w-0">
+          <p class="font-semibold text-gray-900">{{ registrandoSalida ? 'Registrando…' : 'Marcar salida' }}</p>
+          <p class="text-xs text-gray-500 truncate mt-0.5">Ya tienes una entrada activa registrada</p>
+        </div>
+      </button>
 
       <div class="space-y-3">
         <router-link

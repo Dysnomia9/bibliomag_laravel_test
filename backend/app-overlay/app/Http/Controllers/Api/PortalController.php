@@ -8,12 +8,17 @@ use App\Models\Entrada;
 use App\Models\Libro;
 use App\Models\Reserva;
 use App\Models\Sala;
+use App\Services\ReservaSalaService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 
 class PortalController extends Controller
 {
     private const CAPACIDAD_SALA = 220;
+
+    public function __construct(private ReservaSalaService $reservaSalaService)
+    {
+    }
 
     public function estado(Request $request)
     {
@@ -25,6 +30,9 @@ class PortalController extends Controller
                 ->whereNull('fecha_hora_salida')
                 ->count(),
             'capacidad' => self::CAPACIDAD_SALA,
+            'entradaActiva' => Entrada::where('usuario_id', $request->user()->id)
+                ->whereNull('fecha_hora_salida')
+                ->exists(),
         ]);
     }
 
@@ -46,6 +54,14 @@ class PortalController extends Controller
             return response()->json(['message' => 'El código QR no es válido. Pide al personal que lo actualice.'], 422);
         }
 
+        $tieneEntradaActiva = Entrada::where('usuario_id', $usuario->id)
+            ->whereNull('fecha_hora_salida')
+            ->exists();
+
+        if ($tieneEntradaActiva) {
+            return response()->json(['message' => 'Ya tienes una entrada activa registrada'], 409);
+        }
+
         $entrada = Entrada::create([
             'usuario_id' => $usuario->id,
             'via' => $data['via'],
@@ -55,6 +71,22 @@ class PortalController extends Controller
             'entrada' => $entrada,
             'usuario' => $usuario,
         ], 201);
+    }
+
+    public function registrarSalida(Request $request)
+    {
+        $entrada = Entrada::where('usuario_id', $request->user()->id)
+            ->whereNull('fecha_hora_salida')
+            ->latest('fecha_hora_entrada')
+            ->first();
+
+        if (! $entrada) {
+            return response()->json(['message' => 'No tienes una entrada activa registrada'], 404);
+        }
+
+        $entrada->update(['fecha_hora_salida' => now()]);
+
+        return response()->json($entrada);
     }
 
     public function catalogo(Request $request)
@@ -99,9 +131,10 @@ class PortalController extends Controller
             'ruts' => ['required', 'array'],
             // A diferencia del registro de entrada externo, aquí los RUT deben
             // pertenecer a usuarios ya registrados: no se admiten visitantes externos.
-            'ruts.*' => ['required', 'string', 'exists:usuarios,rut'],
+            'ruts.*' => ['required', 'string', 'distinct', 'exists:usuarios,rut'],
         ], [
             'ruts.*.exists' => 'Uno de los RUT ingresados no corresponde a un usuario registrado en el sistema.',
+            'ruts.*.distinct' => 'No puedes ingresar el mismo RUT más de una vez en la misma reserva.',
         ]);
 
         if (count($data['ruts']) !== $data['cantidad_personas']) {
@@ -110,13 +143,30 @@ class PortalController extends Controller
 
         $usuario = $request->user();
 
-        $existe = Reserva::where('sala_id', $data['sala_id'])
-            ->where('fecha', $data['fecha'])
-            ->where('hora_inicio', $data['hora_inicio'])
-            ->exists();
+        $existe = $this->reservaSalaService->existeSolapamiento(
+            $data['sala_id'],
+            $data['fecha'],
+            $data['hora_inicio'],
+            $data['hora_fin'],
+        );
 
         if ($existe) {
             return response()->json(['message' => 'Ese bloque ya se encuentra reservado'], 409);
+        }
+
+        $rutConflicto = $this->reservaSalaService->participanteConReservaSolapada(
+            $data['ruts'],
+            $data['fecha'],
+            $data['hora_inicio'],
+            $data['hora_fin'],
+        );
+
+        if ($rutConflicto) {
+            $mensaje = $rutConflicto === $usuario->rut
+                ? 'Ya tienes otra sala reservada en ese horario'
+                : "El RUT {$rutConflicto} ya tiene otra sala reservada en ese horario";
+
+            return response()->json(['message' => $mensaje], 409);
         }
 
         $reserva = Reserva::create([

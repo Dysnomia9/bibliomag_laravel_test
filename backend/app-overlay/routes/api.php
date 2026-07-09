@@ -33,6 +33,7 @@ Route::middleware(['auth:sanctum', 'staff'])->group(function () {
     Route::get('/entrada', [EntradaController::class, 'index']);
     Route::post('/entrada', [EntradaController::class, 'store']);
     Route::post('/entrada/externo', [EntradaController::class, 'storeExterno']);
+    Route::patch('/entrada/{entrada}/salida', [EntradaController::class, 'marcarSalida']);
 
     Route::get('/prestamos', [PrestamoController::class, 'index']);
     Route::post('/prestamos', [PrestamoController::class, 'store']);
@@ -57,6 +58,7 @@ Route::middleware(['auth:sanctum', 'usuario'])->group(function () {
 
     Route::get('/mi/estado', [PortalController::class, 'estado']);
     Route::post('/mi/entrada', [PortalController::class, 'registrarEntrada']);
+    Route::post('/mi/salida', [PortalController::class, 'registrarSalida']);
     Route::get('/mi/catalogo', [PortalController::class, 'catalogo']);
 
     Route::get('/mi/salas', [PortalController::class, 'salas']);

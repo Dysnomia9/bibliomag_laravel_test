@@ -57,6 +57,21 @@ function formatFechaLarga(fecha: string) {
   return fecha === hoy ? 'hoy' : new Date(`${fecha}T12:00:00`).toLocaleDateString('es-CL')
 }
 
+const marcandoSalida = ref<number | null>(null)
+
+async function marcarSalida(entrada: Entrada) {
+  marcandoSalida.value = entrada.id
+  try {
+    await api.patch(`/entrada/${entrada.id}/salida`)
+    toast.success('Salida registrada')
+    await cargar()
+  } catch (e: any) {
+    toast.error(e?.response?.data?.message ?? 'No se pudo registrar la salida')
+  } finally {
+    marcandoSalida.value = null
+  }
+}
+
 async function registrarEntrada(via: 'manual' | 'qr' = 'manual') {
   if (!rut.value.trim()) {
     toast.error('Ingrese un RUT para buscar')
@@ -194,7 +209,8 @@ async function registrarExterno() {
                 <th class="px-6 py-3 text-left text-xs font-semibold text-stone-600 uppercase tracking-wide border-r border-stone-200">Hora</th>
                 <th class="px-6 py-3 text-left text-xs font-semibold text-stone-600 uppercase tracking-wide border-r border-stone-200">RUT</th>
                 <th class="px-6 py-3 text-left text-xs font-semibold text-stone-600 uppercase tracking-wide border-r border-stone-200">Nombre</th>
-                <th class="px-6 py-3 text-left text-xs font-semibold text-stone-600 uppercase tracking-wide">Vía</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold text-stone-600 uppercase tracking-wide border-r border-stone-200">Vía</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold text-stone-600 uppercase tracking-wide">Salida</th>
               </tr>
             </thead>
             <tbody>
@@ -215,14 +231,25 @@ async function registrarExterno() {
                     <span class="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-amber-50 text-amber-700 border border-amber-200">Externo</span>
                   </span>
                 </td>
-                <td class="px-6 py-3">
+                <td class="px-6 py-3 border-r border-stone-100">
                   <span class="text-xs px-2.5 py-1 rounded-full font-medium" :class="VIA_STYLES[e.via]">
                     {{ VIA_LABELS[e.via] }}
                   </span>
                 </td>
+                <td class="px-6 py-3 text-sm">
+                  <span v-if="e.fecha_hora_salida" class="font-mono text-stone-500">{{ formatHora(e.fecha_hora_salida) }}</span>
+                  <button
+                    v-else
+                    @click="marcarSalida(e)"
+                    :disabled="marcandoSalida === e.id"
+                    class="text-xs px-2.5 py-1 rounded-full font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors disabled:opacity-60"
+                  >
+                    {{ marcandoSalida === e.id ? 'Registrando…' : 'Marcar salida' }}
+                  </button>
+                </td>
               </tr>
               <tr v-if="!entradas.length">
-                <td colspan="4" class="px-6 py-8 text-center text-sm text-gray-400">Sin registros de entrada para {{ formatFechaLarga(selectedDate) }}.</td>
+                <td colspan="5" class="px-6 py-8 text-center text-sm text-gray-400">Sin registros de entrada para {{ formatFechaLarga(selectedDate) }}.</td>
               </tr>
             </tbody>
           </table>

@@ -10,8 +10,17 @@ desde **Next.js + React + Tailwind** hacia **Vue 3 + Tailwind (frontend)** y
 - **Repo original de referencia (solo lectura):**
   `https://github.com/Dysnomia9/biblioteca_sistema_docker_sumag`
   Úsalo para extraer **estructura de datos, textos, reglas de negocio y UX de
-  referencia** de los módulos que aún faltan — NO para copiar código React
-  literal (el stack cambió a Vue).
+  referencia** — NO para copiar código React literal (el stack cambió a Vue).
+
+## Estado del proyecto
+
+Todos los módulos originalmente planeados (usuarios, entrada, préstamos,
+salas, reportes) ya están implementados de punta a punta — no quedan rutas
+placeholder tipo "Próximamente". Además existen dos capas de autenticación
+separadas (`staff` y `usuario`) y un portal de autoservicio para usuarios
+finales que no existía en el plan inicial. **No asumas que un módulo "falta"
+por lo que digan README/tesis/documentación externa — verifica el código
+real en `app-overlay/` y `frontend/src/` primero.**
 
 ## Stack
 
@@ -31,7 +40,9 @@ docker compose exec backend php artisan mockup:datos --fresh  # regenerar todo d
 
 - Frontend: http://localhost:5173
 - Backend API: http://localhost:8000/api
-- Login: `admin@umag.cl` / `admin123`
+- Login staff: `admin@umag.cl` / `admin123`
+- Portal usuario: `/portal/login` (usuarios generados por `mockup:datos`, con
+  password seteada en el seeder)
 
 ## Estructura relevante
 
@@ -39,120 +50,86 @@ docker compose exec backend php artisan mockup:datos --fresh  # regenerar todo d
 backend/
   docker-entrypoint.sh        # instala Laravel en frío la 1ra vez, aplica overlay, migra, seedea
   app-overlay/                # ÚNICO lugar del backend que se edita — se "hornea" en la imagen
-    app/Models/                Staff, Usuario, Entrada, Prestamo, Sala, Reserva
-    app/Http/Controllers/Api/  AuthController, DashboardController, SalaController
+    app/Models/
+      Staff, Usuario, Entrada, Prestamo, Sala, Reserva, Libro, ReservaLibro, CodigoAcceso
+    app/Http/Middleware/
+      EnsureIsStaff, EnsureIsUsuario     # separan los dos guards de Sanctum
+    app/Http/Controllers/Api/
+      AuthController, UsuarioAuthController   # login staff vs. login usuario (portal)
+      DashboardController, UsuarioController, EntradaController, PrestamoController,
+      SalaController, ReporteController, CodigoAccesoController
+      LibroController, ReservaLibroController  # catálogo de libros y reservas de libro (retiro)
+      PortalController                         # endpoints del portal de autoservicio (/mi/*)
     app/Console/Commands/      SeedMockupData.php (comando `mockup:datos`)
-    database/migrations/
-    routes/api.php
+    database/migrations/       15 migraciones correlativas, ver Deuda técnica más abajo
+    routes/api.php             grupo `auth:sanctum + staff` y grupo `auth:sanctum + usuario`
     bootstrap/app.php          # NO tiene statefulApi() — auth es Bearer token puro, sin CSRF
 
 frontend/
   src/
-    views/          LoginView, DashboardView, ProximamenteView (placeholder)
-    components/layout/  StaffLayout, SidebarNav, TopBar
-    stores/auth.ts  Pinia store con login/logout, token en localStorage
-    services/api.ts Cliente axios (interceptor agrega Bearer token)
-    router/index.ts Rutas + guard de auth
-    types/index.ts  Tipos TS que reflejan los modelos de Laravel
+    views/            LoginView, LoginV2View, DashboardView, EntradaView, PrestamoView,
+                       ListadoPrestamosView, UsuariosView, SalasView, ReportesView, CodigoQrView
+    views/portal/      PortalLoginView, PortalHomeView, PortalEntradaView,
+                       PortalCatalogoView, PortalSalasView
+    components/layout/  StaffLayout, TopBar (la navegación vive en TopBar, no hay
+                        un componente "SidebarNav" separado), PortalLayout
+    components/reportes/  BarChart, BreakdownList, ReporteTabla
     components/ApiErrorBanner.vue  Aviso "no se pudo conectar" — NO hay fallback a datos ficticios
+    stores/           auth.ts (staff), usuarioAuth.ts (portal) — dos stores de Pinia separados
+    services/         api.ts (staff, Bearer token de auth.ts), apiUsuario.ts (portal)
+    composables/      useRut.ts, useToast.ts, useStaffShortcuts.ts (atajos de teclado del staff)
+    router/index.ts   dos guards: rutas `meta.portal` usan usuarioAuth, el resto usa auth
+    types/index.ts    Tipos TS que reflejan los modelos de Laravel
 ```
 
-## Convenciones a seguir en los módulos nuevos
+## Convenciones a seguir en módulos nuevos o cambios
 
-1. **Capa Vue:** cada módulo es una vista en `src/views/`, envuelta en
-   `<StaffLayout>`, con su propio store en Pinia si maneja estado propio de CRUD.
-   Seguir el patrón de `DashboardView.vue`: `onMounted` llama a la API real vía
-   `api.ts`; si falla, muestra `<ApiErrorBanner />` ("No se pudo conectar con
-   el servidor. No se están mostrando datos.") y dejar los datos vacíos —
-   **nunca** mostrar datos ficticios/mock como si fueran reales. Este patrón
-   se usó antes (fallback a `data/mock.ts`) y se eliminó a propósito porque
-   confundía a los usuarios; no lo reintroduzcas.
+1. **Capa Vue:** cada módulo staff es una vista en `src/views/`, envuelta en
+   `<StaffLayout>`; los del portal van en `src/views/portal/` envueltos en
+   `<PortalLayout>`. Cada uno con su propio store en Pinia si maneja estado
+   propio de CRUD. Seguir el patrón de `DashboardView.vue`: `onMounted` llama
+   a la API real vía `api.ts` (o `apiUsuario.ts` en el portal); si falla,
+   muestra `<ApiErrorBanner />` ("No se pudo conectar con el servidor. No se
+   están mostrando datos.") y deja los datos vacíos — **nunca** mostrar datos
+   ficticios/mock como si fueran reales. Este patrón se usó antes (fallback a
+   `data/mock.ts`) y se eliminó a propósito porque confundía a los usuarios;
+   no lo reintroduzcas.
 2. **Responsive:** mobile-first con Tailwind (`grid-cols-2 sm:grid-cols-3
-   lg:grid-cols-5`, etc.), igual que el Dashboard. Nada de tablas que rompan
-   el layout en mobile — usar scroll horizontal contenido o cards apiladas.
+   lg:grid-cols-5`, etc.). Nada de tablas que rompan el layout en mobile —
+   usar scroll horizontal contenido o cards apiladas.
 3. **Paleta:** usar los colores `biblioteca-*` y `acento-*` definidos en
-   `tailwind.config.js` 
-   gradientes morados/índigo tipo SaaS del proyecto original.
-4. **Backend:** un Controller + rutas protegidas por `auth:sanctum` por
-   módulo, siguiendo el patrón de `DashboardController`/`SalaController`.
-   Cualquier migración nueva va con timestamp correlativo en
+   `tailwind.config.js` — no reintroducir los gradientes morados/índigo tipo
+   SaaS del proyecto original.
+4. **Backend:** un Controller + rutas protegidas por `auth:sanctum` + (`staff`
+   o `usuario`) por módulo. Si dos controladores necesitan la misma regla de
+   negocio (p. ej. el chequeo de solapamiento de reservas en
+   `ReservaSalaService`), extráela a un `app/Services/` compartido en vez de
+   duplicar la lógica — ya pasó una vez y costó un bug real (ver Deuda
+   técnica). Cualquier migración nueva va con timestamp correlativo en
    `database/migrations/` (nunca editar una migración ya aplicada — crear una
    nueva `alter table` si hace falta cambiar un esquema existente).
-5. Reemplazar la ruta placeholder correspondiente en `router/index.ts` y el
-   ícono/link ya existente en `SidebarNav.vue` (no hay que tocar el sidebar,
-   los links ya apuntan a los `name` correctos: `entrada`, `prestamo`,
-   `usuarios`, `salas`, `reportes`).
+5. Los links de navegación viven en `TopBar.vue` y las rutas en
+   `router/index.ts` — ya apuntan a los componentes reales, no hay
+   `ProximamenteView` que reemplazar.
 
-## Módulos pendientes (orden sugerido)
+## Deuda técnica conocida (no asumir que ya se resolvió sin verificar el código)
 
-### 1. Usuarios (`/usuarios`) — recomendado empezar por acá, es la base de todo lo demás
-
-- CRUD completo: listar (con búsqueda por nombre/RUT/carrera), crear, editar,
-  activar/desactivar (soft — no hay `deleted_at`, usar el campo `activo`).
-- El modelo `Usuario` ya tiene `rut`, `nombre`, `apellido`, `email`, `tipo`,
-  `carrera`, `anio_ingreso`, `sexo`, `activo`, `qr_code`.
-- **Validación de RUT chileno**: el repo original tiene la lógica de
-  formateo/validación en `lib/rut.ts` — pórtala a un composable Vue
-  (`src/composables/useRut.ts` o similar) y a un `FormRequest` de Laravel
-  para el backend. Revisa ese archivo en el repo original antes de reinventar
-  el algoritmo del dígito verificador (el comando `mockup:datos` ya tiene una
-  implementación en PHP en `SeedMockupData::digitoVerificador()` que puedes
-  reutilizar/extraer a un helper compartido).
-- Backend: falta `UsuarioController` (index con filtros, store, update) y
-  las rutas correspondientes.
-
-### 2. Entradas (`/entrada`)
-
-- En el original hay una vista `app/kiosko/` (pantalla pública tipo totem
-  para registrar entrada, probablemente por RUT o QR) y `app/staff/entrada/`
-  (vista de staff). Revisa ambas antes de diseñar el flujo — puede que
-  convenga separar "Kiosko" (pantalla pública, sin auth) de "Entrada" (panel
-  de staff con historial y registro manual).
-- El modelo `Entrada` ya existe (`usuario_id`, `fecha_hora_entrada`,
-  `fecha_hora_salida`, `via: manual|qr`).
-- Falta: `EntradaController` (listar con filtros de fecha, registrar entrada,
-  marcar salida) y la vista Vue con formulario de búsqueda de usuario por RUT
-  + botón de registrar entrada/salida.
-
-### 3. Préstamos (`/prestamo`)
-
-- Modelo `Prestamo` ya existe (`usuario_id`, `libro_titulo`,
-  `fecha_prestamo`, `fecha_devolucion`, `fecha_devolucion_real`,
-  `estado: activo|atrasado|devuelto`).
-- Falta: `PrestamoController` (crear préstamo, marcar devuelto, listar con
-  filtro por estado) y vista con tabla de préstamos activos/atrasados +
-  modal para crear uno nuevo.
-- Nota: el campo es `libro_titulo` (texto libre), no hay catálogo de libros
-  todavía — revisa si el repo original tiene un catálogo real antes de
-  decidir si conviene normalizar esto a una tabla `libros`.
-
-### 4. Salas (`/salas`) — backend ya adelantado
-
-- Modelos `Sala` y `Reserva` ya existen, con 25 salas (1er piso, capacidad
-  variable) generadas por `mockup:datos`.
-- **Ya existe** `GET /api/salas?fecha=YYYY-MM-DD` (devuelve salas + reservas
-  del día). Falta: `POST /api/reservas` (crear) y
-  `DELETE /api/reservas/{id}` (cancelar).
-- Referencia de UX: `app/staff/salas/page.tsx` del repo original — es una
-  grilla de 25 salas × 6 bloques horarios de 2h (08-20h), click en un bloque
-  libre abre modal para reservar con RUT + nombre, bloques ocupados muestran
-  quién reservó y permiten cancelar. Adapta ese mismo patrón a Vue (grid con
-  scroll horizontal en mobile).
-
-### 5. Reportes (`/reportes`)
-
-- El repo original tiene toda la lógica de agregación en
-  `lib/mock-reportes.ts`: agrupa préstamos/ingresos por período (día, semana,
-  mes, semestre, año) y por carrera/sexo/tipo de usuario, con funciones
-  `bucketKey`/`bucketLabel` para las etiquetas de cada agrupación.
-- Esto conviene resolverlo del lado del backend (Laravel) con queries
-  agregadas (`GROUP BY`) sobre `entradas` y `prestamos` — ya tenemos
-  `carrera`/`sexo`/`anio_ingreso` en `usuarios`, así que se puede hacer un
-  `ReporteController` con endpoints tipo
-  `GET /api/reportes/prestamos?periodo=mes&desde=...&hasta=...`.
-- Vista Vue: gráficos con alguna librería ligera (Chart.js ya está permitida
-  en el entorno de artifacts, pero para este frontend real evalúa agregarla
-  a `package.json` si hace falta) + selector de período.
+- **`Prestamo.libro_titulo` es texto libre**, desconectado del catálogo real
+  (`Libro`/`ReservaLibro`). Se puede crear un préstamo con cualquier título
+  sin validar existencia, disponibilidad ni ejemplar. Si se aborda: modelo
+  `Libro → Ejemplar → Prestamo` (el préstamo referencia un ejemplar físico,
+  no solo el título de la obra).
+- **`Reserva.ruts` es un array JSON** (cast `array` en el modelo) en vez de
+  una tabla relacional `reserva_participantes`. `SalaController::index`
+  reconstruye manualmente el mapeo RUT → usuario porque no hay relación
+  Eloquent real.
+- **Sin tests automatizados** (no hay ningún `*Test.php` en el repo).
+- **Credenciales de Postgres hardcodeadas** en `docker-compose.yml`
+  (`biblioteca`/`biblioteca`) — aceptable para desarrollo local, no usar tal
+  cual como base de un despliegue.
+- **`PortalController` concentra varias responsabilidades** (estado/aforo,
+  entrada/salida, catálogo, salas y reservas del usuario). Si crece más,
+  conviene separar por dominio en vez de agregar más métodos ahí.
 
 ## Gotchas ya resueltos (no los reintroduzcas)
 
@@ -174,21 +151,49 @@ frontend/
   Personal Access Tokens), sin cookies de sesión — si se reactiva
   `statefulApi()` sin implementar el flujo de cookie CSRF completo en el
   frontend, el login vuelve a romperse.
-- **Sin rate limiting en login**: ya se agregó `throttle:6,1` en la ruta
-  `POST /auth/login` (`routes/api.php`) — no lo quites, es la única
-  protección contra fuerza bruta que tiene el sistema ahora mismo.
+- **Sin rate limiting en login**: ya se agregó `throttle:6,1` en las rutas
+  `POST /auth/login` y `POST /auth/usuario/login` (`routes/api.php`) — no lo
+  quites, es la única protección contra fuerza bruta que tiene el sistema
+  ahora mismo.
 - **Seed no destructivo**: el entrypoint corre `migrate --force` (no
   `migrate:fresh`) y solo ejecuta `mockup:datos` automáticamente si la tabla
   `staff` está vacía. Los datos de prueba ya NO se borran en cada
   `docker compose up`.
+- **Solapamiento de reservas de sala**: la comparación original solo
+  chequeaba `hora_inicio` exacto (dos reservas 10-12 y 11-13 no se detectaban
+  como conflicto). Ya se corrigió con intersección real
+  (`hora_inicio < fin && hora_fin > inicio`) centralizada en
+  `App\Services\ReservaSalaService::existeSolapamiento()`, usado por
+  `SalaController` y `PortalController`. No reintroduzcas la comparación
+  exacta ni la lógica duplicada en un controlador nuevo.
+- **Entradas duplicadas / sin cierre de salida**: antes se podía registrar
+  una entrada nueva sin haber cerrado la anterior, inflando el conteo de
+  "personas en sala" indefinidamente (no había forma de marcar salida desde
+  la API). Ya se agregó: validación de entrada activa antes de crear una
+  nueva (409 si ya existe) en `EntradaController::store/storeExterno` y
+  `PortalController::registrarEntrada`, más los endpoints
+  `PATCH /entrada/{entrada}/salida` (staff) y `POST /mi/salida` (portal).
+- **RUT repetido / doble reserva de sala para la misma persona**: antes se
+  podía enviar el mismo RUT dos veces en el array `ruts` de una reserva, y un
+  mismo RUT podía terminar reservado en dos salas distintas al mismo tiempo
+  (nada lo impedía). Ya se agregó: regla `distinct` en `ruts.*` (rechaza RUT
+  duplicado dentro de la misma reserva) y
+  `ReservaSalaService::participanteConReservaSolapada()` (busca, con
+  `whereJsonContains` sobre cualquier sala, si alguno de los RUT ya tiene una
+  reserva con horario solapado ese día) en `SalaController::storeReserva` y
+  `PortalController::reservarSala`. No reintroduzcas la validación sin este
+  chequeo cruzado entre salas.
 
 ## Checklist antes de dar un módulo por terminado
 
 - [ ] Responsive real probado en mobile (no solo con dev tools, si es posible)
 - [ ] La vista muestra `<ApiErrorBanner />` si la API falla — sin datos ficticios
-- [ ] Las rutas nuevas del backend están protegidas con `auth:sanctum`
+- [ ] Las rutas nuevas del backend están protegidas con `auth:sanctum` + el
+      middleware de guard correcto (`staff` o `usuario`)
 - [ ] Si hay migración nueva, es un archivo nuevo (no editaste una existente)
-- [ ] El link del sidebar y la ruta en `router/index.ts` quedaron conectados
-      al componente real (ya no al `ProximamenteView`)
+- [ ] El link de navegación en `TopBar.vue` y la ruta en `router/index.ts`
+      quedaron conectados al componente real
+- [ ] Si duplicaste una regla de negocio en dos controladores, extráela a un
+      `App\Services\` compartido en vez de dejarla repetida
 - [ ] `docker compose exec backend php artisan mockup:datos --fresh` sigue
       corriendo sin errores después del cambio
