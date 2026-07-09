@@ -39,6 +39,8 @@ cp -r /app-overlay/app/. /var/www/app/
 cp -r /app-overlay/routes/. /var/www/routes/
 cp -r /app-overlay/database/. /var/www/database/
 cp -r /app-overlay/config/. /var/www/config/
+cp -r /app-overlay/tests/. /var/www/tests/
+cp /app-overlay/phpunit.xml /var/www/phpunit.xml
 cp /app-overlay/bootstrap/app.php /var/www/bootstrap/app.php
 cp /app-overlay/.env.example /var/www/.env.example
 
@@ -55,6 +57,26 @@ echo ">> Esperando a la base de datos..."
 until php artisan db:show > /dev/null 2>&1; do
   sleep 1
 done
+
+# La suite de tests (tests/Feature) corre contra una base Postgres de pruebas
+# separada ('biblioteca_test'), no contra 'biblioteca' (desarrollo/demo) — ver
+# phpunit.xml y backend/README.md. Se crea aquí de forma idempotente para que
+# "docker compose up" deje todo listo para `php artisan test` sin pasos manuales.
+echo ">> Verificando base de datos de pruebas (biblioteca_test)..."
+php -r '
+$pdo = new PDO(
+    "pgsql:host=" . getenv("DB_HOST") . ";port=" . (getenv("DB_PORT") ?: 5432) . ";dbname=" . getenv("DB_DATABASE"),
+    getenv("DB_USERNAME"),
+    getenv("DB_PASSWORD")
+);
+$exists = $pdo->query("SELECT 1 FROM pg_database WHERE datname = '\''biblioteca_test'\''")->fetchColumn();
+if (! $exists) {
+    $pdo->exec("CREATE DATABASE biblioteca_test");
+    echo "   Creada.\n";
+} else {
+    echo "   Ya existe.\n";
+}
+'
 
 echo ">> Corriendo migraciones..."
 php artisan migrate --force

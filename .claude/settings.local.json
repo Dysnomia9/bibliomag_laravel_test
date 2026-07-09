@@ -18,7 +18,12 @@
       "Skill(run)",
       "Skill(run:*)",
       "Bash(find . -maxdepth 4 -path '*/.claude/skills/*/SKILL.md')",
-      "Bash(which chromium-cli *)"
+      "Bash(which chromium-cli *)",
+      "Bash(docker --version)",
+      "Bash(php --version)",
+      "Bash(composer --version)",
+      "Bash(docker exec *)",
+      "Bash(echo \"exit: $?\")"
     ]
   }
 }
