@@ -54,9 +54,13 @@ class SalaController extends Controller
             'hora_fin' => ['required', 'integer', 'gt:hora_inicio', 'max:21'],
             'cantidad_personas' => ['required', 'integer', 'min:2', 'max:5'],
             'ruts' => ['required', 'array'],
-            'ruts.*' => ['required', 'string', 'distinct'],
+            // Los RUT deben pertenecer a usuarios ya registrados: no se admiten
+            // visitantes externos en la reserva de logias (mismo criterio que el
+            // portal de autoservicio en PortalController::reservarSala).
+            'ruts.*' => ['required', 'string', 'distinct', 'exists:usuarios,rut'],
         ], [
             'ruts.*.distinct' => 'No puedes ingresar el mismo RUT más de una vez en la misma reserva.',
+            'ruts.*.exists' => 'Uno de los RUT ingresados no corresponde a un usuario registrado en el sistema.',
         ]);
 
         if (count($data['ruts']) !== $data['cantidad_personas']) {
@@ -107,5 +111,21 @@ class SalaController extends Controller
         $reserva->delete();
 
         return response()->json(null, 204);
+    }
+
+    public function scanLogia(Request $request)
+    {
+        $data = $request->validate([
+            'codigo_barras' => ['required', 'string'],
+            'registrado_por' => ['required', 'string', 'max:255'],
+        ]);
+
+        try {
+            $reserva = $this->reservaSalaService->escanearLogia($data['codigo_barras'], $data['registrado_por']);
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 409);
+        }
+
+        return response()->json($reserva->load('sala'));
     }
 }

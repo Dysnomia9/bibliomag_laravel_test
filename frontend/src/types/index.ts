@@ -27,7 +27,9 @@ export type Entrada = {
   fecha_hora_entrada: string
   fecha_hora_salida: string | null
   via: 'manual' | 'qr'
-  usuario?: Pick<Usuario, 'id' | 'nombre' | 'apellido' | 'rut'>
+  codigo_barras: string | null
+  es_convenio: boolean
+  usuario?: Pick<Usuario, 'id' | 'nombre' | 'apellido' | 'rut' | 'tipo'>
 }
 
 export type Prestamo = {
@@ -39,6 +41,8 @@ export type Prestamo = {
   fecha_devolucion: string | null
   fecha_devolucion_real: string | null
   estado: 'activo' | 'atrasado' | 'devuelto'
+  prestado_por: string | null
+  devuelto_por: string | null
   usuario?: Pick<Usuario, 'id' | 'nombre' | 'apellido' | 'rut'>
 }
 
@@ -83,6 +87,8 @@ export type Sala = {
   nombre: string
   capacidad: number
   piso: string
+  tipo: 'logia' | 'puesto' | 'sala'
+  codigo_barras: string | null
 }
 
 export type Reserva = {
@@ -97,6 +103,11 @@ export type Reserva = {
   hora_inicio: number
   hora_fin: number
   estado: string
+  prestado_por: string | null
+  devuelto_por: string | null
+  hora_prestamo_real: string | null
+  hora_devolucion_real: string | null
+  via: 'manual' | 'BC'
 }
 
 export type SerieItem = {

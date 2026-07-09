@@ -37,6 +37,13 @@ class ReservaLibroController extends Controller
             return response()->json(['message' => 'Código de barras no encontrado en el sistema'], 404);
         }
 
+        // Una reserva existe justamente para bloquear el libro mientras otra persona lo
+        // tiene o lo está esperando: no se puede volver a reservar/prestar un libro que ya
+        // está ocupado por otra reserva pendiente.
+        if (! $libro->disponible) {
+            return response()->json(['message' => 'Este libro ya está reservado/prestado por otra persona'], 409);
+        }
+
         $reserva = ReservaLibro::create([
             'usuario_id' => $data['usuario_id'],
             'libro_id' => $libro->id,
@@ -44,6 +51,8 @@ class ReservaLibroController extends Controller
             'fecha_retiro' => $data['fecha_retiro'],
             'estado' => 'pendiente',
         ]);
+
+        $libro->update(['disponible' => false]);
 
         $reserva->load('libro');
 
@@ -53,6 +62,7 @@ class ReservaLibroController extends Controller
     public function cancelar(ReservaLibro $reservaLibro)
     {
         $reservaLibro->update(['estado' => 'cancelado']);
+        $reservaLibro->libro->update(['disponible' => true]);
 
         return response()->json($reservaLibro);
     }

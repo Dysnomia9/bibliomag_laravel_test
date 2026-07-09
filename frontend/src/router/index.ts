@@ -91,6 +91,11 @@ const router = createRouter({
       name: 'listado-prestamos',
       component: () => import('@/views/ListadoPrestamosView.vue'),
     },
+    {
+      path: '/libros/listado',
+      name: 'listado-libros',
+      component: () => import('@/views/ListadoLibrosView.vue'),
+    },
   ],
 })
 

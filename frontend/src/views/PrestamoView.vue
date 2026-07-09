@@ -5,9 +5,12 @@ import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import api from '@/services/api'
 import { useToast } from '@/composables/useToast'
 import { formatRut } from '@/composables/useRut'
+import { useStaffNombres } from '@/composables/useStaffNombres'
 import type { Prestamo, ReservaLibro, Usuario } from '@/types'
 
 const toast = useToast()
+const { nombresStaff, cargarStaffNombres } = useStaffNombres()
+cargarStaffNombres()
 
 const rut = ref('')
 const usuario = ref<Usuario | null>(null)
@@ -19,15 +22,22 @@ const reservas = ref<ReservaLibro[]>([])
 
 const showForm = ref(false)
 const showReservaForm = ref(false)
-const nuevoLibro = ref('')
-const diasPrestamo = ref(14)
+const prestadoPor = ref('')
 const activeTab = ref<'prestamos' | 'reservas'>('prestamos')
+
+const today = new Date().toISOString().slice(0, 10)
+
+const codigoBarrasPrestamo = ref('')
+const libroEncontradoPrestamo = ref('')
+const libroDisponiblePrestamo = ref(true)
+const fechaPrestamo = ref(today)
+const fechaDevolucion = ref('')
 
 const codigoBarras = ref('')
 const libroEncontrado = ref('')
+const libroDisponible = ref(true)
 const fechaReserva = ref('')
 const fechaRetiro = ref('')
-const today = new Date().toISOString().slice(0, 10)
 
 const prestamosLibros = computed(() => prestamos.value.filter((p) => p.tipo_item === 'libro' || !p.tipo_item))
 const prestamosAudifonos = computed(() => prestamos.value.filter((p) => p.tipo_item === 'audifonos'))
@@ -35,6 +45,8 @@ const prestamosNotebooks = computed(() => prestamos.value.filter((p) => p.tipo_i
 
 const codigoAudifonos = ref('')
 const codigoNotebook = ref('')
+const prestadoPorAudifonos = ref('')
+const prestadoPorNotebook = ref('')
 
 function onRutInput(event: Event) {
   rut.value = formatRut((event.target as HTMLInputElement).value)
@@ -76,38 +88,79 @@ async function buscarUsuario() {
   }
 }
 
+async function buscarLibroApi(codigo: string): Promise<{ titulo: string; disponible: boolean } | null> {
+  try {
+    const { data } = await api.get(`/libros/${codigo}`)
+    return { titulo: data.titulo, disponible: data.disponible }
+  } catch {
+    return null
+  }
+}
+
+let buscarLibroPrestamoTimer: ReturnType<typeof setTimeout> | undefined
+function buscarLibroPorCodigoPrestamo(valor: string) {
+  codigoBarrasPrestamo.value = valor.replace(/\D/g, '')
+  libroEncontradoPrestamo.value = ''
+  libroDisponiblePrestamo.value = true
+  clearTimeout(buscarLibroPrestamoTimer)
+  if (codigoBarrasPrestamo.value.length < 10) return
+  buscarLibroPrestamoTimer = setTimeout(async () => {
+    const libro = await buscarLibroApi(codigoBarrasPrestamo.value)
+    libroEncontradoPrestamo.value = libro?.titulo ?? ''
+    libroDisponiblePrestamo.value = libro?.disponible ?? true
+  }, 250)
+}
+
 async function crearPrestamo() {
-  if (!nuevoLibro.value.trim()) {
-    toast.error('Ingrese el título del libro')
+  if (!codigoBarrasPrestamo.value.trim() || !libroEncontradoPrestamo.value) {
+    toast.error('Escanee o ingrese un código de barras válido')
+    return
+  }
+  if (!libroDisponiblePrestamo.value) {
+    toast.error('Este libro ya está reservado/prestado por otra persona')
+    return
+  }
+  if (!fechaPrestamo.value || !fechaDevolucion.value) {
+    toast.error('Seleccione la fecha de préstamo y de devolución')
     return
   }
   try {
     await api.post('/prestamos', {
       usuario_id: usuario.value!.id,
-      libro_titulo: nuevoLibro.value,
-      dias_prestamo: diasPrestamo.value,
+      codigo_barras: codigoBarrasPrestamo.value,
+      fecha_prestamo: fechaPrestamo.value,
+      fecha_devolucion: fechaDevolucion.value,
+      prestado_por: prestadoPor.value.trim() || undefined,
     })
-    toast.success('Reserva registrada')
-    nuevoLibro.value = ''
+    toast.success(`Préstamo registrado: "${libroEncontradoPrestamo.value}"`)
+    codigoBarrasPrestamo.value = ''
+    libroEncontradoPrestamo.value = ''
+    fechaPrestamo.value = today
+    fechaDevolucion.value = ''
+    prestadoPor.value = ''
     showForm.value = false
     await cargarPrestamosYReservas()
-  } catch {
-    toast.error('No se pudo crear la reserva')
+  } catch (e: any) {
+    toast.error(e?.response?.data?.message ?? 'No se pudo crear el préstamo')
   }
 }
 
 const devolucionPendiente = ref<Prestamo | null>(null)
 const devolviendo = ref(false)
+const devueltoPor = ref('')
 
 function pedirConfirmacionDevolucion(prestamo: Prestamo) {
   devolucionPendiente.value = prestamo
+  devueltoPor.value = ''
 }
 
 async function confirmarDevolucion() {
   if (!devolucionPendiente.value) return
   devolviendo.value = true
   try {
-    await api.patch(`/prestamos/${devolucionPendiente.value.id}/devolver`)
+    await api.patch(`/prestamos/${devolucionPendiente.value.id}/devolver`, {
+      devuelto_por: devueltoPor.value.trim() || undefined,
+    })
     toast.success('Devolución registrada')
     devolucionPendiente.value = null
     await cargarPrestamosYReservas()
@@ -120,6 +173,7 @@ async function confirmarDevolucion() {
 
 async function crearPrestamoEquipo(tipo: 'audifonos' | 'notebook') {
   const codigo = tipo === 'audifonos' ? codigoAudifonos : codigoNotebook
+  const prestadoPorEquipo = tipo === 'audifonos' ? prestadoPorAudifonos : prestadoPorNotebook
 
   if (!codigo.value.trim()) {
     toast.error(`Ingrese el código del ${tipo === 'audifonos' ? 'audífono' : 'notebook'}`)
@@ -130,9 +184,11 @@ async function crearPrestamoEquipo(tipo: 'audifonos' | 'notebook') {
       usuario_id: usuario.value!.id,
       libro_titulo: codigo.value,
       tipo_item: tipo,
+      prestado_por: prestadoPorEquipo.value.trim() || undefined,
     })
     toast.success('Préstamo de equipo registrado')
     codigo.value = ''
+    prestadoPorEquipo.value = ''
     await cargarPrestamosYReservas()
   } catch {
     toast.error('No se pudo registrar el préstamo del equipo')
@@ -143,21 +199,23 @@ let buscarLibroTimer: ReturnType<typeof setTimeout> | undefined
 function buscarLibroPorCodigo(valor: string) {
   codigoBarras.value = valor.replace(/\D/g, '')
   libroEncontrado.value = ''
+  libroDisponible.value = true
   clearTimeout(buscarLibroTimer)
   if (codigoBarras.value.length < 10) return
   buscarLibroTimer = setTimeout(async () => {
-    try {
-      const { data } = await api.get(`/libros/${codigoBarras.value}`)
-      libroEncontrado.value = data.titulo
-    } catch {
-      libroEncontrado.value = ''
-    }
+    const libro = await buscarLibroApi(codigoBarras.value)
+    libroEncontrado.value = libro?.titulo ?? ''
+    libroDisponible.value = libro?.disponible ?? true
   }, 250)
 }
 
 async function crearReserva() {
   if (!codigoBarras.value.trim() || !libroEncontrado.value) {
     toast.error('Escanee o ingrese un código de barras válido')
+    return
+  }
+  if (!libroDisponible.value) {
+    toast.error('Este libro ya está reservado/prestado por otra persona')
     return
   }
   if (!fechaReserva.value || !fechaRetiro.value) {
@@ -171,15 +229,15 @@ async function crearReserva() {
       fecha_reserva: fechaReserva.value,
       fecha_retiro: fechaRetiro.value,
     })
-    toast.success(`Préstamo registrado: "${libroEncontrado.value}"`)
+    toast.success(`Reserva registrada: "${libroEncontrado.value}"`)
     codigoBarras.value = ''
     libroEncontrado.value = ''
     fechaReserva.value = ''
     fechaRetiro.value = ''
     showReservaForm.value = false
     await cargarPrestamosYReservas()
-  } catch {
-    toast.error('No se pudo registrar el préstamo')
+  } catch (e: any) {
+    toast.error(e?.response?.data?.message ?? 'No se pudo registrar la reserva')
   }
 }
 
@@ -268,8 +326,8 @@ function formatFecha(iso: string | null) {
             </div>
             <div class="flex gap-2">
               <button
-                @click="showReservaForm = !showReservaForm; showForm = false"
-                class="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium"
+                @click="showForm = !showForm; showReservaForm = false"
+                class="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
               >
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
@@ -277,8 +335,8 @@ function formatFecha(iso: string | null) {
                 Nuevo Préstamo
               </button>
               <button
-                @click="showForm = !showForm; showReservaForm = false"
-                class="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
+                @click="showReservaForm = !showReservaForm; showForm = false"
+                class="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium"
               >
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
@@ -289,24 +347,73 @@ function formatFecha(iso: string | null) {
           </div>
 
           <div v-if="showForm" class="mt-4 pt-4 border-t border-gray-100">
-            <h4 class="text-sm font-semibold text-gray-700 mb-3">Reservar Libro</h4>
-            <div class="flex gap-3 flex-wrap">
-              <input
-                v-model="nuevoLibro"
-                placeholder="Título del libro"
-                class="flex-1 min-w-[200px] px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-              />
-              <select
-                v-model.number="diasPrestamo"
-                class="px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+            <h4 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+              <svg class="w-4 h-4 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+              </svg>
+              Nuevo Préstamo por Código de Barras
+            </h4>
+            <div class="space-y-3">
+              <div class="flex gap-3 flex-wrap">
+                <div class="relative flex-1 min-w-[200px]">
+                  <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h1m0 0h1M5 6v12M8 6v12M11 6v12m3-12v12m3-12v12m3-12h1v12h-1" />
+                  </svg>
+                  <input
+                    :value="codigoBarrasPrestamo"
+                    @input="buscarLibroPorCodigoPrestamo(($event.target as HTMLInputElement).value)"
+                    placeholder="Escanear o ingresar código de barras"
+                    class="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none font-mono"
+                  />
+                </div>
+              </div>
+              <div
+                v-if="codigoBarrasPrestamo.length >= 10"
+                class="text-sm px-3 py-2 rounded-lg"
+                :class="libroEncontradoPrestamo && libroDisponiblePrestamo ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'"
               >
-                <option :value="7">7 días</option>
-                <option :value="14">14 días</option>
-                <option :value="30">30 días</option>
-              </select>
-              <button @click="crearPrestamo" class="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium">
-                Registrar
-              </button>
+                <span v-if="libroEncontradoPrestamo && libroDisponiblePrestamo" class="flex items-center gap-2">
+                  Libro encontrado: <strong>{{ libroEncontradoPrestamo }}</strong>
+                </span>
+                <span v-else-if="libroEncontradoPrestamo && !libroDisponiblePrestamo">
+                  <strong>{{ libroEncontradoPrestamo }}</strong> ya está reservado/prestado por otra persona
+                </span>
+                <span v-else>Código de barras no encontrado en el sistema</span>
+              </div>
+              <div class="flex gap-3 flex-wrap items-end">
+                <div class="flex-1 min-w-[160px]">
+                  <label class="block text-xs font-medium text-gray-600 mb-1">Fecha de préstamo</label>
+                  <input
+                    v-model="fechaPrestamo"
+                    type="date"
+                    :min="today"
+                    class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                </div>
+                <div class="flex-1 min-w-[160px]">
+                  <label class="block text-xs font-medium text-gray-600 mb-1">Fecha de devolución</label>
+                  <input
+                    v-model="fechaDevolucion"
+                    type="date"
+                    :min="fechaPrestamo || today"
+                    class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                </div>
+                <input
+                  v-model="prestadoPor"
+                  type="text"
+                  list="staff-nombres"
+                  placeholder="Prestado por (opcional)"
+                  class="flex-1 min-w-[160px] px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+                <button
+                  @click="crearPrestamo"
+                  :disabled="!libroEncontradoPrestamo || !libroDisponiblePrestamo || !fechaPrestamo || !fechaDevolucion"
+                  class="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Confirmar Préstamo
+                </button>
+              </div>
             </div>
           </div>
 
@@ -315,7 +422,7 @@ function formatFecha(iso: string | null) {
               <svg class="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h7" />
               </svg>
-              Nuevo Préstamo por Código de Barras
+              Nueva Reserva por Código de Barras
             </h4>
             <div class="space-y-3">
               <div class="flex gap-3 flex-wrap">
@@ -334,16 +441,19 @@ function formatFecha(iso: string | null) {
               <div
                 v-if="codigoBarras.length >= 10"
                 class="text-sm px-3 py-2 rounded-lg"
-                :class="libroEncontrado ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'"
+                :class="libroEncontrado && libroDisponible ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'"
               >
-                <span v-if="libroEncontrado" class="flex items-center gap-2">
+                <span v-if="libroEncontrado && libroDisponible" class="flex items-center gap-2">
                   Libro encontrado: <strong>{{ libroEncontrado }}</strong>
+                </span>
+                <span v-else-if="libroEncontrado && !libroDisponible">
+                  <strong>{{ libroEncontrado }}</strong> ya está reservado/prestado por otra persona
                 </span>
                 <span v-else>Código de barras no encontrado en el sistema</span>
               </div>
               <div class="flex gap-3 flex-wrap items-end">
                 <div class="flex-1 min-w-[180px]">
-                  <label class="block text-xs font-medium text-gray-600 mb-1">Fecha de préstamo</label>
+                  <label class="block text-xs font-medium text-gray-600 mb-1">Fecha de reserva</label>
                   <input
                     v-model="fechaReserva"
                     type="date"
@@ -362,10 +472,10 @@ function formatFecha(iso: string | null) {
                 </div>
                 <button
                   @click="crearReserva"
-                  :disabled="!libroEncontrado || !fechaReserva || !fechaRetiro"
+                  :disabled="!libroEncontrado || !libroDisponible || !fechaReserva || !fechaRetiro"
                   class="px-5 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Confirmar Préstamo
+                  Confirmar Reserva
                 </button>
               </div>
             </div>
@@ -378,14 +488,14 @@ function formatFecha(iso: string | null) {
             class="flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-colors"
             :class="activeTab === 'prestamos' ? 'bg-purple-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'"
           >
-            Reservas ({{ prestamosLibros.length }})
+            Préstamos ({{ prestamosLibros.length }})
           </button>
           <button
             @click="activeTab = 'reservas'"
             class="flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-colors"
             :class="activeTab === 'reservas' ? 'bg-emerald-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'"
           >
-            Préstamos ({{ reservas.length }})
+            Reservas ({{ reservas.length }})
           </button>
         </div>
 
@@ -422,7 +532,7 @@ function formatFecha(iso: string | null) {
                   </td>
                 </tr>
                 <tr v-if="!prestamosLibros.length">
-                  <td colspan="5" class="px-6 py-8 text-center text-sm text-gray-400">Sin reservas registradas.</td>
+                  <td colspan="5" class="px-6 py-8 text-center text-sm text-gray-400">Sin préstamos registrados.</td>
                 </tr>
               </tbody>
             </table>
@@ -464,7 +574,7 @@ function formatFecha(iso: string | null) {
                   </td>
                 </tr>
                 <tr v-if="!reservas.length">
-                  <td colspan="6" class="px-6 py-8 text-center text-sm text-gray-400">Sin préstamos registrados.</td>
+                  <td colspan="6" class="px-6 py-8 text-center text-sm text-gray-400">Sin reservas registradas.</td>
                 </tr>
               </tbody>
             </table>
@@ -485,6 +595,13 @@ function formatFecha(iso: string | null) {
                 v-model="codigoAudifonos"
                 placeholder="Código (ej: AUD-003)"
                 class="flex-1 min-w-[160px] px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
+              />
+              <input
+                v-model="prestadoPorAudifonos"
+                type="text"
+                list="staff-nombres"
+                placeholder="Prestado por (opcional)"
+                class="flex-1 min-w-[160px] px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
               />
               <button
                 @click="crearPrestamoEquipo('audifonos')"
@@ -529,6 +646,13 @@ function formatFecha(iso: string | null) {
                 placeholder="Código (ej: NB-012)"
                 class="flex-1 min-w-[160px] px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
               />
+              <input
+                v-model="prestadoPorNotebook"
+                type="text"
+                list="staff-nombres"
+                placeholder="Prestado por (opcional)"
+                class="flex-1 min-w-[160px] px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+              />
               <button
                 @click="crearPrestamoEquipo('notebook')"
                 class="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium"
@@ -567,9 +691,19 @@ function formatFecha(iso: string | null) {
       >
         <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
           <h3 class="text-lg font-bold text-gray-900 mb-1">¿Confirmar devolución?</h3>
-          <p class="text-sm text-gray-500 mb-6">
+          <p class="text-sm text-gray-500 mb-4">
             Se registrará la devolución de <strong class="font-mono">{{ devolucionPendiente.libro_titulo }}</strong>.
           </p>
+          <div class="mb-6">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Devuelto por (opcional)</label>
+            <input
+              v-model="devueltoPor"
+              type="text"
+              list="staff-nombres"
+              placeholder="Nombre de quien recibe"
+              class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+            />
+          </div>
           <div class="flex gap-3">
             <button
               @click="devolucionPendiente = null"
@@ -587,6 +721,10 @@ function formatFecha(iso: string | null) {
           </div>
         </div>
       </div>
+
+      <datalist id="staff-nombres">
+        <option v-for="n in nombresStaff" :key="n" :value="n" />
+      </datalist>
     </div>
   </StaffLayout>
 </template>

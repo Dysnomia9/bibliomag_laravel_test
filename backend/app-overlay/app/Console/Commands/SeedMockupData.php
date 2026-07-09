@@ -198,6 +198,7 @@ class SeedMockupData extends Command
                     'fecha_hora_entrada' => $entrada,
                     'fecha_hora_salida' => $conSalida ? $entrada->copy()->addMinutes(random_int(30, 180)) : null,
                     'via' => random_int(0, 100) < 35 ? 'qr' : 'manual',
+                    'codigo_barras' => config('horizon_barcodes.puesto_generico'),
                 ]);
                 $total++;
             }
@@ -214,6 +215,26 @@ class SeedMockupData extends Command
                 'fecha_hora_entrada' => $entrada,
                 'fecha_hora_salida' => random_int(0, 100) < 60 ? $entrada->copy()->addMinutes(random_int(30, 180)) : null,
                 'via' => random_int(0, 100) < 35 ? 'qr' : 'manual',
+                'codigo_barras' => config('horizon_barcodes.puesto_generico'),
+            ]);
+            $total++;
+        }
+
+        // Un par de visitantes externos y de convenio para hoy, para que las etiquetas
+        // "Externo"/"Convenio" del historial tengan ejemplos reales tras el seed.
+        foreach ([false, false, true, true] as $esConvenio) {
+            $hora = random_int(8, max(8, $horaActual));
+            $entrada = now()->setTime($hora, random_int(0, 59));
+            $rutVisitante = $this->formatearRut(random_int(9000000, 9999999));
+
+            Entrada::create([
+                'rut_externo' => $rutVisitante,
+                'nombre_externo' => $this->nombres[array_rand($this->nombres)].' '.$this->apellidos[array_rand($this->apellidos)],
+                'es_convenio' => $esConvenio,
+                'fecha_hora_entrada' => $entrada,
+                'fecha_hora_salida' => random_int(0, 100) < 60 ? $entrada->copy()->addMinutes(random_int(30, 180)) : null,
+                'via' => 'manual',
+                'codigo_barras' => config('horizon_barcodes.puesto_generico'),
             ]);
             $total++;
         }
@@ -296,6 +317,11 @@ class SeedMockupData extends Command
                 'nombre' => 'Logia '.str_pad((string) ($i + 1), 2, '0', STR_PAD_LEFT),
                 'capacidad' => $capacidades[$i],
                 'piso' => $i < 13 ? '1er Piso' : '2do Piso',
+                'tipo' => 'logia',
+                // Código de barras hardcodeado por logia (Horizon aún no entrega los
+                // reales) — cada logia tiene el suyo, a diferencia del puesto de
+                // trabajo que reutiliza uno genérico.
+                'codigo_barras' => (string) (90001 + $i),
             ]));
         }
 
@@ -399,7 +425,7 @@ class SeedMockupData extends Command
         return Rut::formatear($numero);
     }
 
-    /** Horario biblioteca 8-21 hrs, más concurrido 10-13 y 15-18 (mismo sesgo que el mock original) */
+    /** Horario biblioteca 8-21 hrs */
     private function horaConSesgo(): int
     {
         $r = random_int(0, 100) / 100;

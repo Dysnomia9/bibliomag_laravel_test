@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import logoUmag from '@/assets/logo-umag.png'
@@ -14,12 +15,42 @@ const generalLinks = [
 const moduleLinks = [
   { name: 'entrada', label: 'Entradas', icon: 'M11 16l-4-4m0 0l4-4m-4 4h14M5 5v14', shortcut: '2' },
   { name: 'prestamo', label: 'Préstamos', icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253', shortcut: '3' },
-  { name: 'usuarios', label: 'Usuarios', icon: 'M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1a4 4 0 100-8 4 4 0 000 8zm6 3a4 4 0 00-3-3.87M9 12a4 4 0 100-8 4 4 0 000 8z', shortcut: '4' },
   { name: 'salas', label: 'Logias', icon: 'M4 6h16M4 12h16M4 18h7', shortcut: '5' },
   { name: 'reportes', label: 'Reportes', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z', shortcut: '6' },
-  { name: 'codigo-qr', label: 'Código QR', icon: 'M4 4h6v6H4V4zm10 0h6v6h-6V4zM4 14h6v6H4v-6zm10 3h3m3 0h-3m0 0v3m0-3v-3', shortcut: '7' },
-  { name: 'listado-prestamos', label: 'Listado Préstamos', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4', shortcut: '8' },
 ]
+
+const adminLinks = [
+  { name: 'usuarios', label: 'Usuarios', icon: 'M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1a4 4 0 100-8 4 4 0 000 8zm6 3a4 4 0 00-3-3.87M9 12a4 4 0 100-8 4 4 0 000 8z' },
+  { name: 'listado-prestamos', label: 'Listado Préstamos', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4' },
+  { name: 'listado-libros', label: 'Listado Libros', icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253' },
+  { name: 'codigo-qr', label: 'Código QR', icon: 'M4 4h6v6H4V4zm10 0h6v6h-6V4zM4 14h6v6H4v-6zm10 3h3m3 0h-3m0 0v3m0-3v-3' },
+]
+
+const adminMenuOpen = ref(false)
+const adminMenuRef = ref<HTMLElement | null>(null)
+const adminButtonRef = ref<HTMLElement | null>(null)
+const adminMenuPos = ref({ top: 0, left: 0 })
+const adminActive = () => adminLinks.some((link) => link.name === route.name)
+
+function toggleAdminMenu() {
+  if (!adminMenuOpen.value && adminButtonRef.value) {
+    // position: fixed es relativo al viewport, igual que getBoundingClientRect(),
+    // así el menú no queda recortado por el overflow-x-auto del <nav>.
+    const rect = adminButtonRef.value.getBoundingClientRect()
+    adminMenuPos.value = { top: rect.bottom + 6, left: rect.left }
+  }
+  adminMenuOpen.value = !adminMenuOpen.value
+}
+
+function onClickOutside(event: MouseEvent) {
+  const target = event.target as Node
+  if (adminMenuRef.value?.contains(target)) return
+  if (adminButtonRef.value?.contains(target)) return
+  adminMenuOpen.value = false
+}
+
+onMounted(() => document.addEventListener('click', onClickOutside))
+onBeforeUnmount(() => document.removeEventListener('click', onClickOutside))
 
 async function onLogout() {
   await auth.logout()
@@ -89,8 +120,54 @@ async function onLogout() {
             :class="route.name === link.name ? 'border-[#1a2430]/30 bg-[#1a2430]/15 text-[#1a2430]' : 'border-white/30 bg-white/10 text-white'"
           >{{ link.shortcut }}</kbd>
         </router-link>
+
+        <div class="h-6 w-px bg-white/10 shrink-0 mx-1" />
+
+        <div class="relative shrink-0">
+          <button
+            ref="adminButtonRef"
+            @click="toggleAdminMenu"
+            class="flex items-center gap-1.5 h-9 px-3 rounded-lg text-[13px] font-medium shrink-0 transition-colors"
+            :class="adminActive()
+              ? 'bg-[#b08d57] text-[#1a2430]'
+              : 'text-slate-200 hover:bg-white/5'"
+            :style="adminActive() ? 'box-shadow: inset 0 1px 0 rgba(255,255,255,0.28);' : ''"
+          >
+            <svg class="h-3.5 w-3.5 shrink-0" :class="adminActive() ? 'text-[#1a2430]' : 'text-slate-400'" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            Gestiones Admin
+            <svg class="h-3 w-3 shrink-0 transition-transform" :class="adminMenuOpen ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        </div>
       </div>
     </nav>
+
+    <Teleport to="body">
+      <div
+        v-if="adminMenuOpen"
+        ref="adminMenuRef"
+        class="fixed w-56 rounded-xl shadow-2xl border border-slate-200 bg-white py-1.5 z-[100]"
+        :style="{ top: `${adminMenuPos.top}px`, left: `${adminMenuPos.left}px` }"
+      >
+        <router-link
+          v-for="link in adminLinks"
+          :key="link.name"
+          :to="{ name: link.name }"
+          @click="adminMenuOpen = false"
+          class="flex items-center gap-2.5 px-4 py-2.5 text-[13px] font-medium transition-colors"
+          :class="route.name === link.name ? 'text-[#4338CA] bg-indigo-50' : 'text-slate-700 hover:bg-slate-50'"
+        >
+          <svg class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" :d="link.icon" />
+          </svg>
+          {{ link.label }}
+        </router-link>
+      </div>
+    </Teleport>
 
     <div class="h-6 w-px bg-white/10 shrink-0" />
 

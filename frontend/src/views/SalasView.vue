@@ -5,9 +5,11 @@ import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import api from '@/services/api'
 import { useToast } from '@/composables/useToast'
 import { formatRut } from '@/composables/useRut'
+import { useStaffNombres } from '@/composables/useStaffNombres'
 import type { Reserva, Sala } from '@/types'
 
 const toast = useToast()
+const { nombresStaff, cargarStaffNombres } = useStaffNombres()
 
 const hoy = new Date().toISOString().slice(0, 10)
 
@@ -46,6 +48,10 @@ const detalleBloque = ref<(typeof horariosBloques)[number] | null>(null)
 
 const cancelacionPendiente = ref<{ salaId: number; horaInicio: number; salaNombre: string; bloqueLabel: string } | null>(null)
 
+const codigoLogiaScan = ref('')
+const registradoPorScan = ref('')
+const escaneando = ref(false)
+
 watch(cantidadPersonas, (nueva) => {
   const actuales = rutsReserva.value.length
   if (nueva > actuales) {
@@ -68,8 +74,32 @@ async function cargar() {
   }
 }
 
-onMounted(cargar)
+onMounted(() => {
+  cargar()
+  cargarStaffNombres()
+})
 watch(selectedDate, cargar)
+
+async function escanearLogia() {
+  if (!codigoLogiaScan.value.trim() || !registradoPorScan.value.trim()) {
+    toast.error('Ingrese el código de barras y quién registra')
+    return
+  }
+  escaneando.value = true
+  try {
+    const { data } = await api.post('/salas/scan-logia', {
+      codigo_barras: codigoLogiaScan.value.trim(),
+      registrado_por: registradoPorScan.value.trim(),
+    })
+    toast.success(data.hora_devolucion_real ? 'Devolución de logia registrada' : 'Entrega de logia registrada')
+    codigoLogiaScan.value = ''
+    await cargar()
+  } catch (e: any) {
+    toast.error(e?.response?.data?.message ?? 'No se pudo procesar el escaneo')
+  } finally {
+    escaneando.value = false
+  }
+}
 
 const pisos = computed(() => Array.from(new Set(salas.value.map((s) => s.piso))).sort())
 
@@ -219,6 +249,43 @@ function formatFechaLarga(fecha: string) {
             class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
           />
         </div>
+      </div>
+
+      <div class="bg-white rounded-xl shadow-md p-5 mb-6">
+        <h3 class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Escanear código de barras (Horizon)</h3>
+        <div class="flex gap-3 flex-wrap items-end">
+          <div class="flex-1 min-w-[200px]">
+            <label class="block text-xs font-medium text-gray-600 mb-1">Código de barras de la logia</label>
+            <input
+              v-model="codigoLogiaScan"
+              type="text"
+              placeholder="Escanear o ingresar código"
+              class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
+              @keydown.enter="escanearLogia"
+            />
+          </div>
+          <div class="flex-1 min-w-[200px]">
+            <label class="block text-xs font-medium text-gray-600 mb-1">Registrado por</label>
+            <input
+              v-model="registradoPorScan"
+              type="text"
+              list="staff-nombres"
+              placeholder="Nombre de quien registra"
+              class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+              @keydown.enter="escanearLogia"
+            />
+          </div>
+          <button
+            @click="escanearLogia"
+            :disabled="escaneando"
+            class="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium disabled:opacity-60"
+          >
+            {{ escaneando ? 'Procesando…' : 'Registrar' }}
+          </button>
+        </div>
+        <datalist id="staff-nombres">
+          <option v-for="n in nombresStaff" :key="n" :value="n" />
+        </datalist>
       </div>
 
       <div class="mb-4 flex flex-wrap items-center gap-3">
@@ -403,6 +470,17 @@ function formatFechaLarga(fecha: string) {
             >
               <span class="text-sm text-gray-900">{{ persona.nombre ?? 'Sin registro en el sistema' }}</span>
               <span class="text-xs font-mono text-gray-500">{{ persona.rut }}</span>
+            </div>
+          </div>
+
+          <div v-if="detalleReserva.prestado_por || detalleReserva.devuelto_por" class="space-y-1.5 mb-6 text-sm border-t border-gray-100 pt-4">
+            <div v-if="detalleReserva.prestado_por" class="flex justify-between">
+              <span class="text-gray-500">Entregada por</span>
+              <span class="text-gray-900 font-medium">{{ detalleReserva.prestado_por }}</span>
+            </div>
+            <div v-if="detalleReserva.devuelto_por" class="flex justify-between">
+              <span class="text-gray-500">Devuelta por</span>
+              <span class="text-gray-900 font-medium">{{ detalleReserva.devuelto_por }}</span>
             </div>
           </div>
 

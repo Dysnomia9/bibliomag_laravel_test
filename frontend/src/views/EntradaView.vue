@@ -23,6 +23,11 @@ const rutExterno = ref('')
 const nombreExterno = ref('')
 const registrandoExterno = ref(false)
 
+const convenioModalOpen = ref(false)
+const rutConvenio = ref('')
+const nombreConvenio = ref('')
+const registrandoConvenio = ref(false)
+
 const VIA_LABELS: Record<string, string> = {
   qr: 'QR Móvil',
   manual: 'Manual',
@@ -31,6 +36,18 @@ const VIA_LABELS: Record<string, string> = {
 const VIA_STYLES: Record<string, string> = {
   qr: 'bg-violet-50 text-violet-700 border border-violet-200',
   manual: 'bg-slate-100 text-slate-700 border border-slate-200',
+}
+
+const TIPO_USUARIO_LABELS: Record<string, string> = {
+  estudiante: 'Estudiante',
+  docente: 'Docente',
+  funcionario: 'Funcionario',
+}
+
+const TIPO_USUARIO_STYLES: Record<string, string> = {
+  estudiante: 'bg-indigo-50 text-indigo-700 border border-indigo-200',
+  docente: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+  funcionario: 'bg-sky-50 text-sky-700 border border-sky-200',
 }
 
 function formatHora(iso: string) {
@@ -126,6 +143,38 @@ async function registrarExterno() {
     registrandoExterno.value = false
   }
 }
+
+function abrirModalConvenio() {
+  rutConvenio.value = ''
+  nombreConvenio.value = ''
+  convenioModalOpen.value = true
+}
+
+function onRutConvenioInput(event: Event) {
+  rutConvenio.value = formatRut((event.target as HTMLInputElement).value)
+}
+
+async function registrarConvenio() {
+  if (!rutConvenio.value.trim()) {
+    toast.error('Ingrese el RUT de la persona de convenio')
+    return
+  }
+
+  registrandoConvenio.value = true
+  try {
+    await api.post('/entrada/convenio', {
+      rut: rutConvenio.value,
+      nombre: nombreConvenio.value.trim() || undefined,
+    })
+    toast.success('Entrada de convenio registrada')
+    convenioModalOpen.value = false
+    await cargar()
+  } catch (e: any) {
+    toast.error(e?.response?.data?.message ?? 'No se pudo registrar la entrada')
+  } finally {
+    registrandoConvenio.value = false
+  }
+}
 </script>
 
 <template>
@@ -188,6 +237,15 @@ async function registrarExterno() {
               </svg>
               Externo
             </button>
+            <button
+              @click="abrirModalConvenio"
+              class="flex items-center gap-2 px-5 py-2.5 bg-sky-50 text-sky-700 border border-sky-200 rounded-lg hover:bg-sky-100 transition-colors font-medium"
+            >
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Convenio
+            </button>
           </div>
         </div>
       </div>
@@ -225,10 +283,27 @@ async function registrarExterno() {
                 </td>
                 <td class="px-6 py-3 text-sm font-mono text-gray-900 border-r border-stone-100">{{ e.usuario?.rut ?? e.rut_externo }}</td>
                 <td class="px-6 py-3 text-sm text-gray-900 border-r border-stone-100">
-                  <span v-if="e.usuario">{{ e.usuario.nombre }} {{ e.usuario.apellido }}</span>
+                  <span v-if="e.usuario" class="flex items-center gap-1.5">
+                    {{ e.usuario.nombre }} {{ e.usuario.apellido }}
+                    <span
+                      v-if="e.usuario.tipo && e.usuario.tipo !== 'estudiante'"
+                      class="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+                      :class="TIPO_USUARIO_STYLES[e.usuario.tipo]"
+                    >
+                      {{ TIPO_USUARIO_LABELS[e.usuario.tipo] }}
+                    </span>
+                  </span>
                   <span v-else class="flex items-center gap-1.5">
                     {{ e.nombre_externo || 'Sin nombre' }}
-                    <span class="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-amber-50 text-amber-700 border border-amber-200">Externo</span>
+                    <span
+                      v-if="e.es_convenio"
+                      class="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-sky-50 text-sky-700 border border-sky-200"
+                    >
+                      Convenio
+                    </span>
+                    <span v-else class="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                      Externo
+                    </span>
                   </span>
                 </td>
                 <td class="px-6 py-3 border-r border-stone-100">
@@ -305,6 +380,60 @@ async function registrarExterno() {
               class="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm disabled:opacity-60"
             >
               {{ registrandoExterno ? 'Registrando…' : 'Registrar' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div
+        v-if="convenioModalOpen"
+        class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        @click.self="convenioModalOpen = false"
+      >
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+          <h3 class="text-lg font-bold text-gray-900 mb-1">Registrar persona de convenio</h3>
+          <p class="text-sm text-gray-500 mb-5">
+            Para personas cubiertas por un convenio institucional que no están en el sistema.
+          </p>
+
+          <div class="space-y-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">RUT</label>
+              <input
+                :value="rutConvenio"
+                @input="onRutConvenioInput"
+                type="text"
+                placeholder="12.345.678-5"
+                maxlength="12"
+                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none"
+                @keydown.enter="registrarConvenio"
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Nombre (opcional)</label>
+              <input
+                v-model="nombreConvenio"
+                type="text"
+                placeholder="Nombre (opcional)"
+                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none"
+                @keydown.enter="registrarConvenio"
+              />
+            </div>
+          </div>
+
+          <div class="flex gap-3 mt-6">
+            <button
+              @click="convenioModalOpen = false"
+              class="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors font-medium text-sm"
+            >
+              Cancelar
+            </button>
+            <button
+              @click="registrarConvenio"
+              :disabled="registrandoConvenio"
+              class="flex-1 px-4 py-2.5 bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition-colors font-medium text-sm disabled:opacity-60"
+            >
+              {{ registrandoConvenio ? 'Registrando…' : 'Registrar' }}
             </button>
           </div>
         </div>

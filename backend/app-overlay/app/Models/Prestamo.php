@@ -20,6 +20,8 @@ class Prestamo extends Model
         'fecha_devolucion',
         'fecha_devolucion_real',
         'estado',
+        'prestado_por',
+        'devuelto_por',
     ];
 
     protected function casts(): array

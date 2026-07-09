@@ -15,6 +15,8 @@ class Sala extends Model
         'nombre',
         'capacidad',
         'piso',
+        'tipo',
+        'codigo_barras',
     ];
 
     public function reservas()

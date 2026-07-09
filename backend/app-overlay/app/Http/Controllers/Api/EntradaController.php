@@ -13,7 +13,7 @@ class EntradaController extends Controller
     {
         $fecha = $request->query('fecha', now()->toDateString());
 
-        $entradas = Entrada::with('usuario:id,nombre,apellido,rut')
+        $entradas = Entrada::with('usuario:id,nombre,apellido,rut,tipo')
             ->whereDate('fecha_hora_entrada', $fecha)
             ->latest('fecha_hora_entrada')
             ->get();
@@ -54,12 +54,16 @@ class EntradaController extends Controller
             return response()->json(['message' => 'El usuario ya tiene una entrada activa registrada'], 409);
         }
 
+        // Horizon gestiona toda la asistencia (usuarios, docentes, funcionarios) con el
+        // código de barras del puesto de trabajo: se estampa siempre automáticamente, nunca
+        // se tipea a mano.
         $entrada = Entrada::create([
             'usuario_id' => $usuario->id,
             'via' => $data['via'] ?? 'manual',
+            'codigo_barras' => config('horizon_barcodes.puesto_generico'),
         ]);
 
-        $entrada->load('usuario:id,nombre,apellido,rut');
+        $entrada->load('usuario:id,nombre,apellido,rut,tipo');
 
         return response()->json($entrada, 201);
     }
@@ -86,6 +90,35 @@ class EntradaController extends Controller
             'rut_externo' => $data['rut'],
             'nombre_externo' => $data['nombre'] ?? null,
             'via' => 'manual',
+            'codigo_barras' => config('horizon_barcodes.puesto_generico'),
+        ]);
+
+        return response()->json($entrada, 201);
+    }
+
+    public function storeConvenio(Request $request)
+    {
+        $data = $request->validate([
+            'rut' => ['required', 'string'],
+            'nombre' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $tieneEntradaActiva = Entrada::where('rut_externo', $data['rut'])
+            ->whereNull('fecha_hora_salida')
+            ->exists();
+
+        if ($tieneEntradaActiva) {
+            return response()->json(['message' => 'Esa persona ya tiene una entrada activa registrada'], 409);
+        }
+
+        // Personas de convenio institucional: mismo flujo que un externo (no están en la
+        // base de datos institucional), pero se marcan aparte para reportería.
+        $entrada = Entrada::create([
+            'rut_externo' => $data['rut'],
+            'nombre_externo' => $data['nombre'] ?? null,
+            'es_convenio' => true,
+            'via' => 'manual',
+            'codigo_barras' => config('horizon_barcodes.puesto_generico'),
         ]);
 
         return response()->json($entrada, 201);
@@ -99,7 +132,7 @@ class EntradaController extends Controller
 
         $entrada->update(['fecha_hora_salida' => now()]);
 
-        $entrada->load('usuario:id,nombre,apellido,rut');
+        $entrada->load('usuario:id,nombre,apellido,rut,tipo');
 
         return response()->json($entrada);
     }

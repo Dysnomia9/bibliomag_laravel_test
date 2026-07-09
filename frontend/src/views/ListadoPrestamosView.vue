@@ -4,9 +4,12 @@ import StaffLayout from '@/components/layout/StaffLayout.vue'
 import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import api from '@/services/api'
 import { useToast } from '@/composables/useToast'
+import { useStaffNombres } from '@/composables/useStaffNombres'
 import type { Prestamo } from '@/types'
 
 const toast = useToast()
+const { nombresStaff, cargarStaffNombres } = useStaffNombres()
+cargarStaffNombres()
 
 const prestamos = ref<Prestamo[]>([])
 const cargando = ref(true)
@@ -52,16 +55,20 @@ onMounted(cargar)
 
 const devolucionPendiente = ref<Prestamo | null>(null)
 const devolviendo = ref(false)
+const devueltoPor = ref('')
 
 function pedirConfirmacionDevolucion(prestamo: Prestamo) {
   devolucionPendiente.value = prestamo
+  devueltoPor.value = ''
 }
 
 async function confirmarDevolucion() {
   if (!devolucionPendiente.value) return
   devolviendo.value = true
   try {
-    await api.patch(`/prestamos/${devolucionPendiente.value.id}/devolver`)
+    await api.patch(`/prestamos/${devolucionPendiente.value.id}/devolver`, {
+      devuelto_por: devueltoPor.value.trim() || undefined,
+    })
     toast.success('Devolución registrada')
     devolucionPendiente.value = null
     await cargar()
@@ -139,6 +146,7 @@ const filtrados = computed(() => prestamos.value)
                 <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Usuario</th>
                 <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Ítem / Código</th>
                 <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Tipo</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Prestado por</th>
                 <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Préstamo</th>
                 <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Devolución</th>
                 <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wide">Estado</th>
@@ -162,6 +170,7 @@ const filtrados = computed(() => prestamos.value)
                     {{ TIPO_LABELS[p.tipo_item] ?? 'Libro' }}
                   </span>
                 </td>
+                <td class="px-6 py-3 text-sm text-gray-600">{{ p.prestado_por ?? '—' }}</td>
                 <td class="px-6 py-3 text-sm font-mono text-gray-600">{{ formatFecha(p.fecha_prestamo) }}</td>
                 <td class="px-6 py-3 text-sm font-mono text-gray-600">
                   {{ p.fecha_devolucion ? formatFecha(p.fecha_devolucion) : 'Estadía en biblioteca' }}
@@ -182,7 +191,7 @@ const filtrados = computed(() => prestamos.value)
                 </td>
               </tr>
               <tr v-if="!cargando && !filtrados.length">
-                <td colspan="7" class="px-6 py-8 text-center text-sm text-gray-400">Sin préstamos que coincidan con los filtros.</td>
+                <td colspan="8" class="px-6 py-8 text-center text-sm text-gray-400">Sin préstamos que coincidan con los filtros.</td>
               </tr>
             </tbody>
           </table>
@@ -196,11 +205,21 @@ const filtrados = computed(() => prestamos.value)
       >
         <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
           <h3 class="text-lg font-bold text-gray-900 mb-1">¿Confirmar devolución?</h3>
-          <p class="text-sm text-gray-500 mb-6">
+          <p class="text-sm text-gray-500 mb-4">
             Se registrará la devolución de <strong class="font-mono">{{ devolucionPendiente.libro_titulo }}</strong>
             ({{ TIPO_LABELS[devolucionPendiente.tipo_item] ?? 'Libro' }}) a nombre de
             <strong>{{ devolucionPendiente.usuario?.nombre }} {{ devolucionPendiente.usuario?.apellido }}</strong>.
           </p>
+          <div class="mb-6">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Devuelto por (opcional)</label>
+            <input
+              v-model="devueltoPor"
+              type="text"
+              list="staff-nombres"
+              placeholder="Nombre de quien recibe"
+              class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+            />
+          </div>
           <div class="flex gap-3">
             <button
               @click="devolucionPendiente = null"
@@ -218,6 +237,10 @@ const filtrados = computed(() => prestamos.value)
           </div>
         </div>
       </div>
+
+      <datalist id="staff-nombres">
+        <option v-for="n in nombresStaff" :key="n" :value="n" />
+      </datalist>
     </div>
   </StaffLayout>
 </template>

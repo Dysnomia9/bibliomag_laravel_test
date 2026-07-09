@@ -21,6 +21,11 @@ class Reserva extends Model
         'hora_inicio',
         'hora_fin',
         'estado',
+        'prestado_por',
+        'devuelto_por',
+        'hora_prestamo_real',
+        'hora_devolucion_real',
+        'via',
     ];
 
     protected function casts(): array
@@ -28,6 +33,8 @@ class Reserva extends Model
         return [
             'fecha' => 'date',
             'ruts' => 'array',
+            'hora_prestamo_real' => 'datetime',
+            'hora_devolucion_real' => 'datetime',
         ];
     }
 
