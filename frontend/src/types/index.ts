@@ -35,6 +35,7 @@ export type Entrada = {
 export type Prestamo = {
   id: number
   usuario_id: number
+  libro_id: number | null
   libro_titulo: string
   tipo_item: 'libro' | 'audifonos' | 'notebook'
   fecha_prestamo: string

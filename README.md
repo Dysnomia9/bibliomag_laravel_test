@@ -11,21 +11,39 @@ Todos los módulos principales están implementados y conectados end-to-end
 | Módulo | Ruta staff | Backend |
 |---|---|---|
 | Dashboard | `/dashboard` | `DashboardController` |
-| Usuarios | `/usuarios` | `UsuarioController` |
+| Usuarios | `/usuarios` (dropdown "Gestiones Admin") | `UsuarioController` |
 | Entrada | `/entrada` | `EntradaController` |
-| Préstamos | `/prestamo`, `/prestamos/listado` | `PrestamoController` |
-| Salas | `/salas` | `SalaController` |
+| Préstamos | `/prestamo`, `/prestamos/listado` (dropdown) | `PrestamoController` |
+| Salas (logias) | `/salas` | `SalaController` |
 | Reportes | `/reportes` | `ReporteController` |
-| Código QR de acceso | `/codigo-qr` | `CodigoAccesoController` |
+| Código QR de acceso | `/codigo-qr` (dropdown) | `CodigoAccesoController` |
+| Listado de libros | `/libros/listado` (dropdown) | `LibroController` |
+
+En el TopBar, los módulos secundarios (Usuarios, Listado Préstamos, Listado
+Libros, Código QR) están agrupados bajo el botón desplegable **"Gestiones
+Admin"** en vez de ir todos como links planos.
 
 Además existe un **portal de autoservicio para usuarios** (no staff), con su
 propio login y guard de rutas (`/portal/*`): marcar entrada/salida (RUT o
 escaneo de QR con la cámara), consultar el catálogo de libros y reservar
 salas de estudio.
 
-Y un catálogo de libros incipiente, separado de los préstamos "texto libre":
-`LibroController` (búsqueda por código de barras) y `ReservaLibroController`
-(reservar un libro del catálogo para retiro).
+Y un catálogo de libros conectado a préstamos y reservas por **código de
+barras** (el código de barras es, en la práctica, la llave con la que se
+identifica un libro en todo el sistema — nunca se elige por nombre/id):
+`LibroController` (listado + búsqueda por código de barras),
+`ReservaLibroController` (reservar un libro del catálogo para retiro) y
+`PrestamoController` (préstamo real, con fecha de préstamo y de devolución
+acordadas). Ambos flujos comparten el campo `libros.disponible` como fuente
+de verdad — no se puede reservar ni prestar un libro que ya está ocupado por
+otra persona (409), y se libera automáticamente al cancelar la reserva o
+devolver el préstamo.
+
+También convive con **Horizon** (sistema externo que ya usa códigos de
+barra reales) para registrar préstamo/devolución de logias y asistencia de
+puestos de trabajo — ver `config/horizon_barcodes.php` y el comando
+`horizon:codigos-logia` para cargar los códigos reales cuando Horizon los
+entregue.
 
 Auth: dos guards de Sanctum independientes — `staff` (bibliotecarios, vía
 `AuthController`) y `usuario` (portal, vía `UsuarioAuthController`) —
@@ -103,8 +121,11 @@ Este comando (`app/Console/Commands/SeedMockupData.php`) genera:
 - 30 `usuarios` con RUT válido (con dígito verificador calculado), carrera (de las
   8 carreras UMAG), año de ingreso y sexo
 - Entradas y préstamos distribuidos en los últimos días, con sesgo horario
-  (más tráfico 10–13h y 15–18h)
-- 25 salas de estudio (1er piso, capacidades variables) y reservas del día
+  (más tráfico 10–13h y 15–18h), incluyendo ejemplos de entrada externa y de
+  convenio para hoy
+- 25 salas/logias de estudio (1er y 2do piso, capacidades variables) — cada
+  una con su propio `codigo_barras` inventado (Horizon aún no entrega los
+  reales) — y reservas de los últimos días
 
 Si necesitas empezar completamente de cero (esquema incluido):
 
@@ -124,10 +145,15 @@ npm run dev
 
 ## Deuda técnica conocida
 
-No hay una suite de tests automatizados en el repo. Algunos puntos del modelo
-de datos y de la capa de autorización quedan pendientes de endurecer (por
-ejemplo: los préstamos siguen guardando `libro_titulo` como texto libre en
-vez de referenciar el catálogo de libros/ejemplares, y las reservas de sala
-guardan los RUT de los participantes como un array JSON en vez de una tabla
-relacional). Antes de asumir que algo "falta" o "está roto", revisa el
-código real en `app-overlay/` — este README se puede desactualizar.
+No hay una suite de tests automatizados en el repo. Las reservas de sala
+siguen guardando los RUT de los participantes como un array JSON en vez de
+una tabla relacional (`Reserva.ruts`), así que `SalaController::index`
+reconstruye el mapeo RUT → usuario a mano. Los préstamos de **equipos**
+(audífonos, notebooks) siguen identificándose por código de inventario en
+texto libre, ya que no son parte del catálogo de libros. Los préstamos de
+**libros**, en cambio, ya están conectados al catálogo real (`libro_id` +
+`codigo_barras`, con validación de disponibilidad) — pero todavía no existe
+un modelo de "ejemplar" (una fila `Libro` = un solo `disponible`, no soporta
+múltiples copias físicas del mismo título). Antes de asumir que algo "falta"
+o "está roto", revisa el código real en `app-overlay/` — este README se
+puede desactualizar.

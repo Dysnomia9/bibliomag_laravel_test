@@ -50,6 +50,8 @@ docker compose exec backend php artisan mockup:datos --fresh  # regenerar todo d
 backend/
   docker-entrypoint.sh        # instala Laravel en frío la 1ra vez, aplica overlay, migra, seedea
   app-overlay/                # ÚNICO lugar del backend que se edita — se "hornea" en la imagen
+    config/horizon_barcodes.php  # código de barras genérico de "puesto de trabajo" +
+                                   mapeo codigo_barras->nombre de logia (para el comando de import)
     app/Models/
       Staff, Usuario, Entrada, Prestamo, Sala, Reserva, Libro, ReservaLibro, CodigoAcceso
     app/Http/Middleware/
@@ -57,27 +59,35 @@ backend/
     app/Http/Controllers/Api/
       AuthController, UsuarioAuthController   # login staff vs. login usuario (portal)
       DashboardController, UsuarioController, EntradaController, PrestamoController,
-      SalaController, ReporteController, CodigoAccesoController
+      SalaController, ReporteController, CodigoAccesoController, StaffController (GET /staff,
+      solo para autocompletar "registrado/prestado/devuelto por" en el frontend)
       LibroController, ReservaLibroController  # catálogo de libros y reservas de libro (retiro)
       PortalController                         # endpoints del portal de autoservicio (/mi/*)
-    app/Console/Commands/      SeedMockupData.php (comando `mockup:datos`)
-    database/migrations/       15 migraciones correlativas, ver Deuda técnica más abajo
+    app/Services/ReservaSalaService.php  # solapamiento de reservas + escanearLogia() (Horizon)
+    app/Console/Commands/
+      SeedMockupData.php (comando `mockup:datos`)
+      ImportarCodigosLogia.php (comando `horizon:codigos-logia`, backfill de
+        salas.codigo_barras real desde config/horizon_barcodes.php cuando Horizon los entregue)
+    database/migrations/       correlativas por fecha; ver Deuda técnica más abajo
     routes/api.php             grupo `auth:sanctum + staff` y grupo `auth:sanctum + usuario`
     bootstrap/app.php          # NO tiene statefulApi() — auth es Bearer token puro, sin CSRF
 
 frontend/
   src/
     views/            LoginView, LoginV2View, DashboardView, EntradaView, PrestamoView,
-                       ListadoPrestamosView, UsuariosView, SalasView, ReportesView, CodigoQrView
+                       ListadoPrestamosView, ListadoLibrosView, UsuariosView, SalasView,
+                       ReportesView, CodigoQrView
     views/portal/      PortalLoginView, PortalHomeView, PortalEntradaView,
                        PortalCatalogoView, PortalSalasView
-    components/layout/  StaffLayout, TopBar (la navegación vive en TopBar, no hay
-                        un componente "SidebarNav" separado), PortalLayout
+    components/layout/  StaffLayout, TopBar (navegación + dropdown "Gestiones Admin" con
+                        Usuarios/Listado Préstamos/Listado Libros/Código QR, ver convención 6
+                        más abajo — no hay un componente "SidebarNav" separado), PortalLayout
     components/reportes/  BarChart, BreakdownList, ReporteTabla
     components/ApiErrorBanner.vue  Aviso "no se pudo conectar" — NO hay fallback a datos ficticios
     stores/           auth.ts (staff), usuarioAuth.ts (portal) — dos stores de Pinia separados
     services/         api.ts (staff, Bearer token de auth.ts), apiUsuario.ts (portal)
-    composables/      useRut.ts, useToast.ts, useStaffShortcuts.ts (atajos de teclado del staff)
+    composables/      useRut.ts, useToast.ts, useStaffShortcuts.ts (atajos de teclado del staff),
+                       useStaffNombres.ts (cachea GET /staff para datalists de "registrado por")
     router/index.ts   dos guards: rutas `meta.portal` usan usuarioAuth, el resto usa auth
     types/index.ts    Tipos TS que reflejan los modelos de Laravel
 ```
@@ -110,15 +120,33 @@ frontend/
    nueva `alter table` si hace falta cambiar un esquema existente).
 5. Los links de navegación viven en `TopBar.vue` y las rutas en
    `router/index.ts` — ya apuntan a los componentes reales, no hay
-   `ProximamenteView` que reemplazar.
+   `ProximamenteView` que reemplazar. Los módulos secundarios (Usuarios,
+   Listado Préstamos, Listado Libros, Código QR) están agrupados en el
+   dropdown "Gestiones Admin" (array `adminLinks` en `TopBar.vue`), no como
+   links planos en la barra.
+6. **Dropdowns/menús flotantes en `TopBar.vue`**: el `<nav>` de navegación
+   usa `overflow-x-auto` para el scroll horizontal en mobile, y por spec CSS
+   eso fuerza a que el overflow vertical también quede recortado (no se
+   puede mezclar `overflow-x: auto` con `overflow-y: visible` en el mismo
+   elemento). Cualquier panel flotante que cuelgue de un botón dentro de ese
+   `<nav>` debe ir en un `<Teleport to="body">` posicionado con
+   `getBoundingClientRect()` del botón (ver `adminMenuOpen`/`adminMenuPos` en
+   `TopBar.vue`) — si lo pones como `absolute` dentro del `<nav>`, queda
+   encerrado y aparece un scroll para verlo en vez de flotar por encima.
 
 ## Deuda técnica conocida (no asumir que ya se resolvió sin verificar el código)
 
-- **`Prestamo.libro_titulo` es texto libre**, desconectado del catálogo real
-  (`Libro`/`ReservaLibro`). Se puede crear un préstamo con cualquier título
-  sin validar existencia, disponibilidad ni ejemplar. Si se aborda: modelo
-  `Libro → Ejemplar → Prestamo` (el préstamo referencia un ejemplar físico,
-  no solo el título de la obra).
+- **`Prestamo.libro_titulo` ya NO es texto libre para libros del catálogo**
+  (resuelto): `PrestamoController::store()` exige `codigo_barras`, busca el
+  `Libro` real, valida `disponible` (409 si ya está prestado/reservado por
+  otra persona) y guarda `libro_id` (FK real, `Prestamo::libro()`) + copia de
+  `libro_titulo`/`codigo_barras`. Al devolver, libera el libro
+  (`disponible = true`) buscándolo por `libro_id`. **Pero los equipos**
+  (`tipo_item = audifonos|notebook`) siguen siendo 100% texto libre por
+  código de inventario (`AUD-003`, `NB-012`) — no están en la tabla `libros`
+  y es intencional, no una laguna. No hay todavía un modelo `Ejemplar` (un
+  mismo `Libro` sigue siendo una sola fila con un solo `disponible`, no
+  soporta múltiples copias físicas).
 - **`Reserva.ruts` es un array JSON** (cast `array` en el modelo) en vez de
   una tabla relacional `reserva_participantes`. `SalaController::index`
   reconstruye manualmente el mapeo RUT → usuario porque no hay relación
@@ -183,6 +211,47 @@ frontend/
   reserva con horario solapado ese día) en `SalaController::storeReserva` y
   `PortalController::reservarSala`. No reintroduzcas la validación sin este
   chequeo cruzado entre salas.
+- **`SalaController::storeReserva` aceptaba RUT externos (no registrados)**:
+  a diferencia del portal (`PortalController::reservarSala`, que siempre
+  exigió `exists:usuarios,rut`), el endpoint de staff no validaba que cada
+  RUT del array `ruts` perteneciera a un usuario real — se podía reservar una
+  logia con RUT inventados. Ya se igualó la regla (`ruts.*` ahora incluye
+  `exists:usuarios,rut` también en `SalaController`). Los visitantes externos
+  NO pueden reservar logias, solo registrar entrada (`/entrada/externo`).
+- **Reserva/préstamo de un libro ya ocupado por otra persona**: ni
+  `ReservaLibroController::store()` ni `PrestamoController::store()`
+  chequeaban `Libro.disponible` antes de crear el registro — se podía
+  reservar o prestar el mismo libro dos veces en paralelo. Ya se agregó: el
+  campo `libros.disponible` ahora es la fuente de verdad compartida entre
+  reservas y préstamos de libro — ambos endpoints devuelven 409 si
+  `disponible = false`, lo ponen en `false` al crear el registro, y lo
+  vuelven a `true` al cancelar la reserva o devolver el préstamo. No
+  reintroduzcas ninguno de los dos flujos sin este chequeo cruzado.
+- **Integración de códigos de barra Horizon (logias, puestos de trabajo,
+  visitas de convenio)**: el sistema convive con Horizon, que ya usa códigos
+  de barra reales. Diseño implementado:
+  - **Logias**: cada `Sala` tiene su propio `codigo_barras` único
+    (`tipo = 'logia'`). `ReservaSalaService::escanearLogia()` (usado por
+    `SalaController::scanLogia`, `POST /salas/scan-logia`) hace check-in/
+    check-out sobre la `Reserva` vigente de esa sala: el primer escaneo
+    marca `prestado_por` + `hora_prestamo_real` + `via='BC'`; el segundo
+    marca `devuelto_por` + `hora_devolucion_real` + `estado='finalizada'`.
+    No crea reservas nuevas, solo cierra el ciclo de una ya existente.
+  - **Puestos de trabajo**: Horizon reutiliza un puñado de códigos
+    genéricos para todos los puestos — por eso NO se modelan como `Sala` ni
+    se le pide el código a nadie: cada `Entrada` creada por
+    `EntradaController::store/storeExterno/storeConvenio` se estampa
+    automáticamente con `codigo_barras = config('horizon_barcodes.puesto_generico')`.
+    Es una marca de asistencia, no una reserva de recurso — no exigas que el
+    staff tipee o escanee ese código en el frontend.
+  - **Convenio**: tercera categoría de entrada (junto a usuario interno y
+    "Externo"), mismo flujo que `storeExterno` pero con `es_convenio = true`
+    para diferenciarla en reportería/UI (badge "Convenio" en `EntradaView.vue`).
+  - Los códigos reales de Horizon (por logia, y el genérico de puesto) no
+    estaban disponibles al implementar esto — `config/horizon_barcodes.php`
+    trae un placeholder inventado (`'62572'`) y el comando
+    `horizon:codigos-logia` para cargar el mapeo real cuando se tenga, sin
+    tocar código.
 
 ## Checklist antes de dar un módulo por terminado
 

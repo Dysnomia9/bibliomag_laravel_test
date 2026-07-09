@@ -65,6 +65,7 @@ class PrestamoController extends Controller
 
         $prestamo = Prestamo::create([
             'usuario_id' => $data['usuario_id'],
+            'libro_id' => $libro?->id,
             'libro_titulo' => $esLibro ? $libro->titulo : $data['libro_titulo'],
             'tipo_item' => $data['tipo_item'],
             'codigo_barras' => $esLibro ? $libro->codigo_barras : null,
@@ -93,8 +94,8 @@ class PrestamoController extends Controller
             'devuelto_por' => $data['devuelto_por'] ?? null,
         ]);
 
-        if ($prestamo->codigo_barras) {
-            Libro::where('codigo_barras', $prestamo->codigo_barras)->update(['disponible' => true]);
+        if ($prestamo->libro_id) {
+            Libro::whereKey($prestamo->libro_id)->update(['disponible' => true]);
         }
 
         return response()->json($prestamo);
