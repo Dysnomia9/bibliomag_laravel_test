@@ -70,7 +70,6 @@ export type EstadoPortal = {
   usuario: Usuario
   personasEnSala: number
   capacidad: number
-  entradaActiva: boolean
 }
 
 export type ReservaLibro = {

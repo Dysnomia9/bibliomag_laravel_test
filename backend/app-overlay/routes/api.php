@@ -28,6 +28,7 @@ Route::middleware(['auth:sanctum', 'staff'])->group(function () {
     Route::post('/salas/scan-logia', [SalaController::class, 'scanLogia']);
     Route::post('/reservas', [SalaController::class, 'storeReserva']);
     Route::delete('/reservas/{reserva}', [SalaController::class, 'destroyReserva']);
+    Route::patch('/reservas/{reserva}/devolver', [SalaController::class, 'devolverReserva']);
 
     Route::get('/staff', [StaffController::class, 'index']);
 
@@ -38,7 +39,6 @@ Route::middleware(['auth:sanctum', 'staff'])->group(function () {
     Route::post('/entrada', [EntradaController::class, 'store']);
     Route::post('/entrada/externo', [EntradaController::class, 'storeExterno']);
     Route::post('/entrada/convenio', [EntradaController::class, 'storeConvenio']);
-    Route::patch('/entrada/{entrada}/salida', [EntradaController::class, 'marcarSalida']);
 
     Route::get('/prestamos', [PrestamoController::class, 'index']);
     Route::post('/prestamos', [PrestamoController::class, 'store']);
@@ -64,7 +64,6 @@ Route::middleware(['auth:sanctum', 'usuario'])->group(function () {
 
     Route::get('/mi/estado', [PortalController::class, 'estado']);
     Route::post('/mi/entrada', [PortalController::class, 'registrarEntrada']);
-    Route::post('/mi/salida', [PortalController::class, 'registrarSalida']);
     Route::get('/mi/catalogo', [PortalController::class, 'catalogo']);
 
     Route::get('/mi/salas', [PortalController::class, 'salas']);

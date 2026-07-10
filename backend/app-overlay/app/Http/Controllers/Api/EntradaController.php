@@ -18,14 +18,14 @@ class EntradaController extends Controller
             ->latest('fecha_hora_entrada')
             ->get();
 
-        $personasEnSala = Entrada::whereDate('fecha_hora_entrada', $fecha)
-            ->whereNull('fecha_hora_salida')
-            ->count();
-
         return response()->json([
             'fecha' => $fecha,
             'entradas' => $entradas,
-            'personasEnSala' => $personasEnSala,
+            // Horizon (el sistema legado) no distingue "quién sigue adentro": cada
+            // ingreso se cierra en el mismo instante en que se registra (ver store()).
+            // "Personas en sala" es, en la práctica, el total de ingresos del día — no
+            // un conteo en tiempo real de quién no ha salido.
+            'personasEnSala' => $entradas->count(),
         ]);
     }
 
@@ -46,21 +46,21 @@ class EntradaController extends Controller
             return response()->json(['message' => 'El usuario se encuentra inactivo'], 403);
         }
 
-        $tieneEntradaActiva = Entrada::where('usuario_id', $usuario->id)
-            ->whereNull('fecha_hora_salida')
-            ->exists();
-
-        if ($tieneEntradaActiva) {
-            return response()->json(['message' => 'El usuario ya tiene una entrada activa registrada'], 409);
-        }
-
         // Horizon gestiona toda la asistencia (usuarios, docentes, funcionarios) con el
         // código de barras del puesto de trabajo: se estampa siempre automáticamente, nunca
-        // se tipea a mano.
+        // se tipea a mano. La salida se marca en el mismo instante que la entrada — Horizon
+        // no registra un evento de salida por separado, así que no tiene sentido modelar un
+        // estado "activo" que dependa de fecha_hora_salida (antes quedaba una entrada
+        // "abierta" indefinidamente si nadie la cerraba a mano, incluso días después). Se usa
+        // el mismo timestamp para ambos campos (no dos now() distintos) para que salida no
+        // quede unos milisegundos después de entrada.
+        $ahora = now();
         $entrada = Entrada::create([
             'usuario_id' => $usuario->id,
             'via' => $data['via'] ?? 'manual',
             'codigo_barras' => config('horizon_barcodes.puesto_generico'),
+            'fecha_hora_entrada' => $ahora,
+            'fecha_hora_salida' => $ahora,
         ]);
 
         $entrada->load('usuario:id,nombre,apellido,rut,tipo');
@@ -75,22 +75,17 @@ class EntradaController extends Controller
             'nombre' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $tieneEntradaActiva = Entrada::where('rut_externo', $data['rut'])
-            ->whereNull('fecha_hora_salida')
-            ->exists();
-
-        if ($tieneEntradaActiva) {
-            return response()->json(['message' => 'Ese visitante ya tiene una entrada activa registrada'], 409);
-        }
-
         // Visitantes externos no están en la base de datos institucional: se
         // registran directamente con el RUT (y nombre opcional) que declaran,
         // sin validar contra la tabla de usuarios.
+        $ahora = now();
         $entrada = Entrada::create([
             'rut_externo' => $data['rut'],
             'nombre_externo' => $data['nombre'] ?? null,
             'via' => 'manual',
             'codigo_barras' => config('horizon_barcodes.puesto_generico'),
+            'fecha_hora_entrada' => $ahora,
+            'fecha_hora_salida' => $ahora,
         ]);
 
         return response()->json($entrada, 201);
@@ -103,37 +98,19 @@ class EntradaController extends Controller
             'nombre' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $tieneEntradaActiva = Entrada::where('rut_externo', $data['rut'])
-            ->whereNull('fecha_hora_salida')
-            ->exists();
-
-        if ($tieneEntradaActiva) {
-            return response()->json(['message' => 'Esa persona ya tiene una entrada activa registrada'], 409);
-        }
-
         // Personas de convenio institucional: mismo flujo que un externo (no están en la
         // base de datos institucional), pero se marcan aparte para reportería.
+        $ahora = now();
         $entrada = Entrada::create([
             'rut_externo' => $data['rut'],
             'nombre_externo' => $data['nombre'] ?? null,
             'es_convenio' => true,
             'via' => 'manual',
             'codigo_barras' => config('horizon_barcodes.puesto_generico'),
+            'fecha_hora_entrada' => $ahora,
+            'fecha_hora_salida' => $ahora,
         ]);
 
         return response()->json($entrada, 201);
-    }
-
-    public function marcarSalida(Entrada $entrada)
-    {
-        if ($entrada->fecha_hora_salida !== null) {
-            return response()->json(['message' => 'Esta entrada ya tiene una salida registrada'], 409);
-        }
-
-        $entrada->update(['fecha_hora_salida' => now()]);
-
-        $entrada->load('usuario:id,nombre,apellido,rut,tipo');
-
-        return response()->json($entrada);
     }
 }

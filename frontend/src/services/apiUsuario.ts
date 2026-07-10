@@ -15,4 +15,17 @@ apiUsuario.interceptors.request.use((config) => {
   return config
 })
 
+// Ver el mismo interceptor en services/api.ts (staff): limpia el token vencido
+// y fuerza login con reload completo en vez de router.push.
+apiUsuario.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401 && !window.location.pathname.startsWith('/portal/login')) {
+      localStorage.removeItem('usuario_token')
+      window.location.href = '/portal/login'
+    }
+    return Promise.reject(error)
+  },
+)
+
 export default apiUsuario

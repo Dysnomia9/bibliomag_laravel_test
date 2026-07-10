@@ -29,6 +29,19 @@ usa** para estos tests (ver `phpunit.xml`).
 idempotente) cada vez que el contenedor `backend` arranca, así que no hace falta
 ningún paso manual — basta con `docker compose up`.
 
+Los tests usan una conexión de Eloquent dedicada, `pgsql_testing`
+(`config/database.php`), en vez de reutilizar la conexión `pgsql` de siempre con
+variables `DB_DATABASE=biblioteca_test` sobreescritas en `phpunit.xml`. Esto es
+intencional y **no debe "simplificarse"**: `docker-compose.yml` ya define
+`DB_HOST`/`DB_DATABASE`/`DB_USERNAME`/`DB_PASSWORD` como variables de entorno
+reales del contenedor `backend` (apuntando a `biblioteca`), y Laravel/Dotenv no
+permite que un `<env>` de `phpunit.xml` sobreescriba una variable de entorno que
+el proceso ya tiene seteada — ni con `force="true"` (eso solo fuerza `getenv()`,
+pero Laravel lee la config vía `$_ENV`/`$_SERVER`). Intentarlo así hace que los
+tests terminen corriendo `migrate:fresh` contra `biblioteca` (la base real de
+desarrollo) sin ningún aviso. `pgsql_testing` evita el problema de raíz usando
+nombres de variable propios (`DB_TEST_*`) que Docker nunca define.
+
 ### Ejecutar la suite
 
 ```bash

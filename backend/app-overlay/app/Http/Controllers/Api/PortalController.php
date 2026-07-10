@@ -26,13 +26,11 @@ class PortalController extends Controller
 
         return response()->json([
             'usuario' => $request->user(),
-            'personasEnSala' => Entrada::whereDate('fecha_hora_entrada', $hoy)
-                ->whereNull('fecha_hora_salida')
-                ->count(),
+            // Horizon (el sistema legado) no distingue "quién sigue adentro": cada ingreso
+            // se cierra en el mismo instante en que se registra (ver registrarEntrada()).
+            // "Personas en sala" es, en la práctica, el total de ingresos del día.
+            'personasEnSala' => Entrada::whereDate('fecha_hora_entrada', $hoy)->count(),
             'capacidad' => self::CAPACIDAD_SALA,
-            'entradaActiva' => Entrada::where('usuario_id', $request->user()->id)
-                ->whereNull('fecha_hora_salida')
-                ->exists(),
         ]);
     }
 
@@ -54,39 +52,21 @@ class PortalController extends Controller
             return response()->json(['message' => 'El código QR no es válido. Pide al personal que lo actualice.'], 422);
         }
 
-        $tieneEntradaActiva = Entrada::where('usuario_id', $usuario->id)
-            ->whereNull('fecha_hora_salida')
-            ->exists();
-
-        if ($tieneEntradaActiva) {
-            return response()->json(['message' => 'Ya tienes una entrada activa registrada'], 409);
-        }
-
+        // La salida se marca en el mismo instante que la entrada — ver la nota en
+        // EntradaController::store() sobre por qué (Horizon no registra un evento de
+        // salida por separado). Se usa el mismo timestamp para ambos campos.
+        $ahora = now();
         $entrada = Entrada::create([
             'usuario_id' => $usuario->id,
             'via' => $data['via'],
+            'fecha_hora_entrada' => $ahora,
+            'fecha_hora_salida' => $ahora,
         ]);
 
         return response()->json([
             'entrada' => $entrada,
             'usuario' => $usuario,
         ], 201);
-    }
-
-    public function registrarSalida(Request $request)
-    {
-        $entrada = Entrada::where('usuario_id', $request->user()->id)
-            ->whereNull('fecha_hora_salida')
-            ->latest('fecha_hora_entrada')
-            ->first();
-
-        if (! $entrada) {
-            return response()->json(['message' => 'No tienes una entrada activa registrada'], 404);
-        }
-
-        $entrada->update(['fecha_hora_salida' => now()]);
-
-        return response()->json($entrada);
     }
 
     public function catalogo(Request $request)

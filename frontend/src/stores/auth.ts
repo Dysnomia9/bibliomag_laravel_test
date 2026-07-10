@@ -8,6 +8,9 @@ export const useAuthStore = defineStore('auth', () => {
   const token = ref<string | null>(localStorage.getItem('token'))
   const error = ref<string | null>(null)
   const loading = ref(false)
+  // Evita repetir la validación contra /auth/me en cada navegación dentro de
+  // la misma sesión del SPA (se resetea solo con una recarga completa).
+  const validated = ref(false)
 
   async function login(email: string, password: string) {
     loading.value = true
@@ -32,9 +35,35 @@ export const useAuthStore = defineStore('auth', () => {
     } finally {
       token.value = null
       staff.value = null
+      validated.value = false
       localStorage.removeItem('token')
     }
   }
 
-  return { staff, token, error, loading, login, logout }
+  /**
+   * Confirma contra el backend que el token guardado en localStorage sigue
+   * siendo válido (antes el router solo comprobaba que el string existiera,
+   * sin verificar si el backend seguía reconociéndolo). Devuelve false solo
+   * cuando el backend responde 401 explícitamente — si la API no responde
+   * (caída/desconexión) se deja pasar la navegación para que la vista
+   * muestre el ApiErrorBanner en vez de expulsar al usuario.
+   */
+  async function validar(): Promise<boolean> {
+    if (!token.value) return false
+    if (validated.value) return true
+
+    try {
+      const { data } = await api.get('/auth/me')
+      staff.value = data
+      validated.value = true
+      return true
+    } catch (e: any) {
+      if (e?.response?.status === 401) {
+        return false
+      }
+      return true
+    }
+  }
+
+  return { staff, token, error, loading, login, logout, validar }
 })

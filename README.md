@@ -143,10 +143,28 @@ cp .env.example .env
 npm run dev
 ```
 
+## Tests y benchmark de rendimiento
+
+Hay una suite de Feature tests (`backend/app-overlay/tests/Feature/`) que
+cubre login de staff/usuario, registro de entradas, reservas de sala
+(solapamiento y validación grupal), cancelación de reservas ajenas y la
+separación de middlewares `staff`/`usuario`. Corre contra una base Postgres
+de pruebas dedicada (`biblioteca_test`, separada de `biblioteca`), que
+`docker-entrypoint.sh` crea automáticamente al levantar el backend.
+
+```bash
+docker compose exec backend php artisan test
+```
+
+También hay un comando (`php artisan benchmark:api`) que mide latencia real
+de la API vía HTTP (promedio, mediana, p95, máximo). Ver
+[`backend/README.md`](backend/README.md) para el detalle de ambos, incluidas
+las opciones disponibles y por qué se usa Postgres en vez de SQLite para los
+tests.
+
 ## Deuda técnica conocida
 
-No hay una suite de tests automatizados en el repo. Las reservas de sala
-siguen guardando los RUT de los participantes como un array JSON en vez de
+Las reservas de sala siguen guardando los RUT de los participantes como un array JSON en vez de
 una tabla relacional (`Reserva.ruts`), así que `SalaController::index`
 reconstruye el mapeo RUT → usuario a mano. Los préstamos de **equipos**
 (audífonos, notebooks) siguen identificándose por código de inventario en

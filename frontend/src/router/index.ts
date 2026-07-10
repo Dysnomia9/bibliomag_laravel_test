@@ -99,11 +99,20 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   if (to.meta.portal) {
     const usuarioAuth = useUsuarioAuthStore()
     if (!to.meta.public && !usuarioAuth.token) {
       return { name: 'portal-login' }
+    }
+    // El token existe en localStorage, pero eso no garantiza que el backend
+    // lo siga reconociendo (pudo vencer o haberse revocado) — se confirma
+    // contra la API antes de dejar pasar a una ruta protegida del portal.
+    if (!to.meta.public && usuarioAuth.token) {
+      const sesionValida = await usuarioAuth.validar()
+      if (!sesionValida) {
+        return { name: 'portal-login' }
+      }
     }
     if (to.name === 'portal-login' && usuarioAuth.token) {
       return { name: 'portal-home' }
@@ -114,6 +123,13 @@ router.beforeEach((to) => {
   const auth = useAuthStore()
   if (!to.meta.public && !auth.token) {
     return { name: 'login' }
+  }
+  // Misma verificación que en el portal, para el panel de personal.
+  if (!to.meta.public && auth.token) {
+    const sesionValida = await auth.validar()
+    if (!sesionValida) {
+      return { name: 'login' }
+    }
   }
   if (to.name === 'login' && auth.token) {
     return { name: 'dashboard' }

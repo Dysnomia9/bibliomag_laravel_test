@@ -48,6 +48,10 @@ const detalleBloque = ref<(typeof horariosBloques)[number] | null>(null)
 
 const cancelacionPendiente = ref<{ salaId: number; horaInicio: number; salaNombre: string; bloqueLabel: string } | null>(null)
 
+const devolucionPendiente = ref<{ reservaId: number; salaNombre: string; bloqueLabel: string } | null>(null)
+const registradoPorDevolucion = ref('')
+const devolviendo = ref(false)
+
 const codigoLogiaScan = ref('')
 const registradoPorScan = ref('')
 const escaneando = ref(false)
@@ -203,6 +207,33 @@ async function confirmarCancelacion() {
   }
 }
 
+function pedirDevolucion(salaNombre: string, bloqueLabel: string, reservaId: number) {
+  registradoPorDevolucion.value = ''
+  devolucionPendiente.value = { reservaId, salaNombre, bloqueLabel }
+}
+
+async function confirmarDevolucion() {
+  if (!devolucionPendiente.value) return
+  if (!registradoPorDevolucion.value.trim()) {
+    toast.error('Ingrese quién registra la devolución')
+    return
+  }
+  devolviendo.value = true
+  try {
+    await api.patch(`/reservas/${devolucionPendiente.value.reservaId}/devolver`, {
+      registrado_por: registradoPorDevolucion.value.trim(),
+    })
+    toast.success('Devolución de llave confirmada')
+    devolucionPendiente.value = null
+    detalleOpen.value = false
+    await cargar()
+  } catch (e: any) {
+    toast.error(e?.response?.data?.message ?? 'No se pudo confirmar la devolución')
+  } finally {
+    devolviendo.value = false
+  }
+}
+
 function formatFechaLarga(fecha: string) {
   return fecha === hoy ? 'Hoy' : new Date(`${fecha}T12:00:00`).toLocaleDateString('es-CL')
 }
@@ -340,7 +371,20 @@ function formatFechaLarga(fecha: string) {
                 </td>
                 <td v-for="bloque in horariosBloques" :key="bloque.inicio" class="px-2 py-2 text-center">
                   <div
-                    v-if="isOcupado(sala.id, bloque.inicio)"
+                    v-if="isOcupado(sala.id, bloque.inicio) && getReserva(sala.id, bloque.inicio)?.hora_devolucion_real"
+                    class="group relative bg-gray-50 border border-gray-200 rounded-lg px-2 py-2 cursor-pointer hover:bg-gray-100 transition-colors"
+                    @click="verDetalle(sala, bloque)"
+                  >
+                    <div class="flex items-center justify-center gap-1 text-xs font-medium text-gray-500">
+                      <svg class="w-3 h-3 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                      Llave devuelta
+                    </div>
+                    <div class="text-[10px] text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">Click para ver detalle</div>
+                  </div>
+                  <div
+                    v-else-if="isOcupado(sala.id, bloque.inicio)"
                     class="group relative bg-red-50 border border-red-200 rounded-lg px-2 py-2 cursor-pointer hover:bg-red-100 transition-colors"
                     @click="verDetalle(sala, bloque)"
                   >
@@ -394,6 +438,7 @@ function formatFechaLarga(fecha: string) {
       <div class="flex gap-4 mt-4 text-xs text-gray-500">
         <div class="flex items-center gap-1.5"><div class="w-3 h-3 rounded bg-emerald-100 border border-emerald-200" /> Disponible</div>
         <div class="flex items-center gap-1.5"><div class="w-3 h-3 rounded bg-red-100 border border-red-200" /> Ocupada</div>
+        <div class="flex items-center gap-1.5"><div class="w-3 h-3 rounded bg-gray-100 border border-gray-200" /> Llave devuelta</div>
       </div>
 
       <div
@@ -443,7 +488,7 @@ function formatFechaLarga(fecha: string) {
             </button>
             <button
               @click="confirmarReserva"
-              class="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm"
+              class="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
             >
               Confirmar
             </button>
@@ -484,6 +529,13 @@ function formatFechaLarga(fecha: string) {
             </div>
           </div>
 
+          <div v-if="detalleReserva.hora_devolucion_real" class="mb-6 flex items-center gap-2 px-3 py-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700">
+            <svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+            Devolución de llave confirmada
+          </div>
+
           <div class="flex gap-3">
             <button
               @click="detalleOpen = false"
@@ -491,12 +543,20 @@ function formatFechaLarga(fecha: string) {
             >
               Cerrar
             </button>
-            <button
-              @click="pedirCancelacion(detalleSala.nombre, detalleBloque.label, detalleSala.id, detalleBloque.inicio)"
-              class="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium text-sm"
-            >
-              Cancelar reserva
-            </button>
+            <template v-if="!detalleReserva.hora_devolucion_real">
+              <button
+                @click="pedirCancelacion(detalleSala.nombre, detalleBloque.label, detalleSala.id, detalleBloque.inicio)"
+                class="flex-1 px-4 py-2.5 border border-red-300 text-red-700 rounded-lg hover:bg-red-50 transition-colors font-medium text-sm"
+              >
+                Cancelar reserva
+              </button>
+              <button
+                @click="pedirDevolucion(detalleSala.nombre, detalleBloque.label, detalleReserva.id)"
+                class="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium text-sm"
+              >
+                Confirmar devolución
+              </button>
+            </template>
           </div>
         </div>
       </div>
@@ -524,6 +584,47 @@ function formatFechaLarga(fecha: string) {
               class="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium text-sm"
             >
               Sí, cancelar
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div
+        v-if="devolucionPendiente"
+        class="fixed inset-0 bg-black/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4"
+        @click.self="devolucionPendiente = null"
+      >
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+          <h3 class="text-lg font-bold text-gray-900 mb-1">Confirmar devolución de llave</h3>
+          <p class="text-sm text-gray-500 mb-4">
+            Se registrará la devolución de <strong>{{ devolucionPendiente.salaNombre }}</strong> para el bloque
+            <strong>{{ devolucionPendiente.bloqueLabel }}</strong>. La reserva queda marcada como finalizada
+            (no se borra, a diferencia de cancelar).
+          </p>
+          <div class="mb-6">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Registrado por</label>
+            <input
+              v-model="registradoPorDevolucion"
+              type="text"
+              list="staff-nombres"
+              placeholder="Nombre de quien registra"
+              class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+              @keydown.enter="confirmarDevolucion"
+            />
+          </div>
+          <div class="flex gap-3">
+            <button
+              @click="devolucionPendiente = null"
+              class="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors font-medium text-sm"
+            >
+              Cancelar
+            </button>
+            <button
+              @click="confirmarDevolucion"
+              :disabled="devolviendo"
+              class="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium text-sm disabled:opacity-60"
+            >
+              {{ devolviendo ? 'Guardando…' : 'Confirmar' }}
             </button>
           </div>
         </div>

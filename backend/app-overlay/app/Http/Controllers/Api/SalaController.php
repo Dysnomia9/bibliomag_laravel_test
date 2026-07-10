@@ -113,6 +113,26 @@ class SalaController extends Controller
         return response()->json(null, 204);
     }
 
+    /**
+     * Confirmación manual de devolución de llave (sin escaneo de código de barras) —
+     * a diferencia de destroyReserva(), no borra la reserva: deja registrado quién y
+     * cuándo se devolvió, igual que hace escanearLogia() por la vía del código de barras.
+     */
+    public function devolverReserva(Request $request, Reserva $reserva)
+    {
+        $data = $request->validate([
+            'registrado_por' => ['required', 'string', 'max:255'],
+        ]);
+
+        try {
+            $reserva = $this->reservaSalaService->registrarDevolucion($reserva, $data['registrado_por']);
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 409);
+        }
+
+        return response()->json($reserva);
+    }
+
     public function scanLogia(Request $request)
     {
         $data = $request->validate([

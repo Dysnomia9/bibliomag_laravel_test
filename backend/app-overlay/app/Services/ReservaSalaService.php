@@ -51,6 +51,28 @@ class ReservaSalaService
         return $reserva->fresh();
     }
 
+    /**
+     * Confirma manualmente (desde el panel de personal, sin escaneo de código de barras)
+     * que la llave de una logia fue devuelta — equivalente a la segunda mitad de
+     * escanearLogia(), pero identificando la reserva directamente por id en vez de por
+     * código de barras + bloque horario vigente. A diferencia de cancelar (que elimina la
+     * reserva), esto conserva el registro con quién y cuándo se devolvió la llave.
+     */
+    public function registrarDevolucion(Reserva $reserva, string $registradoPor): Reserva
+    {
+        if ($reserva->hora_devolucion_real) {
+            throw new \RuntimeException('Esta reserva ya tiene registrada su devolución');
+        }
+
+        $reserva->update([
+            'devuelto_por' => $registradoPor,
+            'hora_devolucion_real' => now(),
+            'estado' => 'finalizada',
+        ]);
+
+        return $reserva->fresh();
+    }
+
     public function existeSolapamiento(int $salaId, string $fecha, int $horaInicio, int $horaFin, ?int $ignorarReservaId = null): bool
     {
         return Reserva::where('sala_id', $salaId)
