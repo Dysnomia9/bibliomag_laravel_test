@@ -79,6 +79,22 @@ function esMia(reserva: Reserva) {
   return reserva.usuario_id === auth.usuario?.id
 }
 
+const horaActual = new Date().getHours()
+const bloqueActual = horariosBloques.find((b) => horaActual >= b.inicio && horaActual < b.fin)
+
+function reservarAhora() {
+  if (!bloqueActual || selectedDate.value !== hoy) {
+    toast.error('Solo puedes reservar "ahora" para el día de hoy, dentro del horario de atención')
+    return
+  }
+  const salaLibre = filteredSalas.value.find((s) => !getReserva(s.id, bloqueActual!.inicio))
+  if (!salaLibre) {
+    toast.error('No hay salas disponibles en este momento')
+    return
+  }
+  openReservaModal(salaLibre, bloqueActual)
+}
+
 function openReservaModal(sala: Sala, bloque: (typeof horariosBloques)[number]) {
   selectedSala.value = sala
   selectedBloque.value = bloque
@@ -185,6 +201,13 @@ function formatFechaLarga(fecha: string) {
             class="w-full px-3.5 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none text-sm"
           />
         </div>
+        <button
+          v-if="bloqueActual && selectedDate === hoy"
+          @click="reservarAhora"
+          class="px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium shrink-0"
+        >
+          Reservar ahora ({{ bloqueActual.label }})
+        </button>
       </div>
 
       <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
@@ -193,8 +216,14 @@ function formatFechaLarga(fecha: string) {
             <thead>
               <tr class="bg-gray-50 border-b border-gray-200">
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase sticky left-0 bg-gray-50 z-10 min-w-[130px]">Sala</th>
-                <th v-for="b in horariosBloques" :key="b.inicio" class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase min-w-[110px]">
+                <th
+                  v-for="b in horariosBloques"
+                  :key="b.inicio"
+                  class="px-3 py-3 text-center text-xs font-medium uppercase min-w-[110px]"
+                  :class="selectedDate === hoy && b.inicio === bloqueActual?.inicio ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500'"
+                >
                   {{ b.label }}
+                  <span v-if="selectedDate === hoy && b.inicio === bloqueActual?.inicio" class="block text-[10px] normal-case font-semibold text-indigo-500">Ahora</span>
                 </th>
               </tr>
             </thead>

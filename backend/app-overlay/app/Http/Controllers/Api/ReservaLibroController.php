@@ -44,6 +44,10 @@ class ReservaLibroController extends Controller
             return response()->json(['message' => 'Este libro ya está reservado/prestado por otra persona'], 409);
         }
 
+        if ($libro->estado_proceso !== 'en_estante') {
+            return response()->json(['message' => "Este libro no está disponible para préstamo (estado: {$libro->estado_proceso})"], 409);
+        }
+
         $reserva = ReservaLibro::create([
             'usuario_id' => $data['usuario_id'],
             'libro_id' => $libro->id,

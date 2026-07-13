@@ -17,6 +17,7 @@ class LibroFactory extends Factory
             'autor' => fake()->name(),
             'categoria' => fake()->randomElement(['Novela', 'Ciencia', 'Historia', 'Tecnología']),
             'disponible' => true,
+            'estado_proceso' => 'en_estante',
         ];
     }
 }

@@ -18,7 +18,11 @@ Todos los módulos originalmente planeados (usuarios, entrada, préstamos,
 salas, reportes) ya están implementados de punta a punta — no quedan rutas
 placeholder tipo "Próximamente". Además existen dos capas de autenticación
 separadas (`staff` y `usuario`) y un portal de autoservicio para usuarios
-finales que no existía en el plan inicial. **No asumas que un módulo "falta"
+finales que no existía en el plan inicial. También hay catalogación de
+libros (formato MARC/Dewey-lite, solo admin) con gestión de estado físico
+del ejemplar ("Estado de Libro", todo staff) — es el primer punto del
+sistema con un chequeo de rol real (`staff.rol`), ver convención 7 más
+abajo. **No asumas que un módulo "falta"
 por lo que digan README/tesis/documentación externa — verifica el código
 real en `app-overlay/` y `frontend/src/` primero.**
 
@@ -56,12 +60,18 @@ backend/
       Staff, Usuario, Entrada, Prestamo, Sala, Reserva, Libro, ReservaLibro, CodigoAcceso
     app/Http/Middleware/
       EnsureIsStaff, EnsureIsUsuario     # separan los dos guards de Sanctum
+      EnsureIsAdmin (alias 'admin')      # chequea staff.rol === 'admin'; se aplica ADEMÁS
+                                            de 'staff' (ej: ['auth:sanctum','staff','admin']),
+                                            no lo reemplaza
     app/Http/Controllers/Api/
       AuthController, UsuarioAuthController   # login staff vs. login usuario (portal)
       DashboardController, UsuarioController, EntradaController, PrestamoController,
       SalaController, ReporteController, CodigoAccesoController, StaffController (GET /staff,
       solo para autocompletar "registrado/prestado/devuelto por" en el frontend)
-      LibroController, ReservaLibroController  # catálogo de libros y reservas de libro (retiro)
+      LibroController    # index/buscarPorCodigo (todo staff); store/update (solo admin,
+                            catalogación MARC/Dewey-lite); cambiarEstado (todo staff,
+                            gestiona libros.estado_proceso — ver Gotchas)
+      ReservaLibroController  # reservas de libro (retiro)
       PortalController                         # endpoints del portal de autoservicio (/mi/*)
     app/Services/ReservaSalaService.php  # solapamiento de reservas + escanearLogia() (Horizon)
     app/Console/Commands/
@@ -76,7 +86,8 @@ frontend/
   src/
     views/            LoginView, LoginV2View, DashboardView, EntradaView, PrestamoView,
                        ListadoPrestamosView, ListadoLibrosView, UsuariosView, SalasView,
-                       ReportesView, CodigoQrView
+                       ReportesView, CodigoQrView, CatalogacionLibrosView (solo admin,
+                       meta.requiresAdmin), EstadoLibroView
     views/portal/      PortalLoginView, PortalHomeView, PortalEntradaView,
                        PortalCatalogoView, PortalSalasView
     components/layout/  StaffLayout, TopBar (navegación + dropdown "Gestiones Admin" con
@@ -88,7 +99,9 @@ frontend/
     services/         api.ts (staff, Bearer token de auth.ts), apiUsuario.ts (portal)
     composables/      useRut.ts, useToast.ts, useStaffShortcuts.ts (atajos de teclado del staff),
                        useStaffNombres.ts (cachea GET /staff para datalists de "registrado por")
-    router/index.ts   dos guards: rutas `meta.portal` usan usuarioAuth, el resto usa auth
+    router/index.ts   dos guards: rutas `meta.portal` usan usuarioAuth, el resto usa auth;
+                       además `meta.requiresAdmin` redirige a dashboard si
+                       `auth.staff?.rol !== 'admin'`
     types/index.ts    Tipos TS que reflejan los modelos de Laravel
 ```
 
@@ -133,6 +146,14 @@ frontend/
    `getBoundingClientRect()` del botón (ver `adminMenuOpen`/`adminMenuPos` en
    `TopBar.vue`) — si lo pones como `absolute` dentro del `<nav>`, queda
    encerrado y aparece un scroll para verlo en vez de flotar por encima.
+7. **Restringir una acción a `rol = 'admin'`**: backend, agregar el
+   middleware `admin` al grupo de rutas (junto a `staff`, no en su lugar —
+   ver `App\Http\Middleware\EnsureIsAdmin`); frontend, marcar la ruta con
+   `meta: { requiresAdmin: true }` en `router/index.ts` (el guard ya
+   redirige a dashboard si no corresponde) y, si el link vive en
+   `TopBar.vue`, agregar `adminOnly: true` a esa entrada de `adminLinks`
+   (ya se filtra con `adminLinksVisibles()`). Las tres capas son necesarias:
+   el middleware es la única que realmente protege, las otras dos son UX.
 
 ## Deuda técnica conocida (no asumir que ya se resolvió sin verificar el código)
 
@@ -151,7 +172,25 @@ frontend/
   una tabla relacional `reserva_participantes`. `SalaController::index`
   reconstruye manualmente el mapeo RUT → usuario porque no hay relación
   Eloquent real.
-- **Sin tests automatizados** (no hay ningún `*Test.php` en el repo).
+- **Sí hay tests automatizados** (`backend/app-overlay/tests/Feature/`:
+  `AuthTest`, `UsuarioAuthTest`, `MiddlewareTest`, `EntradaTest`,
+  `SalaReservaTest`, `SalaDevolucionTest`, `PortalReservaTest`,
+  `PortalEntradaTest`), corren contra una DB Postgres dedicada
+  (`biblioteca_test`, ver `docker-entrypoint.sh`) con
+  `docker compose exec backend php artisan test`. No cubren todavía
+  `LibroController` ni la catalogación/`estado_proceso`.
+- **`Libro`: dos ejes de estado independientes** — `disponible` (boolean,
+  circulación: ¿está prestado/reservado ahora mismo?) y `estado_proceso`
+  (string, procesamiento bibliotecario: `inventario` | `procesos_tecnicos` |
+  `por_colocar` | `en_estante` | `estanteria_auxiliar` | `de_baja`). Un libro
+  solo es prestable/reservable si `estado_proceso === 'en_estante'` **y**
+  `disponible === true` — no colapses estos dos campos en uno ni le des a
+  `disponible` significados de estado físico, rompería
+  `PrestamoController`/`ReservaLibroController`. Se dejaron fuera a
+  propósito (ver commit de catalogación): contadores de préstamos
+  históricos/última fecha (derivables por query sobre `prestamos`), y la
+  separación registro bibliográfico vs. ejemplar físico ("Bib No."/"Item
+  No." estilo Horizon) — sigue siendo 1 fila `Libro` = 1 copia física.
 - **Credenciales de Postgres hardcodeadas** en `docker-compose.yml`
   (`biblioteca`/`biblioteca`) — aceptable para desarrollo local, no usar tal
   cual como base de un despliegue.
@@ -252,6 +291,28 @@ frontend/
     trae un placeholder inventado (`'62572'`) y el comando
     `horizon:codigos-logia` para cargar el mapeo real cuando se tenga, sin
     tocar código.
+- **Catalogación de libros sin control de estado físico**: antes no existía
+  forma de crear libros desde la UI (`LibroController` solo tenía
+  `index`/`buscarPorCodigo`) ni de distinguir un libro recién ingresado (aún
+  en inventario/procesos técnicos) de uno realmente disponible en estante.
+  Ya se agregó `libros.estado_proceso` (ver Deuda técnica) +
+  `LibroController::store/update` (solo admin, `/libros/catalogacion`) +
+  `cambiarEstado` (todo staff, `/libros/estado`). `PrestamoController` y
+  `ReservaLibroController` ya exigen `estado_proceso === 'en_estante'`
+  además de `disponible`, y `PortalController::catalogo()` ya filtra por
+  `en_estante`. No reintroduzcas un `POST /libros` que no dependa de este
+  chequeo, ni dejes que un libro recién catalogado sea prestable por
+  defecto (nace en `inventario`, no en `en_estante`).
+- **Reservas de logia en horas no redondas (ej. alguien llega a las
+  14:30)**: se evaluó pasar a horarios libres en minutos y se descartó a
+  propósito — los bloques fijos de 2h (08-10, 10-12, ...) son una regla de
+  negocio (equidad de uso) y el escaneo Horizon de logias
+  (`ReservaSalaService::escanearLogia()`) ya calza con esa cadencia fija; no
+  es una limitación técnica a "arreglar". Lo que sí se agregó es UX: la
+  columna del bloque vigente se resalta ("Ahora") y hay un botón "Reservar
+  ahora" en `SalasView.vue`/`PortalSalasView.vue` que preselecciona ese
+  bloque en la primera sala libre — la hora real de inicio queda en
+  `hora_prestamo_real`, separada del bloque nominal.
 
 ## Checklist antes de dar un módulo por terminado
 

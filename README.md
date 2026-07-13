@@ -18,6 +18,8 @@ Todos los módulos principales están implementados y conectados end-to-end
 | Reportes | `/reportes` | `ReporteController` |
 | Código QR de acceso | `/codigo-qr` (dropdown) | `CodigoAccesoController` |
 | Listado de libros | `/libros/listado` (dropdown) | `LibroController` |
+| Catalogación de libros | `/libros/catalogacion` (dropdown, **solo admin**) | `LibroController::store/update` |
+| Estado de libro | `/libros/estado` (dropdown) | `LibroController::cambiarEstado` |
 
 En el TopBar, los módulos secundarios (Usuarios, Listado Préstamos, Listado
 Libros, Código QR) están agrupados bajo el botón desplegable **"Gestiones
@@ -39,6 +41,19 @@ de verdad — no se puede reservar ni prestar un libro que ya está ocupado por
 otra persona (409), y se libera automáticamente al cancelar la reserva o
 devolver el préstamo.
 
+La catalogación de libros usa un formato tipo MARC/Horizon simplificado
+(`clasificacion` Dewey+Cutter+año, `coleccion`, `editorial`,
+`anio_publicacion`, `ubicacion`, `tipo_material`, `volumen`, notas pública/
+interna, `precio`) y está restringida a staff con `rol = 'admin'`
+(`LibroController::store/update`, protegidos con el middleware `admin`). El
+ciclo de vida físico de cada ejemplar se gestiona aparte, en
+`libros.estado_proceso` (`inventario` → `procesos_tecnicos` → `por_colocar`
+→ `en_estante` / `estanteria_auxiliar` → `de_baja`), editable por cualquier
+staff desde "Estado de Libro" — **es un eje distinto de `disponible`**: un
+libro solo es prestable/reservable si está `en_estante` **y** `disponible`.
+El catálogo público del portal (`/mi/catalogo`) solo muestra libros
+`en_estante`.
+
 También convive con **Horizon** (sistema externo que ya usa códigos de
 barra reales) para registrar préstamo/devolución de logias y asistencia de
 puestos de trabajo — ver `config/horizon_barcodes.php` y el comando
@@ -47,7 +62,13 @@ entregue.
 
 Auth: dos guards de Sanctum independientes — `staff` (bibliotecarios, vía
 `AuthController`) y `usuario` (portal, vía `UsuarioAuthController`) —
-implementados como middlewares (`EnsureIsStaff`, `EnsureIsUsuario`).
+implementados como middlewares (`EnsureIsStaff`, `EnsureIsUsuario`). Dentro
+del guard `staff` hay además un rol (`staff.rol`: `admin` | `staff`),
+verificado por el middleware `EnsureIsAdmin` (alias `admin`) — es el primer
+chequeo de rol real del sistema, usado hoy solo para restringir la
+catalogación de libros. En el frontend, el router respeta
+`meta.requiresAdmin` y `TopBar.vue` oculta los links marcados `adminOnly`
+cuando el staff logueado no es admin.
 
 ## Estructura
 
@@ -170,8 +191,12 @@ reconstruye el mapeo RUT → usuario a mano. Los préstamos de **equipos**
 (audífonos, notebooks) siguen identificándose por código de inventario en
 texto libre, ya que no son parte del catálogo de libros. Los préstamos de
 **libros**, en cambio, ya están conectados al catálogo real (`libro_id` +
-`codigo_barras`, con validación de disponibilidad) — pero todavía no existe
-un modelo de "ejemplar" (una fila `Libro` = un solo `disponible`, no soporta
-múltiples copias físicas del mismo título). Antes de asumir que algo "falta"
-o "está roto", revisa el código real en `app-overlay/` — este README se
-puede desactualizar.
+`codigo_barras`, con validación de disponibilidad y de `estado_proceso`) —
+pero todavía no existe un modelo de "ejemplar" (una fila `Libro` = un solo
+`disponible`/`estado_proceso`, no soporta múltiples copias físicas del mismo
+título). Tampoco se separa registro bibliográfico de ejemplar físico (sin
+"Bib No." / "Item No." tipo Horizon) ni se guardan contadores históricos de
+préstamo (número de préstamos, fecha del último) — son derivables por query
+sobre `prestamos` si algún día hacen falta, a propósito no se duplicaron
+como columnas. Antes de asumir que algo "falta" o "está roto", revisa el
+código real en `app-overlay/` — este README se puede desactualizar.

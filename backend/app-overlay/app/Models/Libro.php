@@ -17,12 +17,27 @@ class Libro extends Model
         'autor',
         'categoria',
         'disponible',
+        'clasificacion',
+        'coleccion',
+        'editorial',
+        'anio_publicacion',
+        'ubicacion',
+        'tipo_material',
+        'volumen',
+        'nota_interna',
+        'nota_publica',
+        'precio',
+        'estado_proceso',
+        'fecha_inventario',
     ];
 
     protected function casts(): array
     {
         return [
             'disponible' => 'boolean',
+            'anio_publicacion' => 'integer',
+            'precio' => 'decimal:2',
+            'fecha_inventario' => 'date',
         ];
     }
 

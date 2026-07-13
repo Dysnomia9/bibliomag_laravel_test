@@ -2,7 +2,7 @@ export type Staff = {
   id: number
   email: string
   nombre: string
-  rol: string
+  rol: 'admin' | 'staff'
 }
 
 export type Usuario = {
@@ -57,6 +57,16 @@ export type ResumenDashboard = {
   ultimosPrestamos: Prestamo[]
 }
 
+export type EstadoProcesoLibro =
+  | 'inventario'
+  | 'procesos_tecnicos'
+  | 'por_colocar'
+  | 'en_estante'
+  | 'estanteria_auxiliar'
+  | 'de_baja'
+
+export type TipoMaterialLibro = 'libro' | 'revista' | 'tesis' | 'dvd' | 'otro'
+
 export type Libro = {
   id: number
   codigo_barras: string
@@ -64,6 +74,18 @@ export type Libro = {
   autor: string | null
   categoria: string | null
   disponible: boolean
+  clasificacion: string | null
+  coleccion: string | null
+  editorial: string | null
+  anio_publicacion: number | null
+  ubicacion: string | null
+  tipo_material: TipoMaterialLibro
+  volumen: string | null
+  nota_interna: string | null
+  nota_publica: string | null
+  precio: string | null
+  estado_proceso: EstadoProcesoLibro
+  fecha_inventario: string | null
 }
 
 export type EstadoPortal = {

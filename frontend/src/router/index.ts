@@ -96,6 +96,17 @@ const router = createRouter({
       name: 'listado-libros',
       component: () => import('@/views/ListadoLibrosView.vue'),
     },
+    {
+      path: '/libros/catalogacion',
+      name: 'catalogacion-libros',
+      component: () => import('@/views/CatalogacionLibrosView.vue'),
+      meta: { requiresAdmin: true },
+    },
+    {
+      path: '/libros/estado',
+      name: 'estado-libro',
+      component: () => import('@/views/EstadoLibroView.vue'),
+    },
   ],
 })
 
@@ -132,6 +143,9 @@ router.beforeEach(async (to) => {
     }
   }
   if (to.name === 'login' && auth.token) {
+    return { name: 'dashboard' }
+  }
+  if (to.meta.requiresAdmin && auth.staff?.rol !== 'admin') {
     return { name: 'dashboard' }
   }
 })

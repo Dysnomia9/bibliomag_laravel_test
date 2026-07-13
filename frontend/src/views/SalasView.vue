@@ -138,6 +138,19 @@ const disponiblesAhora = computed(() => {
   return salas.value.filter((s) => !isOcupado(s.id, bloqueActual!.inicio)).length
 })
 
+function reservarAhora() {
+  if (!bloqueActual) {
+    toast.error('Fuera del horario de atención (08:00 – 21:00)')
+    return
+  }
+  const salaLibre = salas.value.find((s) => !isOcupado(s.id, bloqueActual!.inicio))
+  if (!salaLibre) {
+    toast.error('No hay logias disponibles en este momento')
+    return
+  }
+  openReservaModal(salaLibre, bloqueActual)
+}
+
 function openReservaModal(sala: Sala, bloque: (typeof horariosBloques)[number]) {
   selectedSala.value = sala
   selectedBloque.value = bloque
@@ -266,10 +279,22 @@ function formatFechaLarga(fecha: string) {
           </div>
         </div>
         <div class="bg-white rounded-xl shadow-md p-5">
-          <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Salas Disponibles Ahora</div>
-          <div class="flex items-end gap-2">
-            <span class="text-3xl font-bold text-emerald-600">{{ disponiblesAhora }}</span>
-            <span class="text-sm text-gray-400 mb-1">de {{ salas.length }} salas</span>
+          <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+            Salas Disponibles Ahora
+            <span v-if="bloqueActual" class="normal-case text-gray-400">· bloque {{ bloqueActual.label }}</span>
+          </div>
+          <div class="flex items-end justify-between gap-2 flex-wrap">
+            <div class="flex items-end gap-2">
+              <span class="text-3xl font-bold text-emerald-600">{{ disponiblesAhora }}</span>
+              <span class="text-sm text-gray-400 mb-1">de {{ salas.length }} salas</span>
+            </div>
+            <button
+              v-if="bloqueActual"
+              @click="reservarAhora"
+              class="px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-xs font-medium shrink-0"
+            >
+              Reservar ahora
+            </button>
           </div>
         </div>
         <div class="bg-white rounded-xl shadow-md p-5">
@@ -358,8 +383,14 @@ function formatFechaLarga(fecha: string) {
             <thead>
               <tr class="bg-gray-50">
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase sticky left-0 bg-gray-50 z-10 min-w-[140px]">Logia</th>
-                <th v-for="b in horariosBloques" :key="b.inicio" class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase min-w-[120px]">
+                <th
+                  v-for="b in horariosBloques"
+                  :key="b.inicio"
+                  class="px-3 py-3 text-center text-xs font-medium uppercase min-w-[120px]"
+                  :class="b.inicio === bloqueActual?.inicio ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500'"
+                >
                   {{ b.label }}
+                  <span v-if="b.inicio === bloqueActual?.inicio" class="block text-[10px] normal-case font-semibold text-indigo-500">Ahora</span>
                 </th>
               </tr>
             </thead>

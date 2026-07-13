@@ -389,6 +389,10 @@ class SeedMockupData extends Command
                 'autor' => $item['autor'],
                 'categoria' => $item['categoria'],
                 'disponible' => random_int(0, 100) < 78,
+                // Los libros de prueba ya están catalogados y en estante: si no, ninguno
+                // sería prestable/reservable (PrestamoController/ReservaLibroController
+                // exigen estado_proceso = 'en_estante') y las demos/otros seeds quedarían rotos.
+                'estado_proceso' => 'en_estante',
             ]));
         }
 

@@ -46,6 +46,12 @@ Route::middleware(['auth:sanctum', 'staff'])->group(function () {
 
     Route::get('/libros', [LibroController::class, 'index']);
     Route::get('/libros/{codigo}', [LibroController::class, 'buscarPorCodigo']);
+    Route::patch('/libros/{libro}/estado', [LibroController::class, 'cambiarEstado']);
+
+    Route::middleware('admin')->group(function () {
+        Route::post('/libros', [LibroController::class, 'store']);
+        Route::patch('/libros/{libro}', [LibroController::class, 'update']);
+    });
 
     Route::get('/reservas-libro', [ReservaLibroController::class, 'index']);
     Route::post('/reservas-libro', [ReservaLibroController::class, 'store']);

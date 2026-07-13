@@ -71,7 +71,7 @@ class PortalController extends Controller
 
     public function catalogo(Request $request)
     {
-        $query = Libro::query();
+        $query = Libro::where('estado_proceso', 'en_estante');
 
         if ($busqueda = $request->query('q')) {
             $query->where(function ($q) use ($busqueda) {
