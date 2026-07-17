@@ -52,10 +52,12 @@ PostgreSQL** (backend API), 100% dockerizada.
 
 ```
 biblioteca-vue-laravel/
-├── backend/              # Laravel API (se auto-instala dentro del contenedor)
+├── backend/              # Proyecto Laravel completo y normal (API-only)
 │   ├── Dockerfile
 │   ├── docker-entrypoint.sh
-│   └── app-overlay/      # Nuestro código (Models, Controllers, routes, migrations, seeders)
+│   ├── app/               # Models, Controllers, Middleware, Services, Console/Commands
+│   ├── config/ database/ routes/ tests/ bootstrap/  # lo que editamos habitualmente
+│   └── public/ resources/ storage/ artisan composer.json  # esqueleto estándar de Laravel
 ├── frontend/              # Vue 3 + Vite + Tailwind + Pinia
 │   └── src/
 └── docker-compose.yml
@@ -76,21 +78,24 @@ biblioteca-vue-laravel/
 | Catalogación de libros | `/libros/catalogacion` (dropdown, **solo admin**) | `LibroController::store/update` |
 | Estado de libro | `/libros/estado` (dropdown) | `LibroController::cambiarEstado` |
 
-### ¿Por qué "app-overlay"?
+### Cómo se arma la imagen del backend
 
-Laravel no se puede "vendorizar" fácilmente dentro de una imagen Docker sin antes
-correr `composer create-project`. Por eso el `docker-entrypoint.sh` instala Laravel
-la primera vez dentro de un volumen (`laravel_app`), y luego copia encima nuestro
-código (`app-overlay/`) — modelos, controladores, rutas, migraciones y seeders.
-En arranques posteriores, si Laravel ya existe en el volumen, solo se reaplica el
-overlay y se corren migraciones — no se reinstala Composer desde cero.
+`backend/Dockerfile` es un Dockerfile Laravel estándar: `composer install`
+corre en tiempo de **build** (capa cacheada por Docker — solo se reinstala
+si `composer.json`/`composer.lock` cambian) y `COPY . .` copia el proyecto
+completo, ya armado, a la imagen. La imagen queda autocontenida: no depende
+de ningún volumen para tener el código, y el primer arranque no necesita
+red para instalar nada.
 
-Es un patrón de **desarrollo**, no de despliegue: la imagen no queda
-autocontenida (el Laravel real vive en un volumen, no en la imagen), y el
-primer arranque depende de red para bajar dependencias vía Composer. Para un
-lanzamiento real conviene un Dockerfile multi-stage que corra
-`composer install --no-dev` en tiempo de **build** e incluya `app-overlay/`
-directo en la imagen final, sin el paso de "instalar en frío" al arrancar.
+`docker-entrypoint.sh` solo hace trabajo de **runtime**: esperar a que la
+base de datos esté lista, correr migraciones, cargar datos de prueba si
+hace falta, y levantar el servidor.
+
+(Hasta el 2026-07-17 esto se resolvía distinto — un "overlay" que se
+aplicaba en el primer arranque del contenedor sobre un Laravel instalado en
+un volumen. Se simplificó a un Dockerfile normal porque no aportaba
+ninguna ventaja real sobre el patrón estándar y hacía la imagen depender de
+red/volumen en el primer arranque — mala base para un despliegue real.)
 
 ## Cómo levantar el proyecto
 
@@ -109,9 +114,10 @@ Esto levanta:
 | backend   | http://localhost:8000         | Laravel API                          |
 | db        | localhost:5432                | PostgreSQL                           |
 
-**Primer arranque:** el backend tarda 1–3 minutos en levantar porque instala Laravel
-y Composer dentro del contenedor. Verás el log `>> Creando proyecto Laravel base...`.
-Arranques siguientes son casi instantáneos.
+**Primer arranque:** la imagen del backend puede tardar un par de minutos en
+construirse la primera vez (`composer install` corre en el build). Una vez
+construida, arrancar y rearmar contenedores es rápido — el código ya está
+horneado en la imagen, no se reinstala nada al levantar.
 
 > Este `docker-compose.yml` es un entorno de **desarrollo** (bind mount del
 > frontend, credenciales de Postgres hardcodeadas en el propio archivo). No
@@ -167,7 +173,7 @@ npm run dev
 
 ## Tests y benchmark de rendimiento
 
-Hay una suite de Feature tests (`backend/app-overlay/tests/Feature/`) que
+Hay una suite de Feature tests (`backend/tests/Feature/`) que
 cubre login de staff/usuario, registro de entradas, reservas de sala
 (solapamiento y validación grupal, incluido el cruce entre salas distintas),
 préstamos de equipos, cálculo/cobro de multas por atraso y su reporte
@@ -207,4 +213,4 @@ tests.
   conviene separar por dominio en vez de agregar más métodos ahí.
 
 Antes de asumir que algo "falta" o "está roto", revisa el código real en
-`app-overlay/` — este README se puede desactualizar.
+`backend/` — este README se puede desactualizar.

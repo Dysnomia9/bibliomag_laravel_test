@@ -30,8 +30,6 @@ services:
       DB_PASSWORD: biblioteca
       FRONTEND_URL: http://localhost:5173
       SANCTUM_STATEFUL_DOMAINS: localhost:5173
-    volumes:
-      - laravel_app:/var/www
     ports:
       - "8000:8000"
 
@@ -49,4 +47,3 @@ services:
 
 volumes:
   db_data:
-  laravel_app:

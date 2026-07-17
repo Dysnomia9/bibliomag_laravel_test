@@ -24,7 +24,7 @@ del ejemplar ("Estado de Libro", todo staff) — es el primer punto del
 sistema con un chequeo de rol real (`staff.rol`), ver convención 7 más
 abajo. **No asumas que un módulo "falta"
 por lo que digan README/tesis/documentación externa — verifica el código
-real en `app-overlay/` y `frontend/src/` primero.**
+real en `backend/` y `frontend/src/` primero.**
 
 ## Cobertura funcional vs. Horizon (checklist de evaluación de tesis)
 
@@ -66,7 +66,7 @@ tesis, y volver a correr esta tabla contra el código si pasó tiempo desde
 | Capa | Tecnología |
 |---|---|
 | Frontend | Vue 3 (Composition API, `<script setup>`), TypeScript, Vite, Pinia, Vue Router, Tailwind CSS, Axios |
-| Backend | Laravel 12 (API-only — Laravel 11 se descartó por advisories de Composer en `laravel/framework`, ver `docker-entrypoint.sh`), Sanctum (tokens Bearer, **no** sesión/cookie — ver nota abajo), PostgreSQL |
+| Backend | Laravel 12 (API-only — Laravel 11 se descartó por advisories de Composer en `laravel/framework`), Sanctum (tokens Bearer, **no** sesión/cookie — ver nota abajo), PostgreSQL |
 | Infra | Docker Compose: `frontend` (Vite dev server), `backend` (PHP-FPM/artisan serve), `db` (Postgres) |
 
 ## Cómo levantar el proyecto
@@ -85,47 +85,57 @@ docker compose exec backend php artisan mockup:datos --fresh  # regenerar todo d
 
 ## Estructura relevante
 
+`backend/` es un proyecto Laravel **normal y completo** — no hay overlay ni
+paso de instalación en frío (ver "Ya no existe `app-overlay/`" en Gotchas).
+Se edita directo ahí, igual que cualquier proyecto Laravel: `app/`,
+`config/`, `database/`, `routes/`, `tests/`, `bootstrap/app.php`. El resto
+(`public/`, `resources/`, `storage/`, `vendor/`, `artisan`, `composer.json`)
+es el esqueleto estándar de Laravel — no lo reestructures sin necesidad.
+
 ```
 backend/
-  docker-entrypoint.sh        # instala Laravel en frío la 1ra vez, aplica overlay, migra, seedea
-  app-overlay/                # ÚNICO lugar del backend que se edita — se "hornea" en la imagen
-    config/horizon_barcodes.php  # código de barras genérico de "puesto de trabajo" +
-                                   mapeo codigo_barras->nombre de logia (para el comando de import)
-    config/multas.php            # tarifa/gracia/tope de la multa por atraso — ajustar acá,
-                                   nunca hardcodear el monto en el controller/service
-    app/Models/
-      Staff, Usuario, Entrada, Prestamo, Sala, Reserva, Libro, ReservaLibro, CodigoAcceso
-    app/Http/Middleware/
-      EnsureIsStaff, EnsureIsUsuario     # separan los dos guards de Sanctum
-      EnsureIsAdmin (alias 'admin')      # chequea staff.rol === 'admin'; se aplica ADEMÁS
-                                            de 'staff' (ej: ['auth:sanctum','staff','admin']),
-                                            no lo reemplaza
-    app/Http/Controllers/Api/
-      AuthController, UsuarioAuthController   # login staff vs. login usuario (portal)
-      DashboardController, UsuarioController, EntradaController, PrestamoController,
-      SalaController, ReporteController, CodigoAccesoController, StaffController (GET /staff,
-      solo para autocompletar "registrado/prestado/devuelto por" en el frontend)
-      LibroController    # index/buscarPorCodigo (todo staff); store/update (solo admin,
-                            catalogación MARC/Dewey-lite); cambiarEstado (todo staff,
-                            gestiona libros.estado_proceso — ver Gotchas)
-      ReservaLibroController  # reservas de libro (retiro)
-      PortalController                         # endpoints del portal de autoservicio (/mi/*)
-    app/Services/ReservaSalaService.php  # solapamiento de reservas + escanearLogia() (Horizon)
-    app/Services/MultaService.php        # calcula la multa por atraso al devolver un libro
-    app/Console/Commands/
-      SeedMockupData.php (comando `mockup:datos`)
-      ImportarCodigosLogia.php (comando `horizon:codigos-logia`, backfill de
-        salas.codigo_barras real desde config/horizon_barcodes.php cuando Horizon los entregue)
-    database/migrations/       correlativas por fecha; ver Deuda técnica más abajo
-    routes/api.php             grupo `auth:sanctum + staff` y grupo `auth:sanctum + usuario`
-    bootstrap/app.php          # NO tiene statefulApi() — auth es Bearer token puro, sin CSRF
+  Dockerfile                  # composer install + copia el proyecto completo en tiempo de BUILD
+  docker-entrypoint.sh        # solo runtime: .env si falta, migra, seedea si hace falta, sirve
+  config/horizon_barcodes.php  # código de barras genérico de "puesto de trabajo" +
+                                 mapeo codigo_barras->nombre de logia (para el comando de import)
+  config/multas.php            # tarifa/gracia/tope de la multa por atraso — ajustar acá,
+                                 nunca hardcodear el monto en el controller/service
+  app/Models/
+    Staff, Usuario, Entrada, Prestamo, Sala, Reserva, Libro, ReservaLibro, Equipo, CodigoAcceso
+  app/Http/Middleware/
+    EnsureIsStaff, EnsureIsUsuario     # separan los dos guards de Sanctum
+    EnsureIsAdmin (alias 'admin')      # chequea staff.rol === 'admin'; se aplica ADEMÁS
+                                          de 'staff' (ej: ['auth:sanctum','staff','admin']),
+                                          no lo reemplaza
+  app/Http/Controllers/Api/
+    AuthController, UsuarioAuthController   # login staff vs. login usuario (portal)
+    DashboardController, UsuarioController, EntradaController, PrestamoController,
+    SalaController, ReporteController (incluye multasPendientes()), CodigoAccesoController,
+    StaffController (GET /staff, solo para autocompletar "registrado/prestado/devuelto por"
+    en el frontend), EquipoController (catálogo de audífonos/notebooks, store/cambiarActivo
+    solo admin)
+    LibroController    # index/buscarPorCodigo (todo staff); store/update (solo admin,
+                          catalogación MARC/Dewey-lite); cambiarEstado (todo staff,
+                          gestiona libros.estado_proceso — ver Gotchas)
+    ReservaLibroController  # reservas de libro (retiro)
+    PortalController                         # endpoints del portal de autoservicio (/mi/*)
+  app/Services/ReservaSalaService.php  # solapamiento de reservas (relacional, ver Gotchas) + escanearLogia() (Horizon)
+  app/Services/MultaService.php        # calcula la multa por atraso al devolver un libro
+  app/Console/Commands/
+    SeedMockupData.php (comando `mockup:datos`)
+    ImportarCodigosLogia.php (comando `horizon:codigos-logia`, backfill de
+      salas.codigo_barras real desde config/horizon_barcodes.php cuando Horizon los entregue)
+  database/migrations/       correlativas por fecha; ver Deuda técnica más abajo
+  routes/api.php             grupo `auth:sanctum + staff` y grupo `auth:sanctum + usuario`
+  bootstrap/app.php          # NO tiene statefulApi() — auth es Bearer token puro, sin CSRF
 
 frontend/
   src/
     views/            LoginView, LoginV2View, DashboardView, EntradaView, PrestamoView,
                        ListadoPrestamosView, ListadoLibrosView, UsuariosView, SalasView,
                        ReportesView, CodigoQrView, CatalogacionLibrosView (solo admin,
-                       meta.requiresAdmin), EstadoLibroView
+                       meta.requiresAdmin), EstadoLibroView, EquiposView (solo admin,
+                       meta.requiresAdmin), MultasPendientesView
     views/portal/      PortalLoginView, PortalHomeView, PortalEntradaView,
                        PortalCatalogoView, PortalSalasView
     components/layout/  StaffLayout, TopBar (navegación + dropdown "Gestiones Admin" con
@@ -200,32 +210,32 @@ frontend/
   `Libro` real, valida `disponible` (409 si ya está prestado/reservado por
   otra persona) y guarda `libro_id` (FK real, `Prestamo::libro()`) + copia de
   `libro_titulo`/`codigo_barras`. Al devolver, libera el libro
-  (`disponible = true`) buscándolo por `libro_id`. **Pero los equipos**
-  (`tipo_item = audifonos|notebook`) siguen siendo 100% texto libre por
-  código de inventario (`AUD-003`, `NB-012`) — no están en la tabla `libros`
-  y es intencional, no una laguna. No hay todavía un modelo `Ejemplar` (un
-  mismo `Libro` sigue siendo una sola fila con un solo `disponible`, no
-  soporta múltiples copias físicas).
-- **`Reserva.ruts` es un array JSON** (cast `array` en el modelo) en vez de
-  una tabla relacional `reserva_participantes`. `SalaController::index`
-  reconstruye manualmente el mapeo RUT → usuario porque no hay relación
-  Eloquent real.
-- **Sí hay tests automatizados** (`backend/app-overlay/tests/Feature/`:
-  `AuthTest`, `UsuarioAuthTest`, `MiddlewareTest`, `EntradaTest`,
-  `SalaReservaTest`, `SalaDevolucionTest`, `PortalReservaTest`,
-  `PortalEntradaTest`, `PrestamoMultaTest`), corren contra una DB Postgres
-  dedicada (`biblioteca_test`, ver `docker-entrypoint.sh`) con
-  `docker compose exec backend php artisan test`. No cubren todavía
-  `LibroController` ni la catalogación/`estado_proceso`.
-- **Multas: solo cálculo y cobro puntual, sin "cuenta corriente" del usuario**
-  — `Prestamo.multa_monto`/`multa_estado` se calculan y guardan por préstamo
-  individual al momento de `devolver()` (ver Gotchas). **No existe** todavía:
-  bloqueo de nuevos préstamos si el usuario tiene una multa `pendiente` en
-  otro préstamo, ni una vista consolidada tipo "multas pendientes de cobro"
-  que cruce todos los usuarios (hoy solo se ven en la columna "Multa" de
-  `PrestamoView.vue`/`ListadoPrestamosView.vue`, préstamo por préstamo). Es
-  una decisión de alcance, no un bug — si la tesis necesita esto, es
-  trabajo nuevo, no algo que "ya debería estar".
+  (`disponible = true`) buscándolo por `libro_id`. **Los equipos**
+  (`tipo_item = audifonos|notebook`) **también están resueltos** — ya no son
+  texto libre: `Equipo` es un modelo real (`codigo_inventario` único,
+  `disponible`, `activo`), con el mismo chequeo doble que `Libro`
+  (`disponible` + `activo`, ver Gotchas). Lo único que sigue faltando es un
+  modelo `Ejemplar` para libros: una fila `Libro` sigue siendo una sola
+  copia física con un solo `disponible`, no soporta múltiples copias del
+  mismo título (fuera de alcance actual, ver checklist de Horizon arriba).
+- **Sí hay tests automatizados** (`backend/tests/Feature/`: `AuthTest`,
+  `UsuarioAuthTest`, `MiddlewareTest`, `EntradaTest`, `SalaReservaTest`,
+  `SalaDevolucionTest`, `PortalReservaTest`, `PortalEntradaTest`,
+  `PrestamoMultaTest`, `EquipoPrestamoTest`, `MultasPendientesTest`), corren
+  contra una DB Postgres dedicada (`biblioteca_test`, ver
+  `docker-entrypoint.sh`) con `docker compose exec backend php artisan
+  test`. No cubren todavía `LibroController` ni la catalogación/
+  `estado_proceso`.
+- **Multas: aviso + vista consolidada, pero sin bloqueo duro** —
+  `Prestamo.multa_monto`/`multa_estado` se calculan y guardan por préstamo
+  individual al momento de `devolver()` (ver Gotchas). Ya existe:
+  `UsuarioController::porRut()` devuelve `multas_pendientes` (cantidad +
+  monto) y `PrestamoView.vue` muestra un aviso ámbar no bloqueante al crear
+  un préstamo si el usuario tiene deuda; `GET /reportes/multas-pendientes`
+  + `MultasPendientesView.vue` consolidan la deuda por usuario cruzando
+  todos los préstamos. Lo que sigue sin existir es un **bloqueo duro**
+  (rechazar el préstamo si hay multa pendiente) — es una decisión de
+  alcance deliberada, no un bug, confirmada explícitamente con el usuario.
 - **`Libro`: dos ejes de estado independientes** — `disponible` (boolean,
   circulación: ¿está prestado/reservado ahora mismo?) y `estado_proceso`
   (string, procesamiento bibliotecario: `inventario` | `procesos_tecnicos` |
@@ -247,19 +257,29 @@ frontend/
 
 ## Gotchas ya resueltos (no los reintroduzcas)
 
-- **Volumen Docker + Composer**: `composer create-project` falla si el
-  directorio destino no está vacío (Docker mete un `lost+found` en volúmenes
-  nuevos sobre ext4). El entrypoint instala en `/tmp/laravel-fresh` y luego
-  copia — no cambies esto a instalar directo en `/var/www`.
+- **Ya no existe `app-overlay/`** (restructurado 2026-07-17): antes
+  `docker-entrypoint.sh` corría `composer create-project` **dentro del
+  contenedor ya arrancado**, guardaba el Laravel real en un volumen
+  (`laravel_app`) y copiaba encima `app-overlay/` (nuestro código) en cada
+  boot — la imagen nunca contenía un Laravel completo, solo esa carpeta. Se
+  cambió a un Dockerfile normal: `composer install` corre en tiempo de
+  **build** (capa cacheada — solo se reinstala si `composer.json`/
+  `composer.lock` cambian) y `COPY . .` copia el proyecto completo, ya
+  armado, directo a la imagen. `backend/` es ahora un Laravel real y
+  autocontenido — no hay overlay que aplicar, no hay volumen `laravel_app`
+  (se quitó de `docker-compose.yml`), y el primer arranque ya no depende de
+  red para instalar nada. No reintroduzcas el patrón de "instalar en el
+  primer boot dentro de un volumen" — si necesitás regenerar el esqueleto
+  de Laravel desde cero por algún motivo, hacelo en una imagen descartable
+  y fusionalo a mano como se hizo esta vez, no en el entrypoint de cada
+  arranque.
 - **Composer audit block**: Composer 2.8+ bloquea instalaciones por
-  advisories de seguridad por defecto. El entrypoint usa `--no-audit` y la
-  imagen define `COMPOSER_NO_AUDIT=1`. No lo quites o `create-project`
-  volverá a fallar.
-- **`.env` con SQLite en vez de Postgres**: `composer create-project` genera
-  su propio `.env` (sqlite) antes de que apliquemos el nuestro. El
-  entrypoint sobreescribe `.env` con nuestra plantilla (`app-overlay/.env.example`)
-  inmediatamente después de instalar Laravel, dentro del bloque `if [ ! -f
-  "artisan" ]`. Si tocas ese bloque, no rompas ese orden.
+  advisories de seguridad por defecto. La imagen define
+  `COMPOSER_NO_AUDIT=1`, que es lo que realmente desactiva el audit para
+  `composer install` (el flag `--no-audit` **no existe** para `install`,
+  solo para `create-project`/`require` — no lo agregues a la línea de
+  `composer install` del Dockerfile, falla con "option does not exist"). No
+  quites la variable de entorno o el build puede volver a bloquearse.
 - **CSRF "token mismatch" en el login**: `bootstrap/app.php` NO llama
   `$middleware->statefulApi()`. La auth es 100% Bearer token (Sanctum
   Personal Access Tokens), sin cookies de sesión — si se reactiva
@@ -292,11 +312,16 @@ frontend/
   mismo RUT podía terminar reservado en dos salas distintas al mismo tiempo
   (nada lo impedía). Ya se agregó: regla `distinct` en `ruts.*` (rechaza RUT
   duplicado dentro de la misma reserva) y
-  `ReservaSalaService::participanteConReservaSolapada()` (busca, con
-  `whereJsonContains` sobre cualquier sala, si alguno de los RUT ya tiene una
-  reserva con horario solapado ese día) en `SalaController::storeReserva` y
-  `PortalController::reservarSala`. No reintroduzcas la validación sin este
-  chequeo cruzado entre salas.
+  `ReservaSalaService::participanteConReservaSolapada()` (busca si alguno de
+  los RUT ya tiene una reserva con horario solapado ese día, en cualquier
+  sala) en `SalaController::storeReserva` y `PortalController::reservarSala`.
+  No reintroduzcas la validación sin este chequeo cruzado entre salas.
+  **Actualización (2026-07-17)**: `Reserva.ruts` dejó de ser un array JSON —
+  ahora es una tabla relacional `reserva_participantes`
+  (`Reserva::participantes()`, `belongsToMany(Usuario::class)`), y
+  `participanteConReservaSolapada()` ya no usa `whereJsonContains` (era una
+  query por cada RUT del array) sino una sola query relacional. Si tocás
+  esa función, no reintroduzcas el patrón JSON.
 - **`SalaController::storeReserva` aceptaba RUT externos (no registrados)**:
   a diferencia del portal (`PortalController::reservarSala`, que siempre
   exigió `exists:usuarios,rut`), el endpoint de staff no validaba que cada
@@ -378,6 +403,30 @@ frontend/
   `(int) floor(...)` antes de multiplicar — ver `MultaService::calcular()` y
   el test de regresión `test_multa_no_se_prorratea_por_fraccion_de_dia` en
   `PrestamoMultaTest.php`. Si tocas ese método, no le quites el `floor()`.
+- **Préstamos de equipo (audífonos/notebooks) sin ningún control**: antes
+  `libro_titulo` era texto libre para `tipo_item !== 'libro'` — el mismo
+  código (ej. "AUD-003") se podía prestar a dos personas en paralelo, nada
+  lo impedía ni en frontend ni en backend. Ya se agregó el modelo `Equipo`
+  (`codigo_inventario` único, `disponible`, `activo`) — `activo` es un eje
+  independiente de `disponible`, igual que `Libro.estado_proceso`: un
+  equipo dado de baja (`activo = false`) no es prestable aunque esté
+  `disponible`, y no se puede dar de baja un equipo actualmente prestado
+  (`EquipoController::cambiarActivo`, 409 si `! disponible`).
+  `PrestamoController::store()` ahora busca el `Equipo` por
+  `codigo_inventario` + `tipo`, igual que hace con `Libro` por
+  `codigo_barras`. No reintroduzcas el flujo de texto libre sin este
+  chequeo.
+- **Multas pendientes sin ninguna señal en el sistema**: un usuario con
+  deuda por atraso podía seguir pidiendo préstamos nuevos sin que nadie se
+  enterara, y no había forma de ver cuánto debía cada usuario sin revisar
+  préstamo por préstamo. Ya se agregó (a propósito **sin bloqueo duro**,
+  ver Deuda técnica): `UsuarioController::porRut()` devuelve
+  `multas_pendientes` (cantidad + monto, vía `Usuario::prestamos()`),
+  mostrado como aviso ámbar no bloqueante en `PrestamoView.vue`; y
+  `GET /reportes/multas-pendientes` (`ReporteController::multasPendientes`)
+  agrupa por usuario para `MultasPendientesView.vue`. No agregues un
+  bloqueo duro sin confirmarlo antes — fue una decisión explícita, no un
+  olvido.
 - **Reservas de logia en horas no redondas (ej. alguien llega a las
   14:30)**: se evaluó pasar a horarios libres en minutos y se descartó a
   propósito — los bloques fijos de 2h (08-10, 10-12, ...) son una regla de

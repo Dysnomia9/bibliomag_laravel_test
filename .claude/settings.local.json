@@ -25,7 +25,20 @@
       "Bash(docker exec *)",
       "Bash(echo \"exit: $?\")",
       "Read(//c/tmp/pw-check/**)",
-      "Bash(node check2.js)"
+      "Bash(node check2.js)",
+      "Bash(docker run --rm --entrypoint bash -v __CMDSUB_OUTPUT__/_generated:/output biblioteca-vue-laravel-backend:latest -c ' *)",
+      "Bash(docker run *)",
+      "Bash(mv _generated/database/migrations/2026_07_17_*_create_personal_access_tokens_table.php _generated/database/migrations/2026_07_03_162340_create_personal_access_tokens_table.php)",
+      "Bash(rm -f _generated/.env _generated/.env.example _generated/README.md _generated/package.json _generated/vite.config.js)",
+      "Bash(rm -rf _generated/vendor)",
+      "Bash(cp -r app-overlay/app/. _generated/app/)",
+      "Bash(cp -r app-overlay/routes/. _generated/routes/)",
+      "Bash(cp -r app-overlay/database/. _generated/database/)",
+      "Bash(cp -r app-overlay/config/. _generated/config/)",
+      "Bash(cp -r app-overlay/tests/. _generated/tests/)",
+      "Bash(curl -s -o /dev/null -w \"frontend HTTP %{http_code}\\\\n\" http://localhost:5173)",
+      "Bash(curl -s -X POST http://localhost:8000/api/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"admin@umag.cl\",\"password\":\"admin123\"}' -w \"\\\\nlogin HTTP %{http_code}\\\\n\")",
+      "Bash(node check3.js)"
     ]
   }
 }
