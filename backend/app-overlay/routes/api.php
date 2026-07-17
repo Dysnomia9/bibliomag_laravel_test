@@ -43,6 +43,7 @@ Route::middleware(['auth:sanctum', 'staff'])->group(function () {
     Route::get('/prestamos', [PrestamoController::class, 'index']);
     Route::post('/prestamos', [PrestamoController::class, 'store']);
     Route::patch('/prestamos/{prestamo}/devolver', [PrestamoController::class, 'devolver']);
+    Route::patch('/prestamos/{prestamo}/multa/pagar', [PrestamoController::class, 'pagarMulta']);
 
     Route::get('/libros', [LibroController::class, 'index']);
     Route::get('/libros/{codigo}', [LibroController::class, 'buscarPorCodigo']);

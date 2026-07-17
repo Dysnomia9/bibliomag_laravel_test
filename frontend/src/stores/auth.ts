@@ -59,6 +59,14 @@ export const useAuthStore = defineStore('auth', () => {
       return true
     } catch (e: any) {
       if (e?.response?.status === 401) {
+        // Limpiar el token acá, no solo devolver false: si no, el guard del router
+        // rebota infinitamente entre login (ve auth.token truthy) y dashboard (ve
+        // que la sesión no es válida) sin que el token stale se borre nunca — cada
+        // vuelta del ping-pong dispara otro GET /auth/me.
+        token.value = null
+        staff.value = null
+        validated.value = false
+        localStorage.removeItem('token')
         return false
       }
       return true

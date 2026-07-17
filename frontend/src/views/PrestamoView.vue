@@ -158,16 +158,50 @@ async function confirmarDevolucion() {
   if (!devolucionPendiente.value) return
   devolviendo.value = true
   try {
-    await api.patch(`/prestamos/${devolucionPendiente.value.id}/devolver`, {
+    const { data } = await api.patch<Prestamo>(`/prestamos/${devolucionPendiente.value.id}/devolver`, {
       devuelto_por: devueltoPor.value.trim() || undefined,
     })
-    toast.success('Devolución registrada')
+    toast.success(
+      data.multa_monto
+        ? `Devolución registrada con multa de ${formatMonto(data.multa_monto)} por atraso`
+        : 'Devolución registrada',
+    )
     devolucionPendiente.value = null
     await cargarPrestamosYReservas()
   } catch {
     toast.error('No se pudo registrar la devolución')
   } finally {
     devolviendo.value = false
+  }
+}
+
+function formatMonto(monto: number) {
+  return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(monto)
+}
+
+const pagoMultaPendiente = ref<Prestamo | null>(null)
+const pagandoMulta = ref(false)
+const multaPagadaPor = ref('')
+
+function pedirConfirmacionPagoMulta(prestamo: Prestamo) {
+  pagoMultaPendiente.value = prestamo
+  multaPagadaPor.value = ''
+}
+
+async function confirmarPagoMulta() {
+  if (!pagoMultaPendiente.value) return
+  pagandoMulta.value = true
+  try {
+    await api.patch(`/prestamos/${pagoMultaPendiente.value.id}/multa/pagar`, {
+      multa_pagada_por: multaPagadaPor.value.trim() || undefined,
+    })
+    toast.success('Multa marcada como pagada')
+    pagoMultaPendiente.value = null
+    await cargarPrestamosYReservas()
+  } catch {
+    toast.error('No se pudo registrar el pago de la multa')
+  } finally {
+    pagandoMulta.value = false
   }
 }
 
@@ -508,6 +542,7 @@ function formatFecha(iso: string | null) {
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Préstamo</th>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Devolución</th>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Multa</th>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acción</th>
                 </tr>
               </thead>
@@ -522,6 +557,24 @@ function formatFecha(iso: string | null) {
                     </span>
                   </td>
                   <td class="px-6 py-3">
+                    <div v-if="p.multa_monto" class="flex items-center gap-2">
+                      <span
+                        class="text-xs px-2.5 py-1 rounded-full font-medium"
+                        :class="p.multa_estado === 'pagada' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'"
+                      >
+                        {{ formatMonto(p.multa_monto) }}
+                      </span>
+                      <button
+                        v-if="p.multa_estado === 'pendiente'"
+                        @click="pedirConfirmacionPagoMulta(p)"
+                        class="text-xs text-indigo-700 hover:text-indigo-800 font-medium"
+                      >
+                        Marcar pagada
+                      </button>
+                    </div>
+                    <span v-else class="text-xs text-gray-400">—</span>
+                  </td>
+                  <td class="px-6 py-3">
                     <button
                       v-if="p.estado !== 'devuelto'"
                       @click="pedirConfirmacionDevolucion(p)"
@@ -532,7 +585,7 @@ function formatFecha(iso: string | null) {
                   </td>
                 </tr>
                 <tr v-if="!prestamosLibros.length">
-                  <td colspan="5" class="px-6 py-8 text-center text-sm text-gray-400">Sin préstamos registrados.</td>
+                  <td colspan="6" class="px-6 py-8 text-center text-sm text-gray-400">Sin préstamos registrados.</td>
                 </tr>
               </tbody>
             </table>
@@ -717,6 +770,45 @@ function formatFecha(iso: string | null) {
               class="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm disabled:opacity-60"
             >
               {{ devolviendo ? 'Confirmando…' : 'Sí, devolver' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div
+        v-if="pagoMultaPendiente"
+        class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        @click.self="pagoMultaPendiente = null"
+      >
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+          <h3 class="text-lg font-bold text-gray-900 mb-1">¿Confirmar pago de multa?</h3>
+          <p class="text-sm text-gray-500 mb-4">
+            Se registrará el pago de <strong>{{ formatMonto(pagoMultaPendiente.multa_monto ?? 0) }}</strong> por
+            <strong class="font-mono">{{ pagoMultaPendiente.libro_titulo }}</strong>.
+          </p>
+          <div class="mb-6">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Cobrada por (opcional)</label>
+            <input
+              v-model="multaPagadaPor"
+              type="text"
+              list="staff-nombres"
+              placeholder="Nombre de quien cobra"
+              class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+            />
+          </div>
+          <div class="flex gap-3">
+            <button
+              @click="pagoMultaPendiente = null"
+              class="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors font-medium text-sm"
+            >
+              Cancelar
+            </button>
+            <button
+              @click="confirmarPagoMulta"
+              :disabled="pagandoMulta"
+              class="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm disabled:opacity-60"
+            >
+              {{ pagandoMulta ? 'Confirmando…' : 'Sí, pagada' }}
             </button>
           </div>
         </div>

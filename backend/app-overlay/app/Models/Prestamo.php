@@ -23,6 +23,10 @@ class Prestamo extends Model
         'estado',
         'prestado_por',
         'devuelto_por',
+        'multa_monto',
+        'multa_estado',
+        'multa_pagada_en',
+        'multa_pagada_por',
     ];
 
     protected function casts(): array
@@ -31,6 +35,7 @@ class Prestamo extends Model
             'fecha_prestamo' => 'datetime',
             'fecha_devolucion' => 'datetime',
             'fecha_devolucion_real' => 'datetime',
+            'multa_pagada_en' => 'datetime',
         ];
     }
 

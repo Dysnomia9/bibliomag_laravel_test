@@ -5,10 +5,15 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Libro;
 use App\Models\Prestamo;
+use App\Services\MultaService;
 use Illuminate\Http\Request;
 
 class PrestamoController extends Controller
 {
+    public function __construct(private MultaService $multaService)
+    {
+    }
+
     public function index(Request $request)
     {
         $query = Prestamo::with('usuario:id,nombre,apellido,rut');
@@ -92,15 +97,39 @@ class PrestamoController extends Controller
             'devuelto_por' => ['nullable', 'string', 'max:255'],
         ]);
 
+        $ahora = now();
+        $multa = $this->multaService->calcular($prestamo, $ahora);
+
         $prestamo->update([
-            'fecha_devolucion_real' => now(),
+            'fecha_devolucion_real' => $ahora,
             'estado' => 'devuelto',
             'devuelto_por' => $data['devuelto_por'] ?? null,
+            'multa_monto' => $multa,
+            'multa_estado' => $multa ? 'pendiente' : null,
         ]);
 
         if ($prestamo->libro_id) {
             Libro::whereKey($prestamo->libro_id)->update(['disponible' => true]);
         }
+
+        return response()->json($prestamo);
+    }
+
+    public function pagarMulta(Request $request, Prestamo $prestamo)
+    {
+        $data = $request->validate([
+            'multa_pagada_por' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        if ($prestamo->multa_estado !== 'pendiente') {
+            return response()->json(['message' => 'Este préstamo no tiene una multa pendiente'], 409);
+        }
+
+        $prestamo->update([
+            'multa_estado' => 'pagada',
+            'multa_pagada_en' => now(),
+            'multa_pagada_por' => $data['multa_pagada_por'] ?? null,
+        ]);
 
         return response()->json($prestamo);
     }

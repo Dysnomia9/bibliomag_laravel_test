@@ -26,12 +26,47 @@ abajo. **No asumas que un módulo "falta"
 por lo que digan README/tesis/documentación externa — verifica el código
 real en `app-overlay/` y `frontend/src/` primero.**
 
+## Cobertura funcional vs. Horizon (checklist de evaluación de tesis)
+
+Checklist de referencia para comparar este sistema contra las funciones que
+la UMAG usa realmente de Horizon (evaluación honesta hecha sobre el código
+real el 2026-07-17 — no asumir que sigue así sin volver a verificar). Un
+profesor evaluando la tesis probablemente busque estos 13 puntos:
+
+| # | Función | Estado | Evidencia / notas |
+|---|---|---|---|
+| 1 | Gestión de libros | ✅ Completo | `LibroController::index/store/update/cambiarEstado`, `CatalogacionLibrosView.vue` (solo admin), catalogación MARC/Dewey-lite |
+| 2 | Gestión de ejemplares | ⚠️ Parcial | 1 fila `Libro` = 1 copia física, sin modelo `Ejemplar`; **no soporta múltiples copias del mismo título** (ver Deuda técnica). Sí gestiona el estado físico de esa única copia (`estado_proceso`, `EstadoLibroView.vue`) |
+| 3 | Préstamos | ✅ Completo | `PrestamoController::store`, incluye cálculo de multa por atraso desde 2026-07-17 (ver Gotchas) |
+| 4 | Devoluciones | ✅ Completo | `PrestamoController::devolver` |
+| 5 | Reservas | ✅ Completo | Salas/logias (`SalaController` + `ReservaSalaService`) y libros para retiro (`ReservaLibroController`) |
+| 6 | Historial | ⚠️ Parcial / distribuido | Por usuario: completo (`PrestamoView.vue` lista todos sus préstamos y reservas, no solo los activos). Global de préstamos: `ListadoPrestamosView.vue` sin filtro de fecha. Entradas: `EntradaController::index` solo admite un día exacto (`?fecha=`), sin rango ni búsqueda por RUT/usuario — no hay forma de auditar la asistencia histórica de una persona puntual |
+| 7 | Dashboard | ✅ Completo | `DashboardController::resumen` + `DashboardView.vue` |
+| 8 | Reportes | ✅ Completo | `ReporteController` (agregaciones `GROUP BY` por período/carrera/sexo/tipo/hora), `ReportesView.vue` con gráficos |
+| 9 | Estadísticas | ✅ Cubierto (dentro de Dashboard + Reportes) | No hay un menú "Estadísticas" separado, pero los desgloses (`porCarrera`, `porSexo`, `porAnioIngreso`, `porTipoUsuario`, `porHora`) existen en `ReporteResumen` |
+| 10 | Búsqueda avanzada | ⚠️ Parcial | Usuarios (`UsuarioController::index`): multi-campo real (`nombre`/`apellido`/`rut`/`carrera`) + filtros `tipo`/`activo`. Préstamos: filtros `usuario_id`/`estado`/`tipo_item`. Libros (`LibroController::index`): busca por `titulo`/`autor`/`codigo_barras`, pero **sin filtro de categoría/disponibilidad/estado_proceso** en el backend. Entradas: solo por fecha exacta, el más débil de los cuatro |
+| 11 | Consulta de disponibilidad | ✅ Completo | `Libro.disponible` + `estado_proceso`, `LibroController::buscarPorCodigo` (chequeo en tiempo real al prestar/reservar), disponibilidad de salas por bloque horario (`GET /salas?fecha=`), catálogo del portal filtrado por disponibilidad |
+| 12 | Integración con la base institucional | ⚠️ Parcial — ojo con este punto en la defensa | **No es una integración de datos/API real con Horizon** (no hay sync ni llamadas a una BD/API externa). Es una capa de **compatibilidad de códigos de barra** para convivir físicamente con los lectores Horizon: `config/horizon_barcodes.php`, `ReservaSalaService::escanearLogia()`, comando `horizon:codigos-logia`. Los códigos reales de Horizon **todavía no están cargados** (placeholder inventado `'62572'`) |
+| 13 | QR | ✅ Completo y funcional | `CodigoAcceso` (código de acceso compartido, regenerable), renderizado real con la librería `qrcode` (`CodigoQrView.vue`, canvas + descarga PNG), validado server-side en `PortalController::registrarEntrada` cuando `via === 'qr'`. Nota: el campo `Usuario.qr_code` es vestigial, no forma parte de este flujo |
+
+**Resumen honesto**: 9/13 sin reservas, 4/13 con brechas reales y
+verificables en el código (ejemplares múltiples, historial con rango de
+fechas/búsqueda por persona, filtros avanzados en libros/entradas, e
+integración real con Horizon más allá de compatibilidad de código de
+barras). El propio profesor considera fuera de alcance razonable
+adquisiciones/seriales/proveedores/multas avanzadas — las multas básicas
+(tarifa fija por día, sin bloqueo de nuevos préstamos por deuda) ya están
+cubiertas por el punto 3. Antes de citar un "% de cobertura" en la defensa,
+decidir si las 4 brechas de arriba importan para el alcance declarado de la
+tesis, y volver a correr esta tabla contra el código si pasó tiempo desde
+2026-07-17.
+
 ## Stack
 
 | Capa | Tecnología |
 |---|---|
 | Frontend | Vue 3 (Composition API, `<script setup>`), TypeScript, Vite, Pinia, Vue Router, Tailwind CSS, Axios |
-| Backend | Laravel 11 (API-only), Sanctum (tokens Bearer, **no** sesión/cookie — ver nota abajo), PostgreSQL |
+| Backend | Laravel 12 (API-only — Laravel 11 se descartó por advisories de Composer en `laravel/framework`, ver `docker-entrypoint.sh`), Sanctum (tokens Bearer, **no** sesión/cookie — ver nota abajo), PostgreSQL |
 | Infra | Docker Compose: `frontend` (Vite dev server), `backend` (PHP-FPM/artisan serve), `db` (Postgres) |
 
 ## Cómo levantar el proyecto
@@ -56,6 +91,8 @@ backend/
   app-overlay/                # ÚNICO lugar del backend que se edita — se "hornea" en la imagen
     config/horizon_barcodes.php  # código de barras genérico de "puesto de trabajo" +
                                    mapeo codigo_barras->nombre de logia (para el comando de import)
+    config/multas.php            # tarifa/gracia/tope de la multa por atraso — ajustar acá,
+                                   nunca hardcodear el monto en el controller/service
     app/Models/
       Staff, Usuario, Entrada, Prestamo, Sala, Reserva, Libro, ReservaLibro, CodigoAcceso
     app/Http/Middleware/
@@ -74,6 +111,7 @@ backend/
       ReservaLibroController  # reservas de libro (retiro)
       PortalController                         # endpoints del portal de autoservicio (/mi/*)
     app/Services/ReservaSalaService.php  # solapamiento de reservas + escanearLogia() (Horizon)
+    app/Services/MultaService.php        # calcula la multa por atraso al devolver un libro
     app/Console/Commands/
       SeedMockupData.php (comando `mockup:datos`)
       ImportarCodigosLogia.php (comando `horizon:codigos-logia`, backfill de
@@ -175,10 +213,19 @@ frontend/
 - **Sí hay tests automatizados** (`backend/app-overlay/tests/Feature/`:
   `AuthTest`, `UsuarioAuthTest`, `MiddlewareTest`, `EntradaTest`,
   `SalaReservaTest`, `SalaDevolucionTest`, `PortalReservaTest`,
-  `PortalEntradaTest`), corren contra una DB Postgres dedicada
-  (`biblioteca_test`, ver `docker-entrypoint.sh`) con
+  `PortalEntradaTest`, `PrestamoMultaTest`), corren contra una DB Postgres
+  dedicada (`biblioteca_test`, ver `docker-entrypoint.sh`) con
   `docker compose exec backend php artisan test`. No cubren todavía
   `LibroController` ni la catalogación/`estado_proceso`.
+- **Multas: solo cálculo y cobro puntual, sin "cuenta corriente" del usuario**
+  — `Prestamo.multa_monto`/`multa_estado` se calculan y guardan por préstamo
+  individual al momento de `devolver()` (ver Gotchas). **No existe** todavía:
+  bloqueo de nuevos préstamos si el usuario tiene una multa `pendiente` en
+  otro préstamo, ni una vista consolidada tipo "multas pendientes de cobro"
+  que cruce todos los usuarios (hoy solo se ven en la columna "Multa" de
+  `PrestamoView.vue`/`ListadoPrestamosView.vue`, préstamo por préstamo). Es
+  una decisión de alcance, no un bug — si la tesis necesita esto, es
+  trabajo nuevo, no algo que "ya debería estar".
 - **`Libro`: dos ejes de estado independientes** — `disponible` (boolean,
   circulación: ¿está prestado/reservado ahora mismo?) y `estado_proceso`
   (string, procesamiento bibliotecario: `inventario` | `procesos_tecnicos` |
@@ -303,6 +350,34 @@ frontend/
   `en_estante`. No reintroduzcas un `POST /libros` que no dependa de este
   chequeo, ni dejes que un libro recién catalogado sea prestable por
   defecto (nace en `inventario`, no en `en_estante`).
+- **Loop infinito de `GET /auth/me` cuando el token queda stale** (ej. tras
+  `mockup:datos --fresh`, que borra `staff` y revoca los tokens de sesiones
+  ya abiertas en el navegador): `auth.validar()`/`usuarioAuth.validar()`
+  detectaban el 401 pero solo devolvían `false`, sin limpiar
+  `token`/`staff`/localStorage. El guard del router entonces rebotaba sin
+  fin entre `login` (ve `auth.token` truthy → redirige a dashboard) y
+  `dashboard` (`validar()` falla → redirige a login), disparando un
+  `GET /auth/me` en cada vuelta. El interceptor 401 de `api.ts` no lo
+  evitaba porque su propia guarda (`!pathname.startsWith('/login')`) lo
+  desactiva justo en ese caso. Ya se corrigió: `validar()` limpia su propio
+  estado (token/usuario/localStorage) al recibir un 401, cortando el
+  ping-pong en el origen. No le quites esa limpieza a `validar()` ni asumas
+  que basta con devolver `false`.
+- **Multa por atraso al devolver un préstamo**: no existía ningún cálculo de
+  multa — se agregó `config/multas.php` (tarifa/gracia/tope) +
+  `App\Services\MultaService::calcular()`, llamado desde
+  `PrestamoController::devolver()`. Solo aplica a `tipo_item === 'libro'`
+  (los equipos no tienen `fecha_devolucion`, nunca quedan atrasados). Nuevo
+  endpoint `PATCH /prestamos/{prestamo}/multa/pagar` para marcarla pagada.
+  **Gotcha real encontrado en verificación manual**: Laravel 12 usa Carbon 3,
+  cuyo `diffInDays()` devuelve un **float** con fracción de día (Carbon 2
+  truncaba a entero) — calcular la multa como
+  `$prestamo->fecha_devolucion->diffInDays($ahora) * monto_dia` sin más
+  prorratea la multa por horas en vez de cobrar por día completo (ej. $1.227
+  en vez de $1.200 para 4 días y 2 horas de atraso). Hay que forzar
+  `(int) floor(...)` antes de multiplicar — ver `MultaService::calcular()` y
+  el test de regresión `test_multa_no_se_prorratea_por_fraccion_de_dia` en
+  `PrestamoMultaTest.php`. Si tocas ese método, no le quites el `floor()`.
 - **Reservas de logia en horas no redondas (ej. alguien llega a las
   14:30)**: se evaluó pasar a horarios libres en minutos y se descartó a
   propósito — los bloques fijos de 2h (08-10, 10-12, ...) son una regla de

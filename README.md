@@ -41,6 +41,13 @@ de verdad — no se puede reservar ni prestar un libro que ya está ocupado por
 otra persona (409), y se libera automáticamente al cancelar la reserva o
 devolver el préstamo.
 
+Al devolver un préstamo de libro atrasado se calcula automáticamente una
+**multa** (tarifa fija por día de atraso, configurable en
+`config/multas.php`, sin prorratear por horas) y queda registrada en el
+propio préstamo (`multa_monto`, `multa_estado: pendiente|pagada`), con un
+botón para marcarla pagada. No hay todavía bloqueo de nuevos préstamos por
+multas pendientes ni una vista consolidada de cobros — ver Deuda técnica.
+
 La catalogación de libros usa un formato tipo MARC/Horizon simplificado
 (`clasificacion` Dewey+Cutter+año, `coleccion`, `editorial`,
 `anio_publicacion`, `ubicacion`, `tipo_material`, `volumen`, notas pública/
@@ -168,8 +175,9 @@ npm run dev
 
 Hay una suite de Feature tests (`backend/app-overlay/tests/Feature/`) que
 cubre login de staff/usuario, registro de entradas, reservas de sala
-(solapamiento y validación grupal), cancelación de reservas ajenas y la
-separación de middlewares `staff`/`usuario`. Corre contra una base Postgres
+(solapamiento y validación grupal), cancelación de reservas ajenas, la
+separación de middlewares `staff`/`usuario`, y el cálculo/cobro de multas
+por atraso en préstamos. Corre contra una base Postgres
 de pruebas dedicada (`biblioteca_test`, separada de `biblioteca`), que
 `docker-entrypoint.sh` crea automáticamente al levantar el backend.
 
@@ -198,5 +206,9 @@ título). Tampoco se separa registro bibliográfico de ejemplar físico (sin
 "Bib No." / "Item No." tipo Horizon) ni se guardan contadores históricos de
 préstamo (número de préstamos, fecha del último) — son derivables por query
 sobre `prestamos` si algún día hacen falta, a propósito no se duplicaron
-como columnas. Antes de asumir que algo "falta" o "está roto", revisa el
-código real en `app-overlay/` — este README se puede desactualizar.
+como columnas. Las **multas** por atraso se calculan y guardan por préstamo
+individual, pero no hay bloqueo de nuevos préstamos si el usuario tiene una
+multa pendiente en otro préstamo, ni una vista que consolide "multas
+pendientes de cobro" cruzando todos los usuarios. Antes de asumir que algo
+"falta" o "está roto", revisa el código real en `app-overlay/` — este
+README se puede desactualizar.

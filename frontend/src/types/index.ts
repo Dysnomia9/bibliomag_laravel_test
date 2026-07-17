@@ -44,6 +44,10 @@ export type Prestamo = {
   estado: 'activo' | 'atrasado' | 'devuelto'
   prestado_por: string | null
   devuelto_por: string | null
+  multa_monto: number | null
+  multa_estado: 'pendiente' | 'pagada' | null
+  multa_pagada_en: string | null
+  multa_pagada_por: string | null
   usuario?: Pick<Usuario, 'id' | 'nombre' | 'apellido' | 'rut'>
 }
 

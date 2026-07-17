@@ -50,6 +50,13 @@ export const useUsuarioAuthStore = defineStore('usuarioAuth', () => {
       return true
     } catch (e: any) {
       if (e?.response?.status === 401) {
+        // Ver auth.ts (staff) — sin esto, el guard del router hace ping-pong
+        // infinito entre portal-login y portal-home porque el token stale nunca
+        // se borra, disparando un GET /auth/usuario/me en cada vuelta.
+        token.value = null
+        usuario.value = null
+        validated.value = false
+        localStorage.removeItem('usuario_token')
         return false
       }
       return true
