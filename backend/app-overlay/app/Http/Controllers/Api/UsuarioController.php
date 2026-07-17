@@ -42,6 +42,16 @@ class UsuarioController extends Controller
             return response()->json(['message' => 'Usuario no encontrado'], 404);
         }
 
+        $multas = $usuario->prestamos()
+            ->where('multa_estado', 'pendiente')
+            ->selectRaw('COUNT(*) as cantidad, COALESCE(SUM(multa_monto), 0) as monto_total')
+            ->first();
+
+        $usuario->setAttribute('multas_pendientes', [
+            'cantidad' => (int) $multas->cantidad,
+            'monto_total' => (int) $multas->monto_total,
+        ]);
+
         return response()->json($usuario);
     }
 }

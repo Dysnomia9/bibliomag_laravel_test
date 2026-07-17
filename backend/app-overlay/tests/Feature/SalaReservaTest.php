@@ -21,13 +21,12 @@ class SalaReservaTest extends TestCase
         $sala = Sala::factory()->create();
         $ocupantes = Usuario::factory()->count(2)->create();
 
-        Reserva::factory()->create([
+        Reserva::factory()->conParticipantes($ocupantes)->create([
             'sala_id' => $sala->id,
             'fecha' => '2026-07-10',
             'hora_inicio' => 10,
             'hora_fin' => 12,
             'cantidad_personas' => 2,
-            'ruts' => $ocupantes->pluck('rut')->all(),
         ]);
 
         $nuevos = Usuario::factory()->count(2)->create();
@@ -61,5 +60,68 @@ class SalaReservaTest extends TestCase
         ]);
 
         $response->assertStatus(422);
+    }
+
+    public function test_participante_con_reserva_en_otra_sala_en_horario_solapado_devuelve_409(): void
+    {
+        Sanctum::actingAs(Staff::factory()->create());
+
+        $salaOcupada = Sala::factory()->create();
+        $salaNueva = Sala::factory()->create();
+        $compartido = Usuario::factory()->create();
+        $otroOcupante = Usuario::factory()->create();
+
+        Reserva::factory()->conParticipantes([$compartido, $otroOcupante])->create([
+            'sala_id' => $salaOcupada->id,
+            'fecha' => '2026-07-10',
+            'hora_inicio' => 10,
+            'hora_fin' => 12,
+            'cantidad_personas' => 2,
+        ]);
+
+        $nuevos = Usuario::factory()->count(1)->create();
+
+        $response = $this->postJson('/api/reservas', [
+            'sala_id' => $salaNueva->id,
+            'fecha' => '2026-07-10',
+            'hora_inicio' => 11,
+            'hora_fin' => 13,
+            'cantidad_personas' => 2,
+            'ruts' => [$compartido->rut, $nuevos->first()->rut],
+        ]);
+
+        $response->assertStatus(409)
+            ->assertJsonPath('message', "El RUT {$compartido->rut} ya tiene otra sala reservada en ese horario");
+    }
+
+    public function test_participante_sin_reserva_solapada_permite_reservar(): void
+    {
+        Sanctum::actingAs(Staff::factory()->create());
+
+        $salaOcupada = Sala::factory()->create();
+        $salaNueva = Sala::factory()->create();
+        $compartido = Usuario::factory()->create();
+        $otroOcupante = Usuario::factory()->create();
+
+        Reserva::factory()->conParticipantes([$compartido, $otroOcupante])->create([
+            'sala_id' => $salaOcupada->id,
+            'fecha' => '2026-07-10',
+            'hora_inicio' => 10,
+            'hora_fin' => 12,
+            'cantidad_personas' => 2,
+        ]);
+
+        $nuevos = Usuario::factory()->count(1)->create();
+
+        $response = $this->postJson('/api/reservas', [
+            'sala_id' => $salaNueva->id,
+            'fecha' => '2026-07-10',
+            'hora_inicio' => 12,
+            'hora_fin' => 14,
+            'cantidad_personas' => 2,
+            'ruts' => [$compartido->rut, $nuevos->first()->rut],
+        ]);
+
+        $response->assertStatus(201);
     }
 }

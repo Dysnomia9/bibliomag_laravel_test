@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Equipo;
 use App\Models\Libro;
 use App\Models\Prestamo;
 use App\Services\MultaService;
@@ -55,6 +56,7 @@ class PrestamoController extends Controller
 
         $esLibro = $data['tipo_item'] === 'libro';
         $libro = null;
+        $equipo = null;
 
         if ($esLibro) {
             $libro = Libro::where('codigo_barras', $data['codigo_barras'])->first();
@@ -70,12 +72,27 @@ class PrestamoController extends Controller
             if ($libro->estado_proceso !== 'en_estante') {
                 return response()->json(['message' => "Este libro no está disponible para préstamo (estado: {$libro->estado_proceso})"], 409);
             }
+        } else {
+            $equipo = Equipo::where('codigo_inventario', $data['libro_titulo'])->where('tipo', $data['tipo_item'])->first();
+
+            if (! $equipo) {
+                return response()->json(['message' => 'Código de inventario no encontrado en el sistema'], 404);
+            }
+
+            if (! $equipo->activo) {
+                return response()->json(['message' => 'Este equipo fue dado de baja'], 409);
+            }
+
+            if (! $equipo->disponible) {
+                return response()->json(['message' => 'Este equipo ya está prestado a otra persona'], 409);
+            }
         }
 
         $prestamo = Prestamo::create([
             'usuario_id' => $data['usuario_id'],
             'libro_id' => $libro?->id,
-            'libro_titulo' => $esLibro ? $libro->titulo : $data['libro_titulo'],
+            'equipo_id' => $equipo?->id,
+            'libro_titulo' => $esLibro ? $libro->titulo : $equipo->codigo_inventario,
             'tipo_item' => $data['tipo_item'],
             'codigo_barras' => $esLibro ? $libro->codigo_barras : null,
             'fecha_prestamo' => $esLibro ? $data['fecha_prestamo'] : now(),
@@ -85,6 +102,7 @@ class PrestamoController extends Controller
         ]);
 
         $libro?->update(['disponible' => false]);
+        $equipo?->update(['disponible' => false]);
 
         $prestamo->load('usuario:id,nombre,apellido,rut');
 
@@ -110,6 +128,10 @@ class PrestamoController extends Controller
 
         if ($prestamo->libro_id) {
             Libro::whereKey($prestamo->libro_id)->update(['disponible' => true]);
+        }
+
+        if ($prestamo->equipo_id) {
+            Equipo::whereKey($prestamo->equipo_id)->update(['disponible' => true]);
         }
 
         return response()->json($prestamo);

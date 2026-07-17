@@ -139,4 +139,21 @@ class ReporteController extends Controller
             'porHora' => $porHora,
         ]);
     }
+
+    public function multasPendientes()
+    {
+        $filas = Prestamo::query()
+            ->join('usuarios', 'usuarios.id', '=', 'prestamos.usuario_id')
+            ->where('prestamos.multa_estado', 'pendiente')
+            ->selectRaw('usuarios.id as usuario_id, usuarios.nombre, usuarios.apellido, usuarios.rut, COUNT(*) as cantidad_prestamos, SUM(prestamos.multa_monto) as monto_total')
+            ->groupBy('usuarios.id', 'usuarios.nombre', 'usuarios.apellido', 'usuarios.rut')
+            ->orderByDesc('monto_total')
+            ->get();
+
+        return response()->json([
+            'total_usuarios' => $filas->count(),
+            'monto_total' => (int) $filas->sum('monto_total'),
+            'usuarios' => $filas,
+        ]);
+    }
 }

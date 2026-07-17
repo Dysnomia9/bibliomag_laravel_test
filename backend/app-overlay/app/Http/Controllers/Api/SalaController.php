@@ -20,20 +20,13 @@ class SalaController extends Controller
         $fecha = $request->query('fecha', now()->toDateString());
 
         $salas = Sala::orderBy('id')->get();
-        $reservas = Reserva::where('fecha', $fecha)->get();
+        $reservas = Reserva::with('participantes:id,nombre,apellido,rut')->where('fecha', $fecha)->get();
 
-        $ruts = $reservas->flatMap(fn ($r) => $r->ruts ?? [])->unique()->values();
-        $usuariosPorRut = Usuario::whereIn('rut', $ruts)->get()->keyBy('rut');
-
-        $reservas = $reservas->map(function ($r) use ($usuariosPorRut) {
-            $r->personas = collect($r->ruts ?? [])->map(function ($rut) use ($usuariosPorRut) {
-                $usuario = $usuariosPorRut->get($rut);
-
-                return [
-                    'rut' => $rut,
-                    'nombre' => $usuario ? "{$usuario->nombre} {$usuario->apellido}" : null,
-                ];
-            })->values();
+        $reservas = $reservas->map(function ($r) {
+            $r->personas = $r->participantes->map(fn ($u) => [
+                'rut' => $u->rut,
+                'nombre' => "{$u->nombre} {$u->apellido}",
+            ])->values();
 
             return $r;
         });
@@ -89,19 +82,20 @@ class SalaController extends Controller
             return response()->json(['message' => "El RUT {$rutConflicto} ya tiene otra sala reservada en ese horario"], 409);
         }
 
-        $usuario = Usuario::where('rut', $data['ruts'][0])->first();
+        $usuarios = Usuario::whereIn('rut', $data['ruts'])->get()->keyBy('rut');
 
         $reserva = Reserva::create([
             'sala_id' => $data['sala_id'],
-            'usuario_id' => $usuario?->id,
+            'usuario_id' => $usuarios[$data['ruts'][0]]->id,
             'rut_usuario' => $data['ruts'][0],
             'cantidad_personas' => $data['cantidad_personas'],
-            'ruts' => $data['ruts'],
             'fecha' => $data['fecha'],
             'hora_inicio' => $data['hora_inicio'],
             'hora_fin' => $data['hora_fin'],
             'estado' => 'activa',
         ]);
+
+        $reserva->participantes()->attach($usuarios->pluck('id'));
 
         return response()->json($reserva, 201);
     }

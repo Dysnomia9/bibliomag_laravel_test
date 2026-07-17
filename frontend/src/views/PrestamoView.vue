@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import StaffLayout from '@/components/layout/StaffLayout.vue'
 import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import api from '@/services/api'
 import { useToast } from '@/composables/useToast'
 import { formatRut } from '@/composables/useRut'
 import { useStaffNombres } from '@/composables/useStaffNombres'
-import type { Prestamo, ReservaLibro, Usuario } from '@/types'
+import type { Equipo, Prestamo, ReservaLibro, Usuario } from '@/types'
 
 const toast = useToast()
 const { nombresStaff, cargarStaffNombres } = useStaffNombres()
@@ -47,6 +47,25 @@ const codigoAudifonos = ref('')
 const codigoNotebook = ref('')
 const prestadoPorAudifonos = ref('')
 const prestadoPorNotebook = ref('')
+
+const equiposAudifonos = ref<Equipo[]>([])
+const equiposNotebook = ref<Equipo[]>([])
+
+async function cargarEquiposDisponibles() {
+  try {
+    const [{ data: audifonos }, { data: notebooks }] = await Promise.all([
+      api.get<Equipo[]>('/equipos', { params: { tipo: 'audifonos', activo: 1, disponible: 1 } }),
+      api.get<Equipo[]>('/equipos', { params: { tipo: 'notebook', activo: 1, disponible: 1 } }),
+    ])
+    equiposAudifonos.value = audifonos
+    equiposNotebook.value = notebooks
+  } catch {
+    equiposAudifonos.value = []
+    equiposNotebook.value = []
+  }
+}
+
+onMounted(cargarEquiposDisponibles)
 
 function onRutInput(event: Event) {
   rut.value = formatRut((event.target as HTMLInputElement).value)
@@ -167,7 +186,7 @@ async function confirmarDevolucion() {
         : 'Devolución registrada',
     )
     devolucionPendiente.value = null
-    await cargarPrestamosYReservas()
+    await Promise.all([cargarPrestamosYReservas(), cargarEquiposDisponibles()])
   } catch {
     toast.error('No se pudo registrar la devolución')
   } finally {
@@ -223,9 +242,9 @@ async function crearPrestamoEquipo(tipo: 'audifonos' | 'notebook') {
     toast.success('Préstamo de equipo registrado')
     codigo.value = ''
     prestadoPorEquipo.value = ''
-    await cargarPrestamosYReservas()
-  } catch {
-    toast.error('No se pudo registrar el préstamo del equipo')
+    await Promise.all([cargarPrestamosYReservas(), cargarEquiposDisponibles()])
+  } catch (e: any) {
+    toast.error(e?.response?.data?.message ?? 'No se pudo registrar el préstamo del equipo')
   }
 }
 
@@ -516,6 +535,14 @@ function formatFecha(iso: string | null) {
           </div>
         </div>
 
+        <div
+          v-if="usuario.multas_pendientes?.cantidad"
+          class="mb-6 flex items-center gap-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800"
+        >
+          ⚠ Este usuario tiene {{ usuario.multas_pendientes.cantidad }} multa(s) pendiente(s) por
+          {{ formatMonto(usuario.multas_pendientes.monto_total) }}. Puede continuar con el préstamo igualmente.
+        </div>
+
         <div class="flex gap-1 mb-4 bg-white rounded-xl shadow-sm p-1">
           <button
             @click="activeTab = 'prestamos'"
@@ -646,6 +673,7 @@ function formatFecha(iso: string | null) {
             <div class="flex gap-2 flex-wrap mb-4">
               <input
                 v-model="codigoAudifonos"
+                list="equipos-audifonos"
                 placeholder="Código (ej: AUD-003)"
                 class="flex-1 min-w-[160px] px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
               />
@@ -696,6 +724,7 @@ function formatFecha(iso: string | null) {
             <div class="flex gap-2 flex-wrap mb-4">
               <input
                 v-model="codigoNotebook"
+                list="equipos-notebook"
                 placeholder="Código (ej: NB-012)"
                 class="flex-1 min-w-[160px] px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
               />
@@ -816,6 +845,12 @@ function formatFecha(iso: string | null) {
 
       <datalist id="staff-nombres">
         <option v-for="n in nombresStaff" :key="n" :value="n" />
+      </datalist>
+      <datalist id="equipos-audifonos">
+        <option v-for="e in equiposAudifonos" :key="e.id" :value="e.codigo_inventario" />
+      </datalist>
+      <datalist id="equipos-notebook">
+        <option v-for="e in equiposNotebook" :key="e.id" :value="e.codigo_inventario" />
       </datalist>
     </div>
   </StaffLayout>

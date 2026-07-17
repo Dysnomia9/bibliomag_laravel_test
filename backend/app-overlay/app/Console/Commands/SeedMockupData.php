@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Entrada;
+use App\Models\Equipo;
 use App\Models\Libro;
 use App\Models\Prestamo;
 use App\Models\Reserva;
@@ -109,8 +110,10 @@ class SeedMockupData extends Command
             $this->info('Eliminando datos de prueba existentes...');
             DB::table('reservas_libro')->delete();
             DB::table('libros')->delete();
+            DB::table('reserva_participantes')->delete();
             DB::table('reservas')->delete();
             DB::table('entradas')->delete();
+            DB::table('equipos')->delete();
             DB::table('prestamos')->delete();
             DB::table('usuarios')->delete();
             DB::table('salas')->delete();
@@ -124,7 +127,8 @@ class SeedMockupData extends Command
         $this->seedStaff();
         $usuarios = $this->seedUsuarios(30);
         $this->seedEntradas($usuarios);
-        $this->seedPrestamos($usuarios);
+        $equipos = $this->seedEquipos();
+        $this->seedPrestamos($usuarios, $equipos);
         $salas = $this->seedSalas();
         $this->seedReservas($salas, $usuarios);
         $libros = $this->seedLibros();
@@ -242,7 +246,7 @@ class SeedMockupData extends Command
         $this->line("  · {$total} entradas creadas (últimos 14 días, con refuerzo para hoy)");
     }
 
-    private function seedPrestamos($usuarios): void
+    private function seedPrestamos($usuarios, $equipos): void
     {
         $total = 0;
         $horaActual = now()->hour;
@@ -276,15 +280,19 @@ class SeedMockupData extends Command
         }
 
         // Préstamos de equipos (audífonos y notebooks): se identifican por código de
-        // inventario, no por nombre, y no tienen fecha de vencimiento — se devuelven
-        // al término de la estadía en la biblioteca.
-        $equipos = [
-            'audifonos' => ['AUD-001', 'AUD-002', 'AUD-003', 'AUD-004'],
-            'notebook' => ['NB-001', 'NB-002', 'NB-003'],
-        ];
-
+        // inventario real (tabla `equipos`), no tienen fecha de vencimiento — se
+        // devuelven al término de la estadía en la biblioteca. Se limita el sorteo a
+        // equipos realmente disponibles del tipo elegido para no simular dos préstamos
+        // activos simultáneos del mismo código físico.
         foreach ($usuarios->random(min(10, $usuarios->count())) as $usuario) {
             $tipo = random_int(0, 1) === 0 ? 'audifonos' : 'notebook';
+            $disponibles = $equipos->where('tipo', $tipo)->where('disponible', true);
+
+            if ($disponibles->isEmpty()) {
+                continue;
+            }
+
+            $equipo = $disponibles->random();
             $diasAtras = random_int(0, 5);
             $hora = $diasAtras === 0 ? random_int(8, max(8, $horaActual)) : $this->horaConSesgo();
             $fechaPrestamo = now()->subDays($diasAtras)->setTime($hora, random_int(0, 59));
@@ -292,17 +300,49 @@ class SeedMockupData extends Command
 
             Prestamo::create([
                 'usuario_id' => $usuario->id,
-                'libro_titulo' => $equipos[$tipo][array_rand($equipos[$tipo])],
+                'equipo_id' => $equipo->id,
+                'libro_titulo' => $equipo->codigo_inventario,
                 'tipo_item' => $tipo,
                 'fecha_prestamo' => $fechaPrestamo,
                 'fecha_devolucion' => null,
                 'fecha_devolucion_real' => $devuelto ? $fechaPrestamo->copy()->addHours(random_int(1, 6)) : null,
                 'estado' => $devuelto ? 'devuelto' : 'activo',
             ]);
+
+            if (! $devuelto) {
+                $equipo->update(['disponible' => false]);
+            }
+
             $total++;
         }
 
         $this->line("  · {$total} préstamos creados (libros y equipos)");
+    }
+
+    /** @return \Illuminate\Support\Collection<int, Equipo> */
+    private function seedEquipos()
+    {
+        $codigos = [
+            'audifonos' => ['AUD-001', 'AUD-002', 'AUD-003', 'AUD-004'],
+            'notebook' => ['NB-001', 'NB-002', 'NB-003'],
+        ];
+
+        $equipos = collect();
+
+        foreach ($codigos as $tipo => $codigosTipo) {
+            foreach ($codigosTipo as $codigo) {
+                $equipos->push(Equipo::create([
+                    'codigo_inventario' => $codigo,
+                    'tipo' => $tipo,
+                    'disponible' => true,
+                    'activo' => true,
+                ]));
+            }
+        }
+
+        $this->line("  · {$equipos->count()} equipos creados (audífonos y notebooks)");
+
+        return $equipos;
     }
 
     /** @return \Illuminate\Support\Collection<int, Sala> */
@@ -350,23 +390,20 @@ class SeedMockupData extends Command
                     }
 
                     $cantidadPersonas = random_int(2, 5);
-                    $ruts = $usuarios->random(min($cantidadPersonas, $usuarios->count()))
-                        ->pluck('rut')
-                        ->values()
-                        ->all();
-                    $usuario = Usuario::where('rut', $ruts[0])->first();
+                    $participantes = $usuarios->random(min($cantidadPersonas, $usuarios->count()))->values();
 
-                    Reserva::create([
+                    $reserva = Reserva::create([
                         'sala_id' => $sala->id,
-                        'usuario_id' => $usuario?->id,
-                        'rut_usuario' => $ruts[0],
+                        'usuario_id' => $participantes->first()->id,
+                        'rut_usuario' => $participantes->first()->rut,
                         'cantidad_personas' => $cantidadPersonas,
-                        'ruts' => $ruts,
                         'fecha' => $fecha,
                         'hora_inicio' => $inicio,
                         'hora_fin' => $fin,
                         'estado' => 'activa',
                     ]);
+
+                    $reserva->participantes()->attach($participantes->pluck('id'));
                     $total++;
                 }
             }

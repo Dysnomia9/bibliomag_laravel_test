@@ -540,7 +540,7 @@ function formatFechaLarga(fecha: string) {
 
           <div class="space-y-2 mb-6">
             <div
-              v-for="(persona, idx) in detalleReserva.personas ?? detalleReserva.ruts.map((rut) => ({ rut, nombre: null }))"
+              v-for="(persona, idx) in detalleReserva.personas ?? []"
               :key="idx"
               class="flex items-center justify-between px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg"
             >

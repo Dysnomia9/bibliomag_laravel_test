@@ -14,6 +14,7 @@ class Prestamo extends Model
     protected $fillable = [
         'usuario_id',
         'libro_id',
+        'equipo_id',
         'libro_titulo',
         'tipo_item',
         'codigo_barras',
@@ -47,5 +48,10 @@ class Prestamo extends Model
     public function libro()
     {
         return $this->belongsTo(Libro::class);
+    }
+
+    public function equipo()
+    {
+        return $this->belongsTo(Equipo::class);
     }
 }

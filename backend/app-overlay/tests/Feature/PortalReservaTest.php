@@ -19,11 +19,10 @@ class PortalReservaTest extends TestCase
         $otroUsuario = Usuario::factory()->create();
         $sala = Sala::factory()->create();
 
-        $reserva = Reserva::factory()->create([
+        $reserva = Reserva::factory()->conParticipantes([$dueno])->create([
             'sala_id' => $sala->id,
             'usuario_id' => $dueno->id,
             'rut_usuario' => $dueno->rut,
-            'ruts' => [$dueno->rut],
             'cantidad_personas' => 1,
         ]);
 

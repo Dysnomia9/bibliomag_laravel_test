@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CodigoAccesoController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\EntradaController;
+use App\Http\Controllers\Api\EquipoController;
 use App\Http\Controllers\Api\LibroController;
 use App\Http\Controllers\Api\PortalController;
 use App\Http\Controllers\Api\PrestamoController;
@@ -49,9 +50,13 @@ Route::middleware(['auth:sanctum', 'staff'])->group(function () {
     Route::get('/libros/{codigo}', [LibroController::class, 'buscarPorCodigo']);
     Route::patch('/libros/{libro}/estado', [LibroController::class, 'cambiarEstado']);
 
+    Route::get('/equipos', [EquipoController::class, 'index']);
+
     Route::middleware('admin')->group(function () {
         Route::post('/libros', [LibroController::class, 'store']);
         Route::patch('/libros/{libro}', [LibroController::class, 'update']);
+        Route::post('/equipos', [EquipoController::class, 'store']);
+        Route::patch('/equipos/{equipo}/activo', [EquipoController::class, 'cambiarActivo']);
     });
 
     Route::get('/reservas-libro', [ReservaLibroController::class, 'index']);
@@ -60,6 +65,7 @@ Route::middleware(['auth:sanctum', 'staff'])->group(function () {
 
     Route::get('/reportes/opciones', [ReporteController::class, 'opciones']);
     Route::get('/reportes/resumen', [ReporteController::class, 'resumen']);
+    Route::get('/reportes/multas-pendientes', [ReporteController::class, 'multasPendientes']);
 
     Route::get('/codigo-acceso', [CodigoAccesoController::class, 'show']);
     Route::post('/codigo-acceso/regenerar', [CodigoAccesoController::class, 'regenerar']);

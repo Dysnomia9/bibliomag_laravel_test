@@ -23,7 +23,9 @@
       "Bash(php --version)",
       "Bash(composer --version)",
       "Bash(docker exec *)",
-      "Bash(echo \"exit: $?\")"
+      "Bash(echo \"exit: $?\")",
+      "Read(//c/tmp/pw-check/**)",
+      "Bash(node check2.js)"
     ]
   }
 }

@@ -17,6 +17,15 @@ export type Usuario = {
   sexo: string | null
   activo: boolean
   qr_code: string | null
+  multas_pendientes?: { cantidad: number; monto_total: number }
+}
+
+export type Equipo = {
+  id: number
+  codigo_inventario: string
+  tipo: 'audifonos' | 'notebook'
+  disponible: boolean
+  activo: boolean
 }
 
 export type Entrada = {
@@ -36,6 +45,7 @@ export type Prestamo = {
   id: number
   usuario_id: number
   libro_id: number | null
+  equipo_id: number | null
   libro_titulo: string
   tipo_item: 'libro' | 'audifonos' | 'notebook'
   fecha_prestamo: string
@@ -123,7 +133,6 @@ export type Reserva = {
   usuario_id: number | null
   rut_usuario: string
   cantidad_personas: number
-  ruts: string[]
   personas?: { rut: string; nombre: string | null }[]
   fecha: string
   hora_inicio: number
@@ -162,6 +171,21 @@ export type ReporteOpciones = {
 
 export type Periodo = 'dia' | 'semana' | 'mes' | 'semestre' | 'anio'
 export type ReporteTab = 'prestamos' | 'ingresos' | 'logias'
+
+export type MultaPendienteUsuario = {
+  usuario_id: number
+  nombre: string
+  apellido: string
+  rut: string
+  cantidad_prestamos: number
+  monto_total: number
+}
+
+export type MultasPendientesResumen = {
+  total_usuarios: number
+  monto_total: number
+  usuarios: MultaPendienteUsuario[]
+}
 
 export type CodigoAcceso = {
   id: number

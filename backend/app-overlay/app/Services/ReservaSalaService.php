@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Reserva;
 use App\Models\Sala;
+use App\Models\Usuario;
 
 class ReservaSalaService
 {
@@ -89,15 +90,20 @@ class ReservaSalaService
      */
     public function participanteConReservaSolapada(array $ruts, string $fecha, int $horaInicio, int $horaFin, ?int $ignorarReservaId = null): ?string
     {
-        foreach ($ruts as $rut) {
-            $existe = Reserva::where('fecha', $fecha)
-                ->where('hora_inicio', '<', $horaFin)
-                ->where('hora_fin', '>', $horaInicio)
-                ->whereJsonContains('ruts', $rut)
-                ->when($ignorarReservaId, fn ($query) => $query->where('id', '!=', $ignorarReservaId))
-                ->exists();
+        $idPorRut = Usuario::whereIn('rut', $ruts)->pluck('id', 'rut');
 
-            if ($existe) {
+        $idsConflicto = Reserva::where('fecha', $fecha)
+            ->where('hora_inicio', '<', $horaFin)
+            ->where('hora_fin', '>', $horaInicio)
+            ->when($ignorarReservaId, fn ($query) => $query->where('id', '!=', $ignorarReservaId))
+            ->whereHas('participantes', fn ($q) => $q->whereIn('usuarios.id', $idPorRut->values()))
+            ->with(['participantes' => fn ($q) => $q->whereIn('usuarios.id', $idPorRut->values())])
+            ->get()
+            ->flatMap(fn ($r) => $r->participantes->pluck('id'))
+            ->unique();
+
+        foreach ($ruts as $rut) {
+            if ($idsConflicto->contains($idPorRut->get($rut))) {
                 return $rut;
             }
         }

@@ -1,81 +1,52 @@
-# Biblioteca UMAG — Vue 3 + Laravel (reestructuración)
+# Biblioteca UMAG en Vue 3 + Laravel
 
-Migración del sistema original (Next.js + React) a **Vue 3 + Tailwind** (frontend)
-y **Laravel + PostgreSQL** (backend API), 100% dockerizado.
+Sistema de biblioteca universitaria que reemplaza a **Horizon** (SirsiDynix)
+por una plataforma propia: **Vue 3 + Tailwind** (frontend) y **Laravel +
+PostgreSQL** (backend API), 100% dockerizada.
 
-## Estado actual
+## Qué se puede hacer
 
-Todos los módulos principales están implementados y conectados end-to-end
-(no quedan placeholders "Próximamente" en el sidebar):
+**Personal de biblioteca (staff)**
 
-| Módulo | Ruta staff | Backend |
-|---|---|---|
-| Dashboard | `/dashboard` | `DashboardController` |
-| Usuarios | `/usuarios` (dropdown "Gestiones Admin") | `UsuarioController` |
-| Entrada | `/entrada` | `EntradaController` |
-| Préstamos | `/prestamo`, `/prestamos/listado` (dropdown) | `PrestamoController` |
-| Salas (logias) | `/salas` | `SalaController` |
-| Reportes | `/reportes` | `ReporteController` |
-| Código QR de acceso | `/codigo-qr` (dropdown) | `CodigoAccesoController` |
-| Listado de libros | `/libros/listado` (dropdown) | `LibroController` |
-| Catalogación de libros | `/libros/catalogacion` (dropdown, **solo admin**) | `LibroController::store/update` |
-| Estado de libro | `/libros/estado` (dropdown) | `LibroController::cambiarEstado` |
+- Dashboard con indicadores en tiempo real: usuarios activos, entradas de
+  hoy, personas en sala, préstamos activos y atrasados.
+- Registro de entradas por RUT, QR o manual — incluye visitantes externos y
+  de convenio.
+- Préstamos y devoluciones de libros (por código de barras, con fecha de
+  préstamo/devolución acordada) y de equipos — audífonos y notebooks —
+  desde un inventario real con control de disponibilidad.
+- Multas automáticas por atraso al devolver un libro: tarifa configurable
+  en `config/multas.php`, aviso al staff si el usuario ya tiene deuda
+  pendiente al crear un préstamo nuevo, y una vista "Multas Pendientes" con
+  el total adeudado por usuario.
+- Reservas de salas de estudio (logias, por bloques de 2 horas) y de libros
+  del catálogo para retiro — ambas comparten `libros.disponible` como
+  fuente de verdad: no se puede reservar ni prestar algo ya ocupado.
+- Catalogación de libros (formato MARC/Dewey simplificado — solo admin) y
+  gestión del estado físico de cada ejemplar (inventario → en estante → de
+  baja, etc.), como eje independiente de su disponibilidad.
+- Gestión de usuarios, equipos (agregar/dar de baja), listado de préstamos
+  y listado de libros — agrupados en el menú "Gestiones Admin".
+- Reportes con gráficos (préstamos, ingresos, uso de logias) filtrables por
+  período, carrera, sexo y tipo de usuario.
+- Código QR de acceso compartido y regenerable, para que los usuarios
+  marquen su entrada por su cuenta.
 
-En el TopBar, los módulos secundarios (Usuarios, Listado Préstamos, Listado
-Libros, Código QR) están agrupados bajo el botón desplegable **"Gestiones
-Admin"** en vez de ir todos como links planos.
+**Portal de autoservicio (usuarios finales, sin ser staff)**
 
-Además existe un **portal de autoservicio para usuarios** (no staff), con su
-propio login y guard de rutas (`/portal/*`): marcar entrada/salida (RUT o
-escaneo de QR con la cámara), consultar el catálogo de libros y reservar
-salas de estudio.
+- Login propio, independiente del panel de personal.
+- Marcar entrada/salida por RUT o escaneando el QR con la cámara.
+- Consultar el catálogo de libros disponibles.
+- Reservar salas de estudio.
 
-Y un catálogo de libros conectado a préstamos y reservas por **código de
-barras** (el código de barras es, en la práctica, la llave con la que se
-identifica un libro en todo el sistema — nunca se elige por nombre/id):
-`LibroController` (listado + búsqueda por código de barras),
-`ReservaLibroController` (reservar un libro del catálogo para retiro) y
-`PrestamoController` (préstamo real, con fecha de préstamo y de devolución
-acordadas). Ambos flujos comparten el campo `libros.disponible` como fuente
-de verdad — no se puede reservar ni prestar un libro que ya está ocupado por
-otra persona (409), y se libera automáticamente al cancelar la reserva o
-devolver el préstamo.
+**Backend / integraciones**
 
-Al devolver un préstamo de libro atrasado se calcula automáticamente una
-**multa** (tarifa fija por día de atraso, configurable en
-`config/multas.php`, sin prorratear por horas) y queda registrada en el
-propio préstamo (`multa_monto`, `multa_estado: pendiente|pagada`), con un
-botón para marcarla pagada. No hay todavía bloqueo de nuevos préstamos por
-multas pendientes ni una vista consolidada de cobros — ver Deuda técnica.
-
-La catalogación de libros usa un formato tipo MARC/Horizon simplificado
-(`clasificacion` Dewey+Cutter+año, `coleccion`, `editorial`,
-`anio_publicacion`, `ubicacion`, `tipo_material`, `volumen`, notas pública/
-interna, `precio`) y está restringida a staff con `rol = 'admin'`
-(`LibroController::store/update`, protegidos con el middleware `admin`). El
-ciclo de vida físico de cada ejemplar se gestiona aparte, en
-`libros.estado_proceso` (`inventario` → `procesos_tecnicos` → `por_colocar`
-→ `en_estante` / `estanteria_auxiliar` → `de_baja`), editable por cualquier
-staff desde "Estado de Libro" — **es un eje distinto de `disponible`**: un
-libro solo es prestable/reservable si está `en_estante` **y** `disponible`.
-El catálogo público del portal (`/mi/catalogo`) solo muestra libros
-`en_estante`.
-
-También convive con **Horizon** (sistema externo que ya usa códigos de
-barra reales) para registrar préstamo/devolución de logias y asistencia de
-puestos de trabajo — ver `config/horizon_barcodes.php` y el comando
-`horizon:codigos-logia` para cargar los códigos reales cuando Horizon los
-entregue.
-
-Auth: dos guards de Sanctum independientes — `staff` (bibliotecarios, vía
-`AuthController`) y `usuario` (portal, vía `UsuarioAuthController`) —
-implementados como middlewares (`EnsureIsStaff`, `EnsureIsUsuario`). Dentro
-del guard `staff` hay además un rol (`staff.rol`: `admin` | `staff`),
-verificado por el middleware `EnsureIsAdmin` (alias `admin`) — es el primer
-chequeo de rol real del sistema, usado hoy solo para restringir la
-catalogación de libros. En el frontend, el router respeta
-`meta.requiresAdmin` y `TopBar.vue` oculta los links marcados `adminOnly`
-cuando el staff logueado no es admin.
+- Dos guards de autenticación independientes vía Sanctum (`staff` y
+  `usuario`), más un rol `admin` dentro de `staff` que restringe acciones
+  como la catalogación de libros.
+- Compatibilidad con los lectores de código de barras de Horizon para
+  logias y puestos de trabajo (sin sincronizar datos con Horizon — ver
+  Deuda técnica).
 
 ## Estructura
 
@@ -90,6 +61,21 @@ biblioteca-vue-laravel/
 └── docker-compose.yml
 ```
 
+| Módulo | Ruta staff | Backend |
+|---|---|---|
+| Dashboard | `/dashboard` | `DashboardController` |
+| Usuarios | `/usuarios` (dropdown "Gestiones Admin") | `UsuarioController` |
+| Entrada | `/entrada` | `EntradaController` |
+| Préstamos | `/prestamo`, `/prestamos/listado` (dropdown) | `PrestamoController` |
+| Equipos | `/equipos` (dropdown, **solo admin**) | `EquipoController` |
+| Salas (logias) | `/salas` | `SalaController` |
+| Multas Pendientes | `/reportes/multas-pendientes` (dropdown) | `ReporteController::multasPendientes` |
+| Reportes | `/reportes` | `ReporteController` |
+| Código QR de acceso | `/codigo-qr` (dropdown) | `CodigoAccesoController` |
+| Listado de libros | `/libros/listado` (dropdown) | `LibroController` |
+| Catalogación de libros | `/libros/catalogacion` (dropdown, **solo admin**) | `LibroController::store/update` |
+| Estado de libro | `/libros/estado` (dropdown) | `LibroController::cambiarEstado` |
+
 ### ¿Por qué "app-overlay"?
 
 Laravel no se puede "vendorizar" fácilmente dentro de una imagen Docker sin antes
@@ -98,6 +84,13 @@ la primera vez dentro de un volumen (`laravel_app`), y luego copia encima nuestr
 código (`app-overlay/`) — modelos, controladores, rutas, migraciones y seeders.
 En arranques posteriores, si Laravel ya existe en el volumen, solo se reaplica el
 overlay y se corren migraciones — no se reinstala Composer desde cero.
+
+Es un patrón de **desarrollo**, no de despliegue: la imagen no queda
+autocontenida (el Laravel real vive en un volumen, no en la imagen), y el
+primer arranque depende de red para bajar dependencias vía Composer. Para un
+lanzamiento real conviene un Dockerfile multi-stage que corra
+`composer install --no-dev` en tiempo de **build** e incluya `app-overlay/`
+directo en la imagen final, sin el paso de "instalar en frío" al arrancar.
 
 ## Cómo levantar el proyecto
 
@@ -151,9 +144,10 @@ Este comando (`app/Console/Commands/SeedMockupData.php`) genera:
 - Entradas y préstamos distribuidos en los últimos días, con sesgo horario
   (más tráfico 10–13h y 15–18h), incluyendo ejemplos de entrada externa y de
   convenio para hoy
+- 7 equipos (audífonos y notebooks) y sus préstamos asociados
 - 25 salas/logias de estudio (1er y 2do piso, capacidades variables) — cada
   una con su propio `codigo_barras` inventado (Horizon aún no entrega los
-  reales) — y reservas de los últimos días
+  reales) — y reservas de los últimos días, con sus participantes reales
 
 Si necesitas empezar completamente de cero (esquema incluido):
 
@@ -175,11 +169,12 @@ npm run dev
 
 Hay una suite de Feature tests (`backend/app-overlay/tests/Feature/`) que
 cubre login de staff/usuario, registro de entradas, reservas de sala
-(solapamiento y validación grupal), cancelación de reservas ajenas, la
-separación de middlewares `staff`/`usuario`, y el cálculo/cobro de multas
-por atraso en préstamos. Corre contra una base Postgres
-de pruebas dedicada (`biblioteca_test`, separada de `biblioteca`), que
-`docker-entrypoint.sh` crea automáticamente al levantar el backend.
+(solapamiento y validación grupal, incluido el cruce entre salas distintas),
+préstamos de equipos, cálculo/cobro de multas por atraso y su reporte
+consolidado, y la separación de middlewares `staff`/`usuario`. Corre contra
+una base Postgres de pruebas dedicada (`biblioteca_test`, separada de
+`biblioteca`), que `docker-entrypoint.sh` crea automáticamente al levantar
+el backend.
 
 ```bash
 docker compose exec backend php artisan test
@@ -193,22 +188,23 @@ tests.
 
 ## Deuda técnica conocida
 
-Las reservas de sala siguen guardando los RUT de los participantes como un array JSON en vez de
-una tabla relacional (`Reserva.ruts`), así que `SalaController::index`
-reconstruye el mapeo RUT → usuario a mano. Los préstamos de **equipos**
-(audífonos, notebooks) siguen identificándose por código de inventario en
-texto libre, ya que no son parte del catálogo de libros. Los préstamos de
-**libros**, en cambio, ya están conectados al catálogo real (`libro_id` +
-`codigo_barras`, con validación de disponibilidad y de `estado_proceso`) —
-pero todavía no existe un modelo de "ejemplar" (una fila `Libro` = un solo
-`disponible`/`estado_proceso`, no soporta múltiples copias físicas del mismo
-título). Tampoco se separa registro bibliográfico de ejemplar físico (sin
-"Bib No." / "Item No." tipo Horizon) ni se guardan contadores históricos de
-préstamo (número de préstamos, fecha del último) — son derivables por query
-sobre `prestamos` si algún día hacen falta, a propósito no se duplicaron
-como columnas. Las **multas** por atraso se calculan y guardan por préstamo
-individual, pero no hay bloqueo de nuevos préstamos si el usuario tiene una
-multa pendiente en otro préstamo, ni una vista que consolide "multas
-pendientes de cobro" cruzando todos los usuarios. Antes de asumir que algo
-"falta" o "está roto", revisa el código real en `app-overlay/` — este
-README se puede desactualizar.
+- **Sin múltiples copias de un mismo libro**: una fila `Libro` sigue siendo
+  una sola copia física (un solo `disponible`/`estado_proceso`); no hay
+  modelo de "ejemplar", ni separación entre registro bibliográfico e ítem
+  físico (sin "Bib No." / "Item No." estilo Horizon). Fuera del alcance
+  actual — ver `CLAUDE.md` si se retoma.
+- **Multas sin bloqueo duro**: se avisa al staff al crear un préstamo si el
+  usuario tiene deuda pendiente, y existe una vista consolidada por usuario,
+  pero ningún préstamo se rechaza por eso — es una decisión deliberada, no
+  un bug.
+- **Contadores históricos de préstamo** (cantidad, última fecha) no se
+  guardan como columnas — son derivables por query sobre `prestamos` si
+  algún día hacen falta.
+- **Credenciales de Postgres hardcodeadas** en `docker-compose.yml` —
+  aceptable en desarrollo local, no usar tal cual en un despliegue.
+- **`PortalController` concentra varias responsabilidades** (estado/aforo,
+  entrada/salida, catálogo, salas y reservas del usuario). Si crece más,
+  conviene separar por dominio en vez de agregar más métodos ahí.
+
+Antes de asumir que algo "falta" o "está roto", revisa el código real en
+`app-overlay/` — este README se puede desactualizar.

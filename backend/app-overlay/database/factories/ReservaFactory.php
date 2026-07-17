@@ -19,11 +19,15 @@ class ReservaFactory extends Factory
             'usuario_id' => Usuario::factory(),
             'rut_usuario' => Rut::formatear(fake()->unique()->numberBetween(1000000, 25000000)),
             'cantidad_personas' => 2,
-            'ruts' => [],
             'fecha' => now()->toDateString(),
             'hora_inicio' => 10,
             'hora_fin' => 12,
             'estado' => 'activa',
         ];
+    }
+
+    public function conParticipantes($usuarios): static
+    {
+        return $this->afterCreating(fn (Reserva $reserva) => $reserva->participantes()->sync(collect($usuarios)->pluck('id')));
     }
 }

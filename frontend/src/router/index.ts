@@ -107,6 +107,17 @@ const router = createRouter({
       name: 'estado-libro',
       component: () => import('@/views/EstadoLibroView.vue'),
     },
+    {
+      path: '/equipos',
+      name: 'equipos',
+      component: () => import('@/views/EquiposView.vue'),
+      meta: { requiresAdmin: true },
+    },
+    {
+      path: '/reportes/multas-pendientes',
+      name: 'multas-pendientes',
+      component: () => import('@/views/MultasPendientesView.vue'),
+    },
   ],
 })
 

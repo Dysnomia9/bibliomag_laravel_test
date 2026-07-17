@@ -8,6 +8,7 @@ use App\Models\Entrada;
 use App\Models\Libro;
 use App\Models\Reserva;
 use App\Models\Sala;
+use App\Models\Usuario;
 use App\Services\ReservaSalaService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -154,12 +155,13 @@ class PortalController extends Controller
             'usuario_id' => $usuario->id,
             'rut_usuario' => $data['ruts'][0],
             'cantidad_personas' => $data['cantidad_personas'],
-            'ruts' => $data['ruts'],
             'fecha' => $data['fecha'],
             'hora_inicio' => $data['hora_inicio'],
             'hora_fin' => $data['hora_fin'],
             'estado' => 'activa',
         ]);
+
+        $reserva->participantes()->attach(Usuario::whereIn('rut', $data['ruts'])->pluck('id'));
 
         return response()->json($reserva, 201);
     }

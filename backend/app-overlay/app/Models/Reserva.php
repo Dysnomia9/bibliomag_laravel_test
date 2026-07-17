@@ -16,7 +16,6 @@ class Reserva extends Model
         'usuario_id',
         'rut_usuario',
         'cantidad_personas',
-        'ruts',
         'fecha',
         'hora_inicio',
         'hora_fin',
@@ -32,7 +31,6 @@ class Reserva extends Model
     {
         return [
             'fecha' => 'date',
-            'ruts' => 'array',
             'hora_prestamo_real' => 'datetime',
             'hora_devolucion_real' => 'datetime',
         ];
@@ -46,5 +44,10 @@ class Reserva extends Model
     public function usuario()
     {
         return $this->belongsTo(Usuario::class);
+    }
+
+    public function participantes()
+    {
+        return $this->belongsToMany(Usuario::class, 'reserva_participantes')->withTimestamps();
     }
 }
