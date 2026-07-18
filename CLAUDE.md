@@ -273,6 +273,16 @@ frontend/
   de Laravel desde cero por algún motivo, hacelo en una imagen descartable
   y fusionalo a mano como se hizo esta vez, no en el entrypoint de cada
   arranque.
+  **Consecuencia práctica para el día a día**: antes, un cambio en
+  `backend/` (Controller, Model, config, etc.) se veía con solo
+  `docker compose restart backend` / `docker compose up` de nuevo, porque
+  el entrypoint reaplicaba el overlay en cada arranque. **Ahora no** — el
+  código está horneado en la imagen, así que hace falta
+  `docker compose up --build backend` (o `--build` para todo el stack)
+  para que un cambio de backend se refleje. `docker compose up` a secas
+  solo levanta la imagen ya construida (o la construye si nunca existió),
+  no recoge cambios de código nuevos. El frontend no cambia — sigue con
+  hot-reload de Vite vía bind-mount, nunca necesitó rebuild.
 - **Composer audit block**: Composer 2.8+ bloquea instalaciones por
   advisories de seguridad por defecto. La imagen define
   `COMPOSER_NO_AUDIT=1`, que es lo que realmente desactiva el audit para
