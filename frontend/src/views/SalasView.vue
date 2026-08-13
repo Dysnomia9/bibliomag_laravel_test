@@ -31,7 +31,6 @@ const reservas = ref<Reserva[]>([])
 const apiError = ref(false)
 const selectedDate = ref(hoy)
 const busqueda = ref('')
-const pisoSeleccionado = ref('')
 const page = ref(0)
 const salasPerPage = 10
 
@@ -105,16 +104,10 @@ async function escanearLogia() {
   }
 }
 
-const pisos = computed(() => Array.from(new Set(salas.value.map((s) => s.piso))).sort())
-
 const filteredSalas = computed(() => {
-  let lista = salas.value
-  if (pisoSeleccionado.value) {
-    lista = lista.filter((s) => s.piso === pisoSeleccionado.value)
-  }
-  if (!busqueda.value.trim()) return lista
+  if (!busqueda.value.trim()) return salas.value
   const q = busqueda.value.toLowerCase()
-  return lista.filter((s) => s.nombre.toLowerCase().includes(q) || String(s.capacidad).includes(q))
+  return salas.value.filter((s) => s.nombre.toLowerCase().includes(q) || String(s.capacidad).includes(q))
 })
 
 const totalPages = computed(() => Math.max(1, Math.ceil(filteredSalas.value.length / salasPerPage)))
@@ -260,8 +253,8 @@ function formatFechaLarga(fecha: string) {
         style="background: linear-gradient(135deg, #2D1B69 0%, #3B28A3 30%, #4338CA 60%, #4F46E5 100%);"
       >
         <div class="px-6 py-5">
-          <h1 class="text-2xl font-serif font-bold tracking-tight text-white">Logias</h1>
-          <p class="text-sm text-white/60 mt-1">25 logias de estudio · 1er y 2do Piso · Horario 08:00 – 21:00</p>
+          <h1 class="text-2xl font-serif font-bold tracking-tight text-white">Salas de Estudio</h1>
+          <p class="text-sm text-white/60 mt-1">15 logias de estudio, Sala de Seminarios, Sala de Postgrado y Sala GACI · Horario 08:00 – 21:00</p>
         </div>
       </div>
 
@@ -357,22 +350,15 @@ function formatFechaLarga(fecha: string) {
             class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
           />
         </div>
-        <div class="flex gap-1 bg-white rounded-lg shadow-sm p-1">
+        <div v-if="totalPages > 1" class="flex items-center gap-2 bg-white rounded-lg shadow-sm p-1.5">
           <button
-            @click="pisoSeleccionado = ''; page = 0"
-            class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
-            :class="pisoSeleccionado === '' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-100'"
+            v-for="n in totalPages"
+            :key="n"
+            @click="page = n - 1"
+            class="px-4 py-2 rounded-md text-sm font-semibold transition-colors"
+            :class="page === n - 1 ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-100'"
           >
-            Todos los pisos
-          </button>
-          <button
-            v-for="piso in pisos"
-            :key="piso"
-            @click="pisoSeleccionado = piso; page = 0"
-            class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
-            :class="pisoSeleccionado === piso ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-100'"
-          >
-            {{ piso }}
+            Página {{ n }}
           </button>
         </div>
       </div>
@@ -382,7 +368,7 @@ function formatFechaLarga(fecha: string) {
           <table class="w-full">
             <thead>
               <tr class="bg-gray-50">
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase sticky left-0 bg-gray-50 z-10 min-w-[140px]">Logia</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase sticky left-0 bg-gray-50 z-10 min-w-[140px]">Sala</th>
                 <th
                   v-for="b in horariosBloques"
                   :key="b.inicio"
@@ -398,7 +384,7 @@ function formatFechaLarga(fecha: string) {
               <tr v-for="sala in salasPage" :key="sala.id" class="hover:bg-gray-50/50">
                 <td class="px-4 py-3 sticky left-0 bg-white z-10">
                   <div class="font-medium text-sm text-gray-900">{{ sala.nombre }}</div>
-                  <div class="text-xs text-gray-400">{{ sala.capacidad }} personas · {{ sala.piso }}</div>
+                  <div class="text-xs text-gray-400">{{ sala.capacidad }} personas</div>
                 </td>
                 <td v-for="bloque in horariosBloques" :key="bloque.inicio" class="px-2 py-2 text-center">
                   <div

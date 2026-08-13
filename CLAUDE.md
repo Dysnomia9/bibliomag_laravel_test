@@ -224,8 +224,9 @@ frontend/
   `PrestamoMultaTest`, `EquipoPrestamoTest`, `MultasPendientesTest`), corren
   contra una DB Postgres dedicada (`biblioteca_test`, ver
   `docker-entrypoint.sh`) con `docker compose exec backend php artisan
-  test`. No cubren todavía `LibroController` ni la catalogación/
-  `estado_proceso`.
+  test`. **Actualización (2026-08-13)**: se agregó `LibroCatalogacionTest`
+  cubriendo la unicidad de `codigo_barras` (store/update); sigue sin
+  cobertura el resto de la catalogación/`estado_proceso`.
 - **Multas: aviso + vista consolidada, pero sin bloqueo duro** —
   `Prestamo.multa_monto`/`multa_estado` se calculan y guardan por préstamo
   individual al momento de `devolver()` (ver Gotchas). Ya existe:
@@ -447,6 +448,36 @@ frontend/
   ahora" en `SalasView.vue`/`PortalSalasView.vue` que preselecciona ese
   bloque en la primera sala libre — la hora real de inicio queda en
   `hora_prestamo_real`, separada del bloque nominal.
+- **Salas ya no se agrupan por piso** (2026-08-13): antes había 25 logias
+  repartidas artificialmente en `piso = '1er Piso' | '2do Piso'`, sin
+  corresponder a la distribución real de la biblioteca — se sacó la
+  columna `piso` de la tabla `salas` (migración
+  `2024_01_02_000013_drop_piso_from_salas_table`, `down()` la restaura si
+  hace falta) y el filtro por piso de `SalasView.vue`. El inventario real
+  de salas ahora es: 15 logias de estudio (`tipo = 'logia'`, con
+  `codigo_barras` Horizon como antes) + 3 salas con nombre propio y
+  `tipo = 'sala'` sin `codigo_barras` (no pasan por
+  `ReservaSalaService::escanearLogia()`, que sigue filtrando
+  `where('tipo', 'logia')`): **Sala de Seminarios**, **Sala de Postgrado**
+  y **Sala GACI** (apoyo a la inclusión). Total 18 filas en `salas`, todas
+  reservables por el mismo flujo de bloques horarios de 2h. Si necesitás
+  volver a distinguir ubicación física, agregá un campo nuevo (ej.
+  `ubicacion`) en vez de reintroducir `piso` con semántica de "1er/2do
+  piso" — no correspondía a la realidad y por eso se sacó.
+- **Unicidad de `codigo_barras` en `libros`** (verificado 2026-08-13, no
+  era un gap real): ya estaba cubierta en dos capas —
+  `libros.codigo_barras` es `unique()` a nivel de columna desde la
+  migración original (`create_libros_table`), y
+  `LibroController::reglasCatalogacion()` valida
+  `unique:libros,codigo_barras,{id},id` tanto en `store()` como en
+  `update()` (ignorando el propio registro al editar), devolviendo 422 con
+  mensaje de validación en vez de un error 500 de constraint de DB. Lo que
+  faltaba era cobertura de test — se agregó
+  `tests/Feature/LibroCatalogacionTest.php` (crear con código repetido,
+  actualizar al código de otro, actualizar manteniendo el propio código, y
+  el caso límite de bypass de validación a nivel de Eloquent). No le quites
+  la regla `unique` de `reglasCatalogacion()` ni asumas que hace falta
+  agregarla — ya estaba ahí.
 
 ## Checklist antes de dar un módulo por terminado
 

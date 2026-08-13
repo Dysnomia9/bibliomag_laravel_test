@@ -14,7 +14,6 @@ class Sala extends Model
     protected $fillable = [
         'nombre',
         'capacidad',
-        'piso',
         'tipo',
         'codigo_barras',
     ];

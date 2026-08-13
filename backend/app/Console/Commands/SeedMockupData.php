@@ -22,7 +22,6 @@ class SeedMockupData extends Command
 
     protected $description = 'Carga datos de prueba (mockup) para desarrollo: staff, usuarios con carrera, salas, entradas, préstamos y reservas.';
 
-    /** Carreras UMAG — adaptado de lib/mock-reportes.ts (proyecto Next.js original) */
     private array $carreras = [
         'Ingeniería Civil Informática',
         'Ingeniería Comercial',
@@ -348,15 +347,15 @@ class SeedMockupData extends Command
     /** @return \Illuminate\Support\Collection<int, Sala> */
     private function seedSalas()
     {
-        // 25 logias de estudio repartidas en 2 pisos — adaptado de app/staff/salas/page.tsx
-        $capacidades = [2, 3, 4, 2, 3, 4, 2, 3, 4, 2, 3, 4, 2, 3, 4, 2, 3, 4, 2, 3, 4, 2, 3, 4, 2];
+        // 15 logias de estudio, todas en la misma ubicación (ya no se distingue
+        // por piso — ver CLAUDE.md), más 3 salas especiales con nombre propio.
+        $capacidades = [2, 3, 4, 2, 3, 4, 2, 3, 4, 2, 3, 4, 2, 3, 4];
         $salas = collect();
 
-        for ($i = 0; $i < 25; $i++) {
+        for ($i = 0; $i < 15; $i++) {
             $salas->push(Sala::create([
                 'nombre' => 'Logia '.str_pad((string) ($i + 1), 2, '0', STR_PAD_LEFT),
                 'capacidad' => $capacidades[$i],
-                'piso' => $i < 13 ? '1er Piso' : '2do Piso',
                 'tipo' => 'logia',
                 // Código de barras hardcodeado por logia (Horizon aún no entrega los
                 // reales) — cada logia tiene el suyo, a diferencia del puesto de
@@ -365,7 +364,26 @@ class SeedMockupData extends Command
             ]));
         }
 
-        $this->line('  · 25 logias de estudio creadas (1er y 2do piso)');
+        // Salas especiales: no son logias de estudio individuales, no tienen
+        // código de barras Horizon asignado (tipo 'sala', quedan fuera del
+        // escaneo de logias en ReservaSalaService::escanearLogia()) pero se
+        // reservan con el mismo flujo de bloques horarios.
+        $salasEspeciales = [
+            ['nombre' => 'Sala de Seminarios', 'capacidad' => 30],
+            ['nombre' => 'Sala de Postgrado', 'capacidad' => 20],
+            ['nombre' => 'Sala GACI (Apoyo a la Inclusión)', 'capacidad' => 10],
+        ];
+
+        foreach ($salasEspeciales as $especial) {
+            $salas->push(Sala::create([
+                'nombre' => $especial['nombre'],
+                'capacidad' => $especial['capacidad'],
+                'tipo' => 'sala',
+                'codigo_barras' => null,
+            ]));
+        }
+
+        $this->line('  · '.$salas->count().' salas creadas (15 logias + Seminarios + Postgrado + GACI)');
 
         return $salas;
     }

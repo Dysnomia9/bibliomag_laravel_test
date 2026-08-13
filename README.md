@@ -151,9 +151,10 @@ Este comando (`app/Console/Commands/SeedMockupData.php`) genera:
   (más tráfico 10–13h y 15–18h), incluyendo ejemplos de entrada externa y de
   convenio para hoy
 - 7 equipos (audífonos y notebooks) y sus préstamos asociados
-- 25 salas/logias de estudio (1er y 2do piso, capacidades variables) — cada
-  una con su propio `codigo_barras` inventado (Horizon aún no entrega los
-  reales) — y reservas de los últimos días, con sus participantes reales
+- 18 salas: 15 logias de estudio (capacidades variables, cada una con su
+  propio `codigo_barras` inventado — Horizon aún no entrega los reales) más
+  Sala de Seminarios, Sala de Postgrado y Sala GACI (apoyo a la inclusión) —
+  y reservas de los últimos días, con sus participantes reales
 
 Si necesitas empezar completamente de cero (esquema incluido):
 

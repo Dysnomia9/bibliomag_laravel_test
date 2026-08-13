@@ -122,7 +122,6 @@ export type Sala = {
   id: number
   nombre: string
   capacidad: number
-  piso: string
   tipo: 'logia' | 'puesto' | 'sala'
   codigo_barras: string | null
 }

@@ -14,7 +14,6 @@ class SalaFactory extends Factory
         return [
             'nombre' => 'Logia '.fake()->unique()->numberBetween(1, 999),
             'capacidad' => fake()->numberBetween(2, 6),
-            'piso' => '1er Piso',
             'tipo' => 'logia',
             'codigo_barras' => null,
         ];
