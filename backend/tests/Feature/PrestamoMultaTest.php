@@ -115,7 +115,8 @@ class PrestamoMultaTest extends TestCase
 
     public function test_marcar_multa_como_pagada(): void
     {
-        Sanctum::actingAs(Staff::factory()->create());
+        $staff = Staff::factory()->create(['nombre' => 'Juan Pérez']);
+        Sanctum::actingAs($staff);
 
         $prestamo = Prestamo::factory()->create([
             'usuario_id' => Usuario::factory()->create()->id,
@@ -125,13 +126,12 @@ class PrestamoMultaTest extends TestCase
             'multa_estado' => 'pendiente',
         ]);
 
-        $response = $this->patchJson("/api/prestamos/{$prestamo->id}/multa/pagar", [
-            'multa_pagada_por' => 'Juan Pérez',
-        ]);
+        $response = $this->patchJson("/api/prestamos/{$prestamo->id}/multa/pagar");
 
         $response->assertStatus(200)
             ->assertJsonPath('multa_estado', 'pagada')
-            ->assertJsonPath('multa_pagada_por', 'Juan Pérez');
+            ->assertJsonPath('multa_pagada_por', 'Juan Pérez')
+            ->assertJsonPath('multa_pagada_por_staff_id', $staff->id);
 
         $prestamo->refresh();
         $this->assertNotNull($prestamo->multa_pagada_en);

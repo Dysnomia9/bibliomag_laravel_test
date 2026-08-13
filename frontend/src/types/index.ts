@@ -53,11 +53,14 @@ export type Prestamo = {
   fecha_devolucion_real: string | null
   estado: 'activo' | 'atrasado' | 'devuelto'
   prestado_por: string | null
+  prestado_por_staff_id?: number | null
   devuelto_por: string | null
+  devuelto_por_staff_id?: number | null
   multa_monto: number | null
   multa_estado: 'pendiente' | 'pagada' | null
   multa_pagada_en: string | null
   multa_pagada_por: string | null
+  multa_pagada_por_staff_id?: number | null
   usuario?: Pick<Usuario, 'id' | 'nombre' | 'apellido' | 'rut'>
 }
 

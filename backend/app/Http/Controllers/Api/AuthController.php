@@ -25,6 +25,12 @@ class AuthController extends Controller
             ]);
         }
 
+        if (! $staff->activo) {
+            throw ValidationException::withMessages([
+                'email' => ['Tu cuenta se encuentra inactiva. Contacta a un administrador.'],
+            ]);
+        }
+
         $token = $staff->createToken('staff-token')->plainTextToken;
 
         return response()->json([

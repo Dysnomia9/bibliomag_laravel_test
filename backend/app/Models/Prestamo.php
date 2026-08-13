@@ -23,11 +23,14 @@ class Prestamo extends Model
         'fecha_devolucion_real',
         'estado',
         'prestado_por',
+        'prestado_por_staff_id',
         'devuelto_por',
+        'devuelto_por_staff_id',
         'multa_monto',
         'multa_estado',
         'multa_pagada_en',
         'multa_pagada_por',
+        'multa_pagada_por_staff_id',
     ];
 
     protected function casts(): array
@@ -53,5 +56,20 @@ class Prestamo extends Model
     public function equipo()
     {
         return $this->belongsTo(Equipo::class);
+    }
+
+    public function prestadoPorStaff()
+    {
+        return $this->belongsTo(Staff::class, 'prestado_por_staff_id');
+    }
+
+    public function devueltoPorStaff()
+    {
+        return $this->belongsTo(Staff::class, 'devuelto_por_staff_id');
+    }
+
+    public function multaPagadaPorStaff()
+    {
+        return $this->belongsTo(Staff::class, 'multa_pagada_por_staff_id');
     }
 }

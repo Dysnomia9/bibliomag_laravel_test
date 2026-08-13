@@ -18,6 +18,7 @@ class Staff extends Authenticatable
         'password',
         'nombre',
         'rol',
+        'activo',
     ];
 
     protected $hidden = [
@@ -28,6 +29,7 @@ class Staff extends Authenticatable
     {
         return [
             'password' => 'hashed',
+            'activo' => 'boolean',
         ];
     }
 }

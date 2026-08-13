@@ -39,7 +39,10 @@
       "Bash(curl -s -o /dev/null -w \"frontend HTTP %{http_code}\\\\n\" http://localhost:5173)",
       "Bash(curl -s -X POST http://localhost:8000/api/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"admin@umag.cl\",\"password\":\"admin123\"}' -w \"\\\\nlogin HTTP %{http_code}\\\\n\")",
       "Bash(node check3.js)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:5173/)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:5173/)",
+      "Bash(git -C /Users/dysnomia/Final/bibliomag_laravel_test checkout -- frontend/tsconfig.tsbuildinfo)",
+      "Bash(DB_DATABASE=x DB_USERNAME=x DB_PASSWORD=x FRONTEND_URL=x SANCTUM_STATEFUL_DOMAINS=x docker compose -f docker-compose.prod.yml config)",
+      "Bash(curl -sD - -o /dev/null -H \"Authorization: Bearer 37|kUwy2QXtq6ZngYnu3of0SdNSUI0J5JzbYQBuWAdu6a02b7b7\" -H \"Accept: application/json\" http://localhost:8000/api/dashboard/resumen)"
     ]
   }
 }

@@ -4,12 +4,9 @@ import StaffLayout from '@/components/layout/StaffLayout.vue'
 import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import api from '@/services/api'
 import { useToast } from '@/composables/useToast'
-import { useStaffNombres } from '@/composables/useStaffNombres'
 import type { Prestamo } from '@/types'
 
 const toast = useToast()
-const { nombresStaff, cargarStaffNombres } = useStaffNombres()
-cargarStaffNombres()
 
 const prestamos = ref<Prestamo[]>([])
 const cargando = ref(true)
@@ -55,20 +52,16 @@ onMounted(cargar)
 
 const devolucionPendiente = ref<Prestamo | null>(null)
 const devolviendo = ref(false)
-const devueltoPor = ref('')
 
 function pedirConfirmacionDevolucion(prestamo: Prestamo) {
   devolucionPendiente.value = prestamo
-  devueltoPor.value = ''
 }
 
 async function confirmarDevolucion() {
   if (!devolucionPendiente.value) return
   devolviendo.value = true
   try {
-    const { data } = await api.patch<Prestamo>(`/prestamos/${devolucionPendiente.value.id}/devolver`, {
-      devuelto_por: devueltoPor.value.trim() || undefined,
-    })
+    const { data } = await api.patch<Prestamo>(`/prestamos/${devolucionPendiente.value.id}/devolver`)
     toast.success(
       data.multa_monto
         ? `Devolución registrada con multa de ${formatMonto(data.multa_monto)} por atraso`
@@ -89,20 +82,16 @@ function formatMonto(monto: number) {
 
 const pagoMultaPendiente = ref<Prestamo | null>(null)
 const pagandoMulta = ref(false)
-const multaPagadaPor = ref('')
 
 function pedirConfirmacionPagoMulta(prestamo: Prestamo) {
   pagoMultaPendiente.value = prestamo
-  multaPagadaPor.value = ''
 }
 
 async function confirmarPagoMulta() {
   if (!pagoMultaPendiente.value) return
   pagandoMulta.value = true
   try {
-    await api.patch(`/prestamos/${pagoMultaPendiente.value.id}/multa/pagar`, {
-      multa_pagada_por: multaPagadaPor.value.trim() || undefined,
-    })
+    await api.patch(`/prestamos/${pagoMultaPendiente.value.id}/multa/pagar`)
     toast.success('Multa marcada como pagada')
     pagoMultaPendiente.value = null
     await cargar()
@@ -258,21 +247,11 @@ const filtrados = computed(() => prestamos.value)
       >
         <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
           <h3 class="text-lg font-bold text-gray-900 mb-1">¿Confirmar devolución?</h3>
-          <p class="text-sm text-gray-500 mb-4">
+          <p class="text-sm text-gray-500 mb-6">
             Se registrará la devolución de <strong class="font-mono">{{ devolucionPendiente.libro_titulo }}</strong>
             ({{ TIPO_LABELS[devolucionPendiente.tipo_item] ?? 'Libro' }}) a nombre de
             <strong>{{ devolucionPendiente.usuario?.nombre }} {{ devolucionPendiente.usuario?.apellido }}</strong>.
           </p>
-          <div class="mb-6">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Devuelto por (opcional)</label>
-            <input
-              v-model="devueltoPor"
-              type="text"
-              list="staff-nombres"
-              placeholder="Nombre de quien recibe"
-              class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-            />
-          </div>
           <div class="flex gap-3">
             <button
               @click="devolucionPendiente = null"
@@ -298,20 +277,10 @@ const filtrados = computed(() => prestamos.value)
       >
         <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
           <h3 class="text-lg font-bold text-gray-900 mb-1">¿Confirmar pago de multa?</h3>
-          <p class="text-sm text-gray-500 mb-4">
+          <p class="text-sm text-gray-500 mb-6">
             Se registrará el pago de <strong>{{ formatMonto(pagoMultaPendiente.multa_monto ?? 0) }}</strong> a nombre de
             <strong>{{ pagoMultaPendiente.usuario?.nombre }} {{ pagoMultaPendiente.usuario?.apellido }}</strong>.
           </p>
-          <div class="mb-6">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Cobrada por (opcional)</label>
-            <input
-              v-model="multaPagadaPor"
-              type="text"
-              list="staff-nombres"
-              placeholder="Nombre de quien cobra"
-              class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-            />
-          </div>
           <div class="flex gap-3">
             <button
               @click="pagoMultaPendiente = null"
@@ -329,10 +298,6 @@ const filtrados = computed(() => prestamos.value)
           </div>
         </div>
       </div>
-
-      <datalist id="staff-nombres">
-        <option v-for="n in nombresStaff" :key="n" :value="n" />
-      </datalist>
     </div>
   </StaffLayout>
 </template>

@@ -5,12 +5,9 @@ import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import api from '@/services/api'
 import { useToast } from '@/composables/useToast'
 import { formatRut } from '@/composables/useRut'
-import { useStaffNombres } from '@/composables/useStaffNombres'
 import type { Equipo, Prestamo, ReservaLibro, Usuario } from '@/types'
 
 const toast = useToast()
-const { nombresStaff, cargarStaffNombres } = useStaffNombres()
-cargarStaffNombres()
 
 const rut = ref('')
 const usuario = ref<Usuario | null>(null)
@@ -22,7 +19,6 @@ const reservas = ref<ReservaLibro[]>([])
 
 const showForm = ref(false)
 const showReservaForm = ref(false)
-const prestadoPor = ref('')
 const activeTab = ref<'prestamos' | 'reservas'>('prestamos')
 
 const today = new Date().toISOString().slice(0, 10)
@@ -45,8 +41,6 @@ const prestamosNotebooks = computed(() => prestamos.value.filter((p) => p.tipo_i
 
 const codigoAudifonos = ref('')
 const codigoNotebook = ref('')
-const prestadoPorAudifonos = ref('')
-const prestadoPorNotebook = ref('')
 
 const equiposAudifonos = ref<Equipo[]>([])
 const equiposNotebook = ref<Equipo[]>([])
@@ -149,14 +143,12 @@ async function crearPrestamo() {
       codigo_barras: codigoBarrasPrestamo.value,
       fecha_prestamo: fechaPrestamo.value,
       fecha_devolucion: fechaDevolucion.value,
-      prestado_por: prestadoPor.value.trim() || undefined,
     })
     toast.success(`Préstamo registrado: "${libroEncontradoPrestamo.value}"`)
     codigoBarrasPrestamo.value = ''
     libroEncontradoPrestamo.value = ''
     fechaPrestamo.value = today
     fechaDevolucion.value = ''
-    prestadoPor.value = ''
     showForm.value = false
     await cargarPrestamosYReservas()
   } catch (e: any) {
@@ -166,20 +158,16 @@ async function crearPrestamo() {
 
 const devolucionPendiente = ref<Prestamo | null>(null)
 const devolviendo = ref(false)
-const devueltoPor = ref('')
 
 function pedirConfirmacionDevolucion(prestamo: Prestamo) {
   devolucionPendiente.value = prestamo
-  devueltoPor.value = ''
 }
 
 async function confirmarDevolucion() {
   if (!devolucionPendiente.value) return
   devolviendo.value = true
   try {
-    const { data } = await api.patch<Prestamo>(`/prestamos/${devolucionPendiente.value.id}/devolver`, {
-      devuelto_por: devueltoPor.value.trim() || undefined,
-    })
+    const { data } = await api.patch<Prestamo>(`/prestamos/${devolucionPendiente.value.id}/devolver`)
     toast.success(
       data.multa_monto
         ? `Devolución registrada con multa de ${formatMonto(data.multa_monto)} por atraso`
@@ -200,20 +188,16 @@ function formatMonto(monto: number) {
 
 const pagoMultaPendiente = ref<Prestamo | null>(null)
 const pagandoMulta = ref(false)
-const multaPagadaPor = ref('')
 
 function pedirConfirmacionPagoMulta(prestamo: Prestamo) {
   pagoMultaPendiente.value = prestamo
-  multaPagadaPor.value = ''
 }
 
 async function confirmarPagoMulta() {
   if (!pagoMultaPendiente.value) return
   pagandoMulta.value = true
   try {
-    await api.patch(`/prestamos/${pagoMultaPendiente.value.id}/multa/pagar`, {
-      multa_pagada_por: multaPagadaPor.value.trim() || undefined,
-    })
+    await api.patch(`/prestamos/${pagoMultaPendiente.value.id}/multa/pagar`)
     toast.success('Multa marcada como pagada')
     pagoMultaPendiente.value = null
     await cargarPrestamosYReservas()
@@ -226,7 +210,6 @@ async function confirmarPagoMulta() {
 
 async function crearPrestamoEquipo(tipo: 'audifonos' | 'notebook') {
   const codigo = tipo === 'audifonos' ? codigoAudifonos : codigoNotebook
-  const prestadoPorEquipo = tipo === 'audifonos' ? prestadoPorAudifonos : prestadoPorNotebook
 
   if (!codigo.value.trim()) {
     toast.error(`Ingrese el código del ${tipo === 'audifonos' ? 'audífono' : 'notebook'}`)
@@ -237,11 +220,9 @@ async function crearPrestamoEquipo(tipo: 'audifonos' | 'notebook') {
       usuario_id: usuario.value!.id,
       libro_titulo: codigo.value,
       tipo_item: tipo,
-      prestado_por: prestadoPorEquipo.value.trim() || undefined,
     })
     toast.success('Préstamo de equipo registrado')
     codigo.value = ''
-    prestadoPorEquipo.value = ''
     await Promise.all([cargarPrestamosYReservas(), cargarEquiposDisponibles()])
   } catch (e: any) {
     toast.error(e?.response?.data?.message ?? 'No se pudo registrar el préstamo del equipo')
@@ -452,13 +433,6 @@ function formatFecha(iso: string | null) {
                     class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                   />
                 </div>
-                <input
-                  v-model="prestadoPor"
-                  type="text"
-                  list="staff-nombres"
-                  placeholder="Prestado por (opcional)"
-                  class="flex-1 min-w-[160px] px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                />
                 <button
                   @click="crearPrestamo"
                   :disabled="!libroEncontradoPrestamo || !libroDisponiblePrestamo || !fechaPrestamo || !fechaDevolucion"
@@ -677,13 +651,6 @@ function formatFecha(iso: string | null) {
                 placeholder="Código (ej: AUD-003)"
                 class="flex-1 min-w-[160px] px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
               />
-              <input
-                v-model="prestadoPorAudifonos"
-                type="text"
-                list="staff-nombres"
-                placeholder="Prestado por (opcional)"
-                class="flex-1 min-w-[160px] px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-              />
               <button
                 @click="crearPrestamoEquipo('audifonos')"
                 class="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium"
@@ -728,13 +695,6 @@ function formatFecha(iso: string | null) {
                 placeholder="Código (ej: NB-012)"
                 class="flex-1 min-w-[160px] px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
               />
-              <input
-                v-model="prestadoPorNotebook"
-                type="text"
-                list="staff-nombres"
-                placeholder="Prestado por (opcional)"
-                class="flex-1 min-w-[160px] px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-              />
               <button
                 @click="crearPrestamoEquipo('notebook')"
                 class="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium"
@@ -773,19 +733,9 @@ function formatFecha(iso: string | null) {
       >
         <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
           <h3 class="text-lg font-bold text-gray-900 mb-1">¿Confirmar devolución?</h3>
-          <p class="text-sm text-gray-500 mb-4">
+          <p class="text-sm text-gray-500 mb-6">
             Se registrará la devolución de <strong class="font-mono">{{ devolucionPendiente.libro_titulo }}</strong>.
           </p>
-          <div class="mb-6">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Devuelto por (opcional)</label>
-            <input
-              v-model="devueltoPor"
-              type="text"
-              list="staff-nombres"
-              placeholder="Nombre de quien recibe"
-              class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-            />
-          </div>
           <div class="flex gap-3">
             <button
               @click="devolucionPendiente = null"
@@ -811,20 +761,10 @@ function formatFecha(iso: string | null) {
       >
         <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
           <h3 class="text-lg font-bold text-gray-900 mb-1">¿Confirmar pago de multa?</h3>
-          <p class="text-sm text-gray-500 mb-4">
+          <p class="text-sm text-gray-500 mb-6">
             Se registrará el pago de <strong>{{ formatMonto(pagoMultaPendiente.multa_monto ?? 0) }}</strong> por
             <strong class="font-mono">{{ pagoMultaPendiente.libro_titulo }}</strong>.
           </p>
-          <div class="mb-6">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Cobrada por (opcional)</label>
-            <input
-              v-model="multaPagadaPor"
-              type="text"
-              list="staff-nombres"
-              placeholder="Nombre de quien cobra"
-              class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-            />
-          </div>
           <div class="flex gap-3">
             <button
               @click="pagoMultaPendiente = null"
@@ -843,9 +783,6 @@ function formatFecha(iso: string | null) {
         </div>
       </div>
 
-      <datalist id="staff-nombres">
-        <option v-for="n in nombresStaff" :key="n" :value="n" />
-      </datalist>
       <datalist id="equipos-audifonos">
         <option v-for="e in equiposAudifonos" :key="e.id" :value="e.codigo_inventario" />
       </datalist>

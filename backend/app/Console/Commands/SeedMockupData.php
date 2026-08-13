@@ -107,13 +107,16 @@ class SeedMockupData extends Command
     {
         if ($this->option('fresh')) {
             $this->info('Eliminando datos de prueba existentes...');
+            // Orden importa: prestamos/entradas/reservas_libro tienen FK RESTRICT hacia
+            // usuarios/libros/equipos (ver migración restrict_delete_on_historial_foreign_keys),
+            // así que deben borrarse antes que sus padres, no después.
             DB::table('reservas_libro')->delete();
-            DB::table('libros')->delete();
+            DB::table('prestamos')->delete();
             DB::table('reserva_participantes')->delete();
             DB::table('reservas')->delete();
             DB::table('entradas')->delete();
+            DB::table('libros')->delete();
             DB::table('equipos')->delete();
-            DB::table('prestamos')->delete();
             DB::table('usuarios')->delete();
             DB::table('salas')->delete();
             DB::table('staff')->delete();

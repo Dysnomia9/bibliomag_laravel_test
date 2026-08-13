@@ -1,0 +1,69 @@
+# Compose de referencia para producción — a diferencia de docker-compose.yml
+# (desarrollo): sin bind mounts, sin credenciales hardcodeadas (vienen del
+# entorno del host/CI), sin exponer el puerto de Postgres al host. No es
+# "listo para usar tal cual" — reemplazar los ${VAR} desde el gestor de
+# secretos del entorno de despliegue real antes de levantar.
+#
+# Uso: docker compose -f docker-compose.prod.yml up -d --build
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    # Sin "ports:" a propósito — solo backend accede a Postgres, dentro de la
+    # red interna de compose. No publicar 5432 al host.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_DATABASE}"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+  # pgbouncer (opcional, recomendado si el tráfico lo justifica): PHP-FPM abre
+  # una conexión nueva por request, sin pool delante. Si se agrega, apuntar
+  # DB_HOST del backend a este servicio en vez de a "db" directamente.
+  # pgbouncer:
+  #   image: edoburu/pgbouncer
+  #   restart: unless-stopped
+  #   environment:
+  #     DATABASE_URL: postgres://${DB_USERNAME}:${DB_PASSWORD}@db:5432/${DB_DATABASE}
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      DB_HOST: db
+      DB_DATABASE: ${DB_DATABASE}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_SSLMODE: require
+      FRONTEND_URL: ${FRONTEND_URL}
+      SANCTUM_STATEFUL_DOMAINS: ${SANCTUM_STATEFUL_DOMAINS}
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "5173:5173"
+
+volumes:
+  db_data:
