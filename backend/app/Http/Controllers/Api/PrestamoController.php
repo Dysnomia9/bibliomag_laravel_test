@@ -7,13 +7,16 @@ use App\Models\Equipo;
 use App\Models\Libro;
 use App\Models\Prestamo;
 use App\Services\MultaService;
+use App\Services\ReservaLibroService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class PrestamoController extends Controller
 {
-    public function __construct(private MultaService $multaService)
-    {
+    public function __construct(
+        private MultaService $multaService,
+        private ReservaLibroService $reservaLibroService,
+    ) {
     }
 
     public function index(Request $request)
@@ -139,7 +142,12 @@ class PrestamoController extends Controller
             ]);
 
             if ($prestamo->libro_id) {
-                Libro::whereKey($prestamo->libro_id)->lockForUpdate()->first()?->update(['disponible' => true]);
+                // liberarLibro() no siempre deja el libro "disponible": si hay alguien en
+                // la cola de espera, lo promueve a 'pendiente' en vez de liberarlo del todo.
+                $libro = Libro::whereKey($prestamo->libro_id)->lockForUpdate()->first();
+                if ($libro) {
+                    $this->reservaLibroService->liberarLibro($libro);
+                }
             }
 
             if ($prestamo->equipo_id) {

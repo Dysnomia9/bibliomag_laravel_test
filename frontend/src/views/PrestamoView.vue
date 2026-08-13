@@ -248,11 +248,10 @@ async function crearReserva() {
     toast.error('Escanee o ingrese un código de barras válido')
     return
   }
-  if (!libroDisponible.value) {
-    toast.error('Este libro ya está reservado/prestado por otra persona')
-    return
-  }
-  if (!fechaReserva.value || !fechaRetiro.value) {
+  // Si el libro está disponible ahora, se reserva con fechas explícitas (como antes).
+  // Si no, se une a la cola de espera: no hace falta fecha de retiro todavía, se
+  // calcula automáticamente cuando le toque el turno (ver ReservaLibroService).
+  if (libroDisponible.value && (!fechaReserva.value || !fechaRetiro.value)) {
     toast.error('Seleccione las fechas de reserva y retiro')
     return
   }
@@ -260,10 +259,14 @@ async function crearReserva() {
     await api.post('/reservas-libro', {
       usuario_id: usuario.value!.id,
       codigo_barras: codigoBarras.value,
-      fecha_reserva: fechaReserva.value,
-      fecha_retiro: fechaRetiro.value,
+      fecha_reserva: fechaReserva.value || undefined,
+      fecha_retiro: libroDisponible.value ? fechaRetiro.value : undefined,
     })
-    toast.success(`Reserva registrada: "${libroEncontrado.value}"`)
+    toast.success(
+      libroDisponible.value
+        ? `Reserva registrada: "${libroEncontrado.value}"`
+        : `Te uniste a la lista de espera de "${libroEncontrado.value}"`,
+    )
     codigoBarras.value = ''
     libroEncontrado.value = ''
     fechaReserva.value = ''
@@ -278,7 +281,7 @@ async function crearReserva() {
 async function cancelarReserva(reserva: ReservaLibro) {
   try {
     await api.patch(`/reservas-libro/${reserva.id}/cancelar`)
-    toast.success('Reserva cancelada')
+    toast.success(reserva.estado === 'en_cola' ? 'Saliste de la lista de espera' : 'Reserva cancelada')
     await cargarPrestamosYReservas()
   } catch {
     toast.error('No se pudo cancelar la reserva')
@@ -302,6 +305,7 @@ const reservaBadges: Record<string, { label: string; cls: string }> = {
   pendiente: { label: 'Pendiente', cls: 'bg-amber-100 text-amber-700' },
   retirado: { label: 'Retirado', cls: 'bg-emerald-100 text-emerald-700' },
   cancelado: { label: 'Cancelado', cls: 'bg-gray-100 text-gray-700' },
+  en_cola: { label: 'En lista de espera', cls: 'bg-sky-100 text-sky-700' },
 }
 
 function formatFecha(iso: string | null) {
@@ -473,36 +477,39 @@ function formatFecha(iso: string | null) {
                 <span v-if="libroEncontrado && libroDisponible" class="flex items-center gap-2">
                   Libro encontrado: <strong>{{ libroEncontrado }}</strong>
                 </span>
-                <span v-else-if="libroEncontrado && !libroDisponible">
-                  <strong>{{ libroEncontrado }}</strong> ya está reservado/prestado por otra persona
+                <span v-else-if="libroEncontrado && !libroDisponible" class="flex items-center gap-2">
+                  <strong>{{ libroEncontrado }}</strong> ya está reservado/prestado por otra persona — se puede unir a la lista de espera
                 </span>
                 <span v-else>Código de barras no encontrado en el sistema</span>
               </div>
               <div class="flex gap-3 flex-wrap items-end">
-                <div class="flex-1 min-w-[180px]">
-                  <label class="block text-xs font-medium text-gray-600 mb-1">Fecha de reserva</label>
-                  <input
-                    v-model="fechaReserva"
-                    type="date"
-                    :min="today"
-                    class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
-                  />
-                </div>
-                <div class="flex-1 min-w-[180px]">
-                  <label class="block text-xs font-medium text-gray-600 mb-1">Fecha límite de retiro</label>
-                  <input
-                    v-model="fechaRetiro"
-                    type="date"
-                    :min="fechaReserva || today"
-                    class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
-                  />
-                </div>
+                <template v-if="libroDisponible">
+                  <div class="flex-1 min-w-[180px]">
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Fecha de reserva</label>
+                    <input
+                      v-model="fechaReserva"
+                      type="date"
+                      :min="today"
+                      class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
+                  <div class="flex-1 min-w-[180px]">
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Fecha límite de retiro</label>
+                    <input
+                      v-model="fechaRetiro"
+                      type="date"
+                      :min="fechaReserva || today"
+                      class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
+                </template>
                 <button
                   @click="crearReserva"
-                  :disabled="!libroEncontrado || !libroDisponible || !fechaReserva || !fechaRetiro"
-                  class="px-5 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  :disabled="!libroEncontrado || (libroDisponible && (!fechaReserva || !fechaRetiro))"
+                  class="px-5 py-2.5 rounded-lg text-white transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  :class="libroDisponible ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-sky-600 hover:bg-sky-700'"
                 >
-                  Confirmar Reserva
+                  {{ libroDisponible ? 'Confirmar Reserva' : 'Unirse a la Lista de Espera' }}
                 </button>
               </div>
             </div>
@@ -616,14 +623,17 @@ function formatFecha(iso: string | null) {
                     <span class="text-xs px-2.5 py-1 rounded-full font-medium" :class="reservaBadges[r.estado]?.cls">
                       {{ reservaBadges[r.estado]?.label }}
                     </span>
+                    <span v-if="r.estado === 'en_cola' && r.posicion" class="block text-[11px] text-gray-400 mt-0.5">
+                      Lugar #{{ r.posicion }} en la fila
+                    </span>
                   </td>
                   <td class="px-6 py-3">
                     <button
-                      v-if="r.estado === 'pendiente'"
+                      v-if="r.estado === 'pendiente' || r.estado === 'en_cola'"
                       @click="cancelarReserva(r)"
                       class="text-sm text-red-600 hover:text-red-700 font-medium"
                     >
-                      Cancelar
+                      {{ r.estado === 'en_cola' ? 'Salir de la fila' : 'Cancelar' }}
                     </button>
                   </td>
                 </tr>

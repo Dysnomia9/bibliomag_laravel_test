@@ -28,7 +28,7 @@ class ReservaLibroTest extends TestCase
         $response->assertStatus(404);
     }
 
-    public function test_reservar_libro_ya_no_disponible_devuelve_409(): void
+    public function test_reservar_libro_ya_no_disponible_se_une_a_la_cola_de_espera(): void
     {
         Sanctum::actingAs(Staff::factory()->create());
         $libro = Libro::factory()->create(['disponible' => false]);
@@ -36,11 +36,13 @@ class ReservaLibroTest extends TestCase
         $response = $this->postJson('/api/reservas-libro', [
             'usuario_id' => Usuario::factory()->create()->id,
             'codigo_barras' => $libro->codigo_barras,
-            'fecha_reserva' => now()->toDateString(),
-            'fecha_retiro' => now()->addDays(2)->toDateString(),
         ]);
 
-        $response->assertStatus(409);
+        $response->assertStatus(201)
+            ->assertJsonPath('estado', 'en_cola')
+            ->assertJsonPath('fecha_retiro', null);
+        // El libro no se toca: ya estaba ocupado por otra persona, sigue igual.
+        $this->assertDatabaseHas('libros', ['id' => $libro->id, 'disponible' => false]);
     }
 
     public function test_reservar_libro_que_no_esta_en_estante_devuelve_409(): void

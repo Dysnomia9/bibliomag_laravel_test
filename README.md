@@ -32,12 +32,15 @@ PostgreSQL** (backend API), 100% dockerizada.
 - Código QR de acceso compartido y regenerable, para que los usuarios
   marquen su entrada por su cuenta.
 
-**Portal de autoservicio (usuarios finales, sin ser staff)**
+**Portal virtual de autoservicio (usuarios finales, sin ser staff)**
 
 - Login propio, independiente del panel de personal.
 - Marcar entrada/salida por RUT o escaneando el QR con la cámara.
 - Consultar el catálogo de libros disponibles.
 - Reservar salas de estudio.
+- Reservar un libro por su cuenta, o unirse a la cola de espera si ya está
+  prestado/reservado por otra persona — cuando se libera, se promueve
+  automáticamente al primero en la fila (sin tener que ir a mesón).
 
 **Backend / integraciones**
 

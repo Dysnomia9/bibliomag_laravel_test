@@ -39,7 +39,7 @@ profesor evaluando la tesis probablemente busque estos 13 puntos:
 | 2 | Gestión de ejemplares | ⚠️ Parcial | 1 fila `Libro` = 1 copia física, sin modelo `Ejemplar`; **no soporta múltiples copias del mismo título** (ver Deuda técnica). Sí gestiona el estado físico de esa única copia (`estado_proceso`, `EstadoLibroView.vue`) |
 | 3 | Préstamos | ✅ Completo | `PrestamoController::store`, incluye cálculo de multa por atraso desde 2026-07-17 (ver Gotchas) |
 | 4 | Devoluciones | ✅ Completo | `PrestamoController::devolver` |
-| 5 | Reservas | ✅ Completo | Salas/logias (`SalaController` + `ReservaSalaService`) y libros para retiro (`ReservaLibroController`) |
+| 5 | Reservas | ✅ Completo | Salas/logias (`SalaController` + `ReservaSalaService`) y libros para retiro (`ReservaLibroController` + `PortalReservaLibroController`, con cola de espera FIFO — ver Gotchas) |
 | 6 | Historial | ⚠️ Parcial / distribuido | Por usuario: completo (`PrestamoView.vue` lista todos sus préstamos y reservas, no solo los activos). Global de préstamos: `ListadoPrestamosView.vue` sin filtro de fecha. Entradas: `EntradaController::index` solo admite un día exacto (`?fecha=`), sin rango ni búsqueda por RUT/usuario — no hay forma de auditar la asistencia histórica de una persona puntual |
 | 7 | Dashboard | ✅ Completo | `DashboardController::resumen` + `DashboardView.vue` |
 | 8 | Reportes | ✅ Completo | `ReporteController` (agregaciones `GROUP BY` por período/carrera/sexo/tipo/hora), `ReportesView.vue` con gráficos |
@@ -110,6 +110,9 @@ backend/
                                  nunca hardcodear el monto en el controller/service
   config/database.php          # DB_SSLMODE ya es env()-driven (default 'prefer'); en
                                   .env.production.example se fuerza a 'require'
+  config/reservas_libro.php    # días para retirar un libro una vez apartado
+                                  (reserva directa o promoción desde la cola) — ajustar
+                                  acá, nunca hardcodear en el service
   app/Providers/AppServiceProvider.php  # RateLimiter::for('api', ...) — 60/min por
                                   usuario autenticado o IP, aplicado a toda la API vía
                                   $middleware->throttleApi() en bootstrap/app.php
@@ -133,10 +136,19 @@ backend/
     LibroController    # index/buscarPorCodigo (todo staff); store/update (solo admin,
                           catalogación MARC/Dewey-lite); cambiarEstado (todo staff,
                           gestiona libros.estado_proceso — ver Gotchas)
-    ReservaLibroController  # reservas de libro (retiro)
-    PortalController                         # endpoints del portal de autoservicio (/mi/*)
+    ReservaLibroController  # reservas de libro (retiro) + cola de espera, todo staff
+    PortalController                         # endpoints del portal virtual de autoservicio (/mi/*):
+                                                estado/aforo, entrada/salida, catálogo, salas
+    PortalReservaLibroController              # autoservicio de reservas de libro del portal
+                                                 virtual (/mi/reservas-libro) — se separó de
+                                                 PortalController a propósito (ver Deuda técnica)
+                                                 en vez de seguir agregándole métodos
   app/Services/ReservaSalaService.php  # solapamiento de reservas (relacional, ver Gotchas) + escanearLogia() (Horizon)
   app/Services/MultaService.php        # calcula la multa por atraso al devolver un libro
+  app/Services/ReservaLibroService.php # reservar/encolar un libro, cancelar, y liberarLibro()
+                                          (promueve la cola de espera) — compartido entre
+                                          ReservaLibroController (staff) y
+                                          PortalReservaLibroController (portal virtual)
   app/Console/Commands/
     SeedMockupData.php (comando `mockup:datos`)
     ImportarCodigosLogia.php (comando `horizon:codigos-logia`, backfill de
@@ -631,6 +643,61 @@ frontend/
   (artefacto de caché de `vue-tsc`) se sacó del tracking de git y se agregó
   `*.tsbuildinfo` al `.gitignore` — se regenera solo, no debería
   versionarse.
+- **Reservar un libro ocupado devolvía 409 sin alternativa — ya hay cola de
+  espera** (2026-08-13): antes `ReservaLibroController::store()` rechazaba
+  de plano reservar un libro que ya estaba prestado/reservado — que es
+  justo el caso más común de querer reservar un libro. Ya se agregó un
+  estado nuevo `reservas_libro.estado = 'en_cola'` (CHECK constraint
+  actualizado en
+  `2024_01_04_000001_add_en_cola_estado_to_reservas_libro_table.php`, que
+  también volvió `fecha_retiro` nullable — una fila `en_cola` todavía no
+  tiene fecha límite). Toda la lógica compartida vive en
+  `App\Services\ReservaLibroService`:
+  - `reservarOEncolar()`: si el libro está disponible, reserva como antes
+    (`estado = 'pendiente'`); si no, crea la fila `en_cola` (FIFO por `id`,
+    **no** por `created_at` — dos filas creadas en el mismo segundo
+    empatarían el orden con `created_at`, el autoincremental no tiene esa
+    ambigüedad).
+  - `liberarLibro()`: se llama siempre que un libro pasa a estar disponible
+    (`PrestamoController::devolver()` al devolver un préstamo, `cancelar()`
+    al cancelar una reserva `'pendiente'`) — en vez de simplemente poner
+    `disponible = true`, primero busca si hay alguien `en_cola` y lo
+    promueve a `pendiente` con una `fecha_retiro` nueva
+    (`config('reservas_libro.dias_para_retirar')`, calculada en ese
+    momento, no elegida por nadie). El libro **sigue** `disponible = false`
+    si hubo promoción — recién queda realmente libre cuando la cola está
+    vacía. Cancelar una reserva `'en_cola'` (alguien se arrepiente de
+    esperar) NO dispara `liberarLibro()` — nunca tuvo el libro apartado, no
+    afecta a nadie más.
+  - No reintroduzcas el 409 duro para "libro no disponible" en
+    `reservarOEncolar()` — el 409 sigue existiendo, pero solo para
+    `estado_proceso !== 'en_estante'` o para quien ya tiene una reserva/
+    lugar en cola activo sobre el mismo libro.
+  - `ReservaLibroController::store()` (staff) ya no exige `fecha_reserva`/
+    `fecha_retiro` (pasaron a `nullable`) — si el staff no las manda, se
+    calculan igual que en el portal virtual.
+  Tests: `ReservaLibroColaTest.php` (FIFO con 3 personas, promoción al
+  devolver/cancelar, cola no afecta disponibilidad al cancelarse a sí
+  misma).
+- **Autoservicio de reservas de libro desde el portal virtual** (2026-08-13):
+  antes un usuario del portal virtual podía ver el catálogo y reservar una
+  **sala** por su cuenta, pero para pedir un **libro** tenía que ir a
+  mesón — `/reservas-libro` solo existía en el grupo de rutas de `staff`.
+  Ya se agregó `PortalReservaLibroController` (nuevo, no se metió en
+  `PortalController` a propósito — ver Deuda técnica) con
+  `GET/POST /mi/reservas-libro` y
+  `PATCH /mi/reservas-libro/{reservaLibro}/cancelar`, usando el mismo
+  `ReservaLibroService` que el staff — un usuario del portal virtual
+  reserva o se une a la cola de espera sin elegir fechas (se calculan
+  solas). El chequeo de dueño
+  (`$reservaLibro->usuario_id !== $request->user()->id` → 403) sigue el
+  mismo patrón que `PortalController::cancelarReservaSala()`. Frontend:
+  `PortalCatalogoView.vue` (portal virtual) ahora tiene botón "Reservar"/
+  "Unirme a la espera" por libro y una sección "Mis reservas" con la
+  posición en la cola; `PrestamoView.vue` (staff) también soporta unirse a
+  la cola desde el mismo formulario de reserva (el botón cambia a "Unirse
+  a la Lista de Espera" cuando el libro no está disponible). Tests:
+  `PortalReservaLibroTest.php`.
 
 ## Checklist antes de dar un módulo por terminado
 

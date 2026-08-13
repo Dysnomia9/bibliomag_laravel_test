@@ -116,8 +116,10 @@ export type ReservaLibro = {
   usuario_id: number
   libro_id: number
   fecha_reserva: string
-  fecha_retiro: string
-  estado: 'pendiente' | 'retirado' | 'cancelado'
+  fecha_retiro: string | null
+  estado: 'pendiente' | 'retirado' | 'cancelado' | 'en_cola'
+  // Solo presente cuando estado === 'en_cola' — lugar en la fila (1 = siguiente).
+  posicion?: number | null
   libro?: Libro
 }
 

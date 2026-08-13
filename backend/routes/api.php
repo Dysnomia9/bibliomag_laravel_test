@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\EntradaController;
 use App\Http\Controllers\Api\EquipoController;
 use App\Http\Controllers\Api\LibroController;
 use App\Http\Controllers\Api\PortalController;
+use App\Http\Controllers\Api\PortalReservaLibroController;
 use App\Http\Controllers\Api\PrestamoController;
 use App\Http\Controllers\Api\ReporteController;
 use App\Http\Controllers\Api\ReservaLibroController;
@@ -82,4 +83,8 @@ Route::middleware(['auth:sanctum', 'usuario'])->group(function () {
     Route::get('/mi/salas', [PortalController::class, 'salas']);
     Route::post('/mi/reservas', [PortalController::class, 'reservarSala']);
     Route::delete('/mi/reservas/{reserva}', [PortalController::class, 'cancelarReservaSala']);
+
+    Route::get('/mi/reservas-libro', [PortalReservaLibroController::class, 'index']);
+    Route::post('/mi/reservas-libro', [PortalReservaLibroController::class, 'store']);
+    Route::patch('/mi/reservas-libro/{reservaLibro}/cancelar', [PortalReservaLibroController::class, 'cancelar']);
 });
