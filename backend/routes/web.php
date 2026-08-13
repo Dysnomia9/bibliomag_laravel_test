@@ -2,6 +2,6 @@
 
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return view('welcome');
-});
+// API-only: no hay vistas Blade. El healthcheck real vive en /up
+// (definido por bootstrap/app.php -> withRouting(health: '/up')).
+Route::get('/', fn () => response()->json(['message' => 'Biblioteca UMAG API']));

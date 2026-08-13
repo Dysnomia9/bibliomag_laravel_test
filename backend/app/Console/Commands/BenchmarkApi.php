@@ -48,6 +48,9 @@ class BenchmarkApi extends Command
             'GET /api/reportes/resumen' => $this->medir($n, fn () => $client->get('/api/reportes/resumen')),
         ];
 
+        // entradas.usuario_id es RESTRICT (ver CLAUDE.md) — hay que borrar las
+        // entradas de prueba generadas por medirEntrada() antes que el usuario.
+        $benchmarkUsuario->entradas()->delete();
         $benchmarkUsuario->delete();
 
         $this->newLine();

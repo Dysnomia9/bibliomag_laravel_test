@@ -83,6 +83,14 @@ docker compose exec backend php artisan mockup:datos --fresh  # regenerar todo d
 - Portal usuario: `/portal/login` (usuarios generados por `mockup:datos`, con
   password seteada en el seeder)
 
+`docker-compose.yml` es solo para desarrollo (bind mount del frontend,
+credenciales hardcodeadas). Para un despliegue real existe
+`docker-compose.prod.yml` (sin bind mounts, sin credenciales hardcodeadas —
+vienen de variables de entorno del host/CI, sin exponer el puerto de
+Postgres) + `backend/.env.production.example` (plantilla, valores
+`__REEMPLAZAR__`, nunca commitear el `.env.production` real — ya está en
+`.gitignore`). Ver "Producción real" en Gotchas más abajo.
+
 ## Estructura relevante
 
 `backend/` es un proyecto Laravel **normal y completo** — no hay overlay ni
@@ -100,8 +108,16 @@ backend/
                                  mapeo codigo_barras->nombre de logia (para el comando de import)
   config/multas.php            # tarifa/gracia/tope de la multa por atraso — ajustar acá,
                                  nunca hardcodear el monto en el controller/service
+  config/database.php          # DB_SSLMODE ya es env()-driven (default 'prefer'); en
+                                  .env.production.example se fuerza a 'require'
+  app/Providers/AppServiceProvider.php  # RateLimiter::for('api', ...) — 60/min por
+                                  usuario autenticado o IP, aplicado a toda la API vía
+                                  $middleware->throttleApi() en bootstrap/app.php
   app/Models/
-    Staff, Usuario, Entrada, Prestamo, Sala, Reserva, Libro, ReservaLibro, Equipo, CodigoAcceso
+    Staff (con `activo`, ver Gotchas), Usuario, Entrada, Prestamo (con
+    prestado_por_staff_id/devuelto_por_staff_id/multa_pagada_por_staff_id,
+    FK reales a staff — ver Gotchas), Sala, Reserva, Libro, ReservaLibro,
+    Equipo, CodigoAcceso
   app/Http/Middleware/
     EnsureIsStaff, EnsureIsUsuario     # separan los dos guards de Sanctum
     EnsureIsAdmin (alias 'admin')      # chequea staff.rol === 'admin'; se aplica ADEMÁS
@@ -125,7 +141,11 @@ backend/
     SeedMockupData.php (comando `mockup:datos`)
     ImportarCodigosLogia.php (comando `horizon:codigos-logia`, backfill de
       salas.codigo_barras real desde config/horizon_barcodes.php cuando Horizon los entregue)
-  database/migrations/       correlativas por fecha; ver Deuda técnica más abajo
+  database/migrations/       correlativas por fecha; ver Deuda técnica más abajo.
+                              El bloque `2024_01_03_0000XX` es el de
+                              "producción real" (CHECK constraints, índices
+                              de FK faltantes, cascadas RESTRICT, atribución
+                              de staff, staff.activo) — ver Gotchas
   routes/api.php             grupo `auth:sanctum + staff` y grupo `auth:sanctum + usuario`
   bootstrap/app.php          # NO tiene statefulApi() — auth es Bearer token puro, sin CSRF
 
@@ -146,7 +166,9 @@ frontend/
     stores/           auth.ts (staff), usuarioAuth.ts (portal) — dos stores de Pinia separados
     services/         api.ts (staff, Bearer token de auth.ts), apiUsuario.ts (portal)
     composables/      useRut.ts, useToast.ts, useStaffShortcuts.ts (atajos de teclado del staff),
-                       useStaffNombres.ts (cachea GET /staff para datalists de "registrado por")
+                       useStaffNombres.ts (cachea GET /staff para el datalist "registrado por"
+                       de SalasView.vue — ya NO se usa en Préstamos, ver Gotchas de atribución
+                       de staff)
     router/index.ts   dos guards: rutas `meta.portal` usan usuarioAuth, el resto usa auth;
                        además `meta.requiresAdmin` redirige a dashboard si
                        `auth.staff?.rol !== 'admin'`
@@ -221,12 +243,15 @@ frontend/
 - **Sí hay tests automatizados** (`backend/tests/Feature/`: `AuthTest`,
   `UsuarioAuthTest`, `MiddlewareTest`, `EntradaTest`, `SalaReservaTest`,
   `SalaDevolucionTest`, `PortalReservaTest`, `PortalEntradaTest`,
-  `PrestamoMultaTest`, `EquipoPrestamoTest`, `MultasPendientesTest`), corren
-  contra una DB Postgres dedicada (`biblioteca_test`, ver
-  `docker-entrypoint.sh`) con `docker compose exec backend php artisan
-  test`. **Actualización (2026-08-13)**: se agregó `LibroCatalogacionTest`
-  cubriendo la unicidad de `codigo_barras` (store/update); sigue sin
-  cobertura el resto de la catalogación/`estado_proceso`.
+  `PrestamoMultaTest`, `EquipoPrestamoTest`, `MultasPendientesTest`,
+  `LibroCatalogacionTest`, `LibroEstadoProcesoTest`, `PrestamoLibroTest`,
+  `ReservaLibroTest`, `PrestamoConcurrenciaTest`, `EnumCheckConstraintsTest`,
+  `CascadaRestrictTest`, `StaffAtribucionTest`), corren contra una DB
+  Postgres dedicada (`biblioteca_test`, ver `docker-entrypoint.sh`) con
+  `docker compose exec backend php artisan test` — 87 tests al 2026-08-13.
+  La catalogación de libros y el flujo de préstamo/reserva de libro por
+  código de barras ya tienen cobertura completa (antes solo se probaba el
+  flujo de equipos).
 - **Multas: aviso + vista consolidada, pero sin bloqueo duro** —
   `Prestamo.multa_monto`/`multa_estado` se calculan y guardan por préstamo
   individual al momento de `devolver()` (ver Gotchas). Ya existe:
@@ -237,6 +262,9 @@ frontend/
   todos los préstamos. Lo que sigue sin existir es un **bloqueo duro**
   (rechazar el préstamo si hay multa pendiente) — es una decisión de
   alcance deliberada, no un bug, confirmada explícitamente con el usuario.
+  **Actualización (2026-08-13)**: `multa_pagada_por` ya no es texto libre,
+  ver `multa_pagada_por_staff_id` en la entrada de atribución de staff más
+  abajo.
 - **`Libro`: dos ejes de estado independientes** — `disponible` (boolean,
   circulación: ¿está prestado/reservado ahora mismo?) y `estado_proceso`
   (string, procesamiento bibliotecario: `inventario` | `procesos_tecnicos` |
@@ -250,8 +278,10 @@ frontend/
   separación registro bibliográfico vs. ejemplar físico ("Bib No."/"Item
   No." estilo Horizon) — sigue siendo 1 fila `Libro` = 1 copia física.
 - **Credenciales de Postgres hardcodeadas** en `docker-compose.yml`
-  (`biblioteca`/`biblioteca`) — aceptable para desarrollo local, no usar tal
-  cual como base de un despliegue.
+  (`biblioteca`/`biblioteca`) — aceptable para desarrollo local, es a
+  propósito y no se toca. Para un despliegue real usar
+  `docker-compose.prod.yml` (ver Gotchas), que toma las credenciales de
+  variables de entorno en vez de hardcodearlas.
 - **`PortalController` concentra varias responsabilidades** (estado/aforo,
   entrada/salida, catálogo, salas y reservas del usuario). Si crece más,
   conviene separar por dominio en vez de agregar más métodos ahí.
@@ -297,9 +327,14 @@ frontend/
   `statefulApi()` sin implementar el flujo de cookie CSRF completo en el
   frontend, el login vuelve a romperse.
 - **Sin rate limiting en login**: ya se agregó `throttle:6,1` en las rutas
-  `POST /auth/login` y `POST /auth/usuario/login` (`routes/api.php`) — no lo
-  quites, es la única protección contra fuerza bruta que tiene el sistema
-  ahora mismo.
+  `POST /auth/login` y `POST /auth/usuario/login` (`routes/api.php`) — más
+  estricto a propósito que el límite general, no lo quites.
+  **Actualización (2026-08-13)**: además del throttle de login, ya existe un
+  límite global de 60 req/min (por usuario autenticado o IP) en el resto de
+  la API vía `RateLimiter::for('api', ...)` en `AppServiceProvider::boot()` +
+  `$middleware->throttleApi()` en `bootstrap/app.php` — antes solo las dos
+  rutas de login tenían protección, el resto de las ~40 rutas autenticadas no
+  tenía ninguna.
 - **Seed no destructivo**: el entrypoint corre `migrate --force` (no
   `migrate:fresh`) y solo ejecuta `mockup:datos` automáticamente si la tabla
   `staff` está vacía. Los datos de prueba ya NO se borran en cada
@@ -478,6 +513,124 @@ frontend/
   el caso límite de bypass de validación a nivel de Eloquent). No le quites
   la regla `unique` de `reglasCatalogacion()` ni asumas que hace falta
   agregarla — ya estaba ahí.
+- **Condición de carrera real en préstamo/reserva de libro** (2026-08-13):
+  `PrestamoController::store()` y `ReservaLibroController::store()` leían
+  `Libro`/`Equipo.disponible`, decidían, y recién después escribían, sin
+  ninguna transacción ni lock (`grep -rn "DB::transaction\|lockForUpdate"
+  app/` daba cero resultados en todo el proyecto). Dos requests concurrentes
+  sobre el mismo `codigo_barras`/`codigo_inventario` podían ambas pasar el
+  chequeo `disponible` antes de que la primera escribiera, resultando en
+  doble préstamo del mismo ejemplar único. Ya se corrigió: todo el ciclo
+  lectura→decisión→escritura de `store()` (y `devolver()`/`cancelar()`, por
+  atomicidad) va dentro de `DB::transaction()` con `->lockForUpdate()` sobre
+  la fila de `Libro`/`Equipo` — el lock **solo tiene efecto dentro de una
+  transacción explícita**, no lo separes del closure. Test de regresión:
+  `PrestamoConcurrenciaTest.php` (verifica con `DB::listen()` que la query
+  real incluye `FOR UPDATE`, no depende de timing real). No reintroduzcas un
+  `->first()` suelto seguido de `->update()` en estos flujos.
+- **Enums simulados sin restricción real en la base de datos** (2026-08-13):
+  `usuarios.tipo`, `prestamos.estado/tipo_item/multa_estado`,
+  `libros.tipo_material/estado_proceso`, `reservas_libro.estado` y
+  `equipos.tipo` eran `string` planos — la única validación era la regla
+  `in:` de cada controller, así que cualquier inserción directa (seeder,
+  tinker, un futuro import de Horizon) podía dejar un valor inválido. Ya se
+  agregó un `CHECK CONSTRAINT` de Postgres por columna
+  (`2024_01_03_000001_add_check_constraints_to_enum_columns.php`, vía
+  `DB::statement()` — Postgres no tiene `->check()` nativo en el Schema
+  Builder de Laravel). Los valores incluyen `prestamos.estado = 'atrasado'`
+  y `reservas_libro.estado = 'retirado'` aunque hoy ningún controller los
+  escriba (solo el seeder) — si agregás un valor nuevo a una regla `in:` de
+  un controller, actualizá también el CHECK o `mockup:datos` (u otro insert
+  directo) puede empezar a fallar. **Excluido a propósito**: `usuarios.sexo`
+  no tiene CHECK — no es un enum simulado, no tiene regla `in:` en ningún
+  controller, `ReporteController` lo puebla dinámicamente vía `distinct()`.
+  Test: `EnumCheckConstraintsTest.php`.
+- **Cascadas de borrado inconsistentes entre tablas equivalentes**
+  (2026-08-13): `prestamos.usuario_id` era CASCADE (borrar un `Usuario`
+  borraba su historial financiero de multas), `entradas.usuario_id` era
+  CASCADE (borraba asistencia), pero `prestamos.libro_id`/`equipo_id` eran
+  `nullOnDelete`, y `reservas_libro.libro_id` era CASCADE mientras
+  `prestamos.libro_id` era SET NULL para el mismo tipo de relación — sin
+  ningún criterio uniforme (y sin ningún endpoint que borrara `Usuario`/
+  `Libro` hoy, así que era un riesgo latente, no explotado). Ya se unificó a
+  **RESTRICT** en todas las FK de historial/circulación
+  (`2024_01_03_000003_restrict_delete_on_historial_foreign_keys.php`):
+  `prestamos.usuario_id/libro_id/equipo_id`, `entradas.usuario_id`,
+  `reservas_libro.usuario_id/libro_id`. La baja lógica ya existe en el padre
+  (`usuarios.activo`, `equipos.activo`, `libros.estado_proceso='de_baja'`,
+  `staff.activo`) — RESTRICT bloquea el hard delete a nivel de Postgres
+  incluso ante un `DELETE` manual en `psql` o un import mal escrito, no
+  reintroduzcas CASCADE/SET NULL en estas columnas. **Consecuencia
+  encontrada al aplicar esto**: `SeedMockupData::handle()` con `--fresh`
+  borraba `libros`/`equipos`/`usuarios` **antes** que `prestamos`, lo que
+  ahora viola el RESTRICT — el orden de los `DB::table(...)->delete()` se
+  corrigió (hijos antes que padres: `reservas_libro` → `prestamos` →
+  `reserva_participantes` → `reservas` → `entradas` → `libros` → `equipos` →
+  `usuarios` → `salas` → `staff`). Si agregás una tabla nueva con FK
+  RESTRICT hacia otra que el seeder borra, actualizá ese orden. Índices
+  faltantes en FK (Postgres no los crea automáticamente, a diferencia de
+  MySQL/InnoDB) también se agregaron en el mismo lote
+  (`2024_01_03_000002_add_missing_indexes_to_foreign_keys.php`):
+  `prestamos.libro_id/equipo_id/fecha_prestamo/fecha_devolucion`,
+  `reservas_libro.libro_id`, `codigo_acceso.generado_por`. Test:
+  `CascadaRestrictTest.php`.
+- **`prestado_por`/`devuelto_por`/`multa_pagada_por` eran texto libre
+  tipeado por el staff** (2026-08-13): el propio staff autenticado escribía
+  a mano quién prestó/devolvió/cobró (con un datalist de autocompletar en
+  `PrestamoView.vue`/`ListadoPrestamosView.vue`) — no eran FK, y aunque lo
+  fueran, el dato lo seguía escribiendo el cliente (podía tipear el nombre
+  de cualquier otro staff). Ya se agregaron `prestado_por_staff_id`,
+  `devuelto_por_staff_id`, `multa_pagada_por_staff_id` (FK reales a `staff`,
+  `nullOnDelete`) en `PrestamoController`, estampados automáticamente desde
+  `$request->user()` — **ya no se piden en el body**, un valor de
+  `prestado_por` enviado en el request se ignora. Las columnas string viejas
+  se mantienen como snapshot legible del nombre en ese momento (no como
+  fuente de verdad). Se quitaron los inputs de texto y el `<datalist
+  id="staff-nombres">` correspondientes de `PrestamoView.vue`/
+  `ListadoPrestamosView.vue` (ojo: `useStaffNombres.ts` sigue vivo, lo sigue
+  usando `SalasView.vue` para "registrado por" en el escaneo de logias — no
+  es lo mismo). No reintroduzcas un campo de texto libre para esto. Tests:
+  `StaffAtribucionTest.php`, más el ajuste en `PrestamoMultaTest.php`.
+- **`staff` sin mecanismo de baja lógica** (2026-08-13): `usuarios.activo` y
+  `equipos.activo` ya existían, `staff` era la única entidad "padre" sin
+  ninguno. Ya se agregó `staff.activo` (default `true`) y
+  `AuthController::login` ya rechaza con 422 si `activo = false`, mismo
+  patrón que `UsuarioAuthController::login` usa para `usuarios.activo`.
+- **Producción real: timezone fijo en UTC y sin plantilla de despliegue**
+  (2026-08-13): `config/app.php` tenía `'timezone' => 'UTC'` hardcodeado (no
+  venía de `.env`), sin conversión a hora de Chile documentada en ningún
+  lado. Ya se cambió a `env('APP_TIMEZONE', 'America/Punta_Arenas')` +
+  `APP_TIMEZONE` en `.env.example`. También se agregaron
+  `backend/.env.production.example` (plantilla con placeholders
+  `__REEMPLAZAR__`, `APP_DEBUG=false`, `DB_SSLMODE=require`) y
+  `docker-compose.prod.yml` (sin bind mounts, sin credenciales hardcodeadas,
+  sin exponer el puerto 5432 al host) — ninguno de los dos tiene valores
+  reales, son plantillas de referencia para cuando haya un despliegue real.
+  No los uses tal cual sin completar las variables de entorno reales.
+- **Scaffold default de `laravel new` sin uso real, limpiado** (2026-08-13):
+  el backend es API-only, pero sobrevivían archivos del scaffold web por
+  defecto de Laravel, desconectados de la app real (nada los importaba ni
+  los servía — no hay Vite configurado en `backend/` para compilarlos):
+  `resources/views/welcome.blade.php`, `resources/css/app.css`,
+  `resources/js/app.js`+`bootstrap.js`, `public/favicon.ico` — ya se
+  eliminaron (la carpeta `resources/` completa desapareció, quedaba vacía).
+  `routes/web.php` ya no referencia la vista borrada, devuelve un JSON
+  simple en `/`. También se eliminó `App\Models\User` +
+  `database/factories/UserFactory.php` + las tablas `users`/
+  `password_reset_tokens`/`sessions` (migración
+  `2024_01_03_000007_drop_default_laravel_auth_tables.php`) — era el guard
+  `web`/sesión por defecto, nunca usado (la auth real es 100% Bearer token
+  vía Sanctum sobre los guards `staff`/`usuario`, `SESSION_DRIVER` siempre
+  fue `file`, no `database`). `config/auth.php` quedó con el `provider
+  'users'` sin modelo por defecto (`env('AUTH_MODEL')`, sin fallback a
+  `User::class`) — no le agregues un modelo ahí salvo que reactives
+  sesión/guard `web` de verdad. También se sacaron `ExampleTest.php`
+  (Feature y Unit, boilerplate default sin lógica de negocio) y el
+  `faviconV2.png` huérfano de la raíz del repo (sin ninguna referencia, el
+  favicon real es `frontend/public/favicon.png`). `frontend/tsconfig.tsbuildinfo`
+  (artefacto de caché de `vue-tsc`) se sacó del tracking de git y se agregó
+  `*.tsbuildinfo` al `.gitignore` — se regenera solo, no debería
+  versionarse.
 
 ## Checklist antes de dar un módulo por terminado
 

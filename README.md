@@ -174,10 +174,14 @@ npm run dev
 
 ## Tests y benchmark de rendimiento
 
-Hay una suite de Feature tests (`backend/tests/Feature/`) que
-cubre login de staff/usuario, registro de entradas, reservas de sala
-(solapamiento y validación grupal, incluido el cruce entre salas distintas),
-préstamos de equipos, cálculo/cobro de multas por atraso y su reporte
+Hay una suite de Feature tests (`backend/tests/Feature/`, 87 tests al
+2026-08-13) que cubre login de staff/usuario, registro de entradas, reservas
+de sala (solapamiento y validación grupal, incluido el cruce entre salas
+distintas), préstamos y reservas de libros y equipos (incluida la protección
+contra condición de carrera con `DB::transaction()`+`lockForUpdate()`),
+catalogación y cambio de estado de libros, CHECK constraints de las columnas
+tipo enum, cascadas de borrado `RESTRICT` en el historial, atribución real
+de staff en préstamos, cálculo/cobro de multas por atraso y su reporte
 consolidado, y la separación de middlewares `staff`/`usuario`. Corre contra
 una base Postgres de pruebas dedicada (`biblioteca_test`, separada de
 `biblioteca`), que `docker-entrypoint.sh` crea automáticamente al levantar
@@ -208,10 +212,16 @@ tests.
   guardan como columnas — son derivables por query sobre `prestamos` si
   algún día hacen falta.
 - **Credenciales de Postgres hardcodeadas** en `docker-compose.yml` —
-  aceptable en desarrollo local, no usar tal cual en un despliegue.
+  aceptable en desarrollo local, a propósito. Para un despliegue real usar
+  `docker-compose.prod.yml` + `backend/.env.production.example` (plantillas,
+  sin valores reales — ver `CLAUDE.md`).
 - **`PortalController` concentra varias responsabilidades** (estado/aforo,
   entrada/salida, catálogo, salas y reservas del usuario). Si crece más,
   conviene separar por dominio en vez de agregar más métodos ahí.
+- **Sin backups automatizados ni soft deletes** — decisión de alcance
+  deliberada por ahora, no un olvido. La integridad de datos (transacciones,
+  locks, CHECK constraints, cascadas `RESTRICT`) ya está resuelta; ver
+  `CLAUDE.md` para el detalle y el criterio de cuándo retomarlo.
 
 Antes de asumir que algo "falta" o "está roto", revisa el código real en
 `backend/` — este README se puede desactualizar.

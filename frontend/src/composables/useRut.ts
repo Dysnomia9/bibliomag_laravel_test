@@ -1,4 +1,4 @@
-/** Utilidades de RUT chileno — portado de lib/rut.ts (proyecto Next.js original) */
+
 
 export function calcularDV(rut: number): string {
   let suma = 0

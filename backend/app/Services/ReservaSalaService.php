@@ -11,7 +11,7 @@ class ReservaSalaService
     /**
      * Registra el escaneo de un código de barras de logia (Horizon): la primera vez marca
      * la entrega de la reserva vigente para ese bloque horario, la segunda marca la
-     * devolución. No crea reservas — solo cierra el ciclo de una reserva ya existente.
+     * devolución. No crea reservas  solo cierra el ciclo de una reserva ya existente.
      */
     public function escanearLogia(string $codigoBarras, string $registradoPor): Reserva
     {
