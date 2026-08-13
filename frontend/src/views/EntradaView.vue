@@ -9,6 +9,9 @@ import type { Entrada } from '@/types'
 
 const toast = useToast()
 
+// Oculto visualmente por mientras (botón, badge y modal) — flujo/backend intactos.
+const MOSTRAR_CONVENIO = false
+
 const hoy = new Date().toISOString().slice(0, 10)
 
 const rut = ref('')
@@ -223,6 +226,7 @@ async function registrarConvenio() {
               Externo
             </button>
             <button
+              v-if="MOSTRAR_CONVENIO"
               @click="abrirModalConvenio"
               class="flex items-center gap-2 px-5 py-2.5 bg-sky-50 text-sky-700 border border-sky-200 rounded-lg hover:bg-sky-100 transition-colors font-medium"
             >
@@ -280,7 +284,7 @@ async function registrarConvenio() {
                   <span v-else class="flex items-center gap-1.5">
                     {{ e.nombre_externo || 'Sin nombre' }}
                     <span
-                      v-if="e.es_convenio"
+                      v-if="MOSTRAR_CONVENIO && e.es_convenio"
                       class="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-sky-50 text-sky-700 border border-sky-200"
                     >
                       Convenio
@@ -359,7 +363,7 @@ async function registrarConvenio() {
       </div>
 
       <div
-        v-if="convenioModalOpen"
+        v-if="convenioModalOpen && MOSTRAR_CONVENIO"
         class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
         @click.self="convenioModalOpen = false"
       >
