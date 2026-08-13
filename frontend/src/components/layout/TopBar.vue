@@ -19,44 +19,58 @@ const moduleLinks = [
   { name: 'reportes', label: 'Reportes', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z', shortcut: '6' },
 ]
 
-const adminLinks: { name: string; label: string; icon: string; adminOnly: boolean }[] = [
-  { name: 'usuarios', label: 'Usuarios', icon: 'M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1a4 4 0 100-8 4 4 0 000 8zm6 3a4 4 0 00-3-3.87M9 12a4 4 0 100-8 4 4 0 000 8z', adminOnly: false },
-  { name: 'listado-prestamos', label: 'Listado Préstamos', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4', adminOnly: false },
-  { name: 'listado-libros', label: 'Listado Libros', icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253', adminOnly: false },
-  { name: 'catalogacion-libros', label: 'Catalogación de Libros', icon: 'M12 4.5v15m0-15c-2.485 0-4.5.672-6 2.25v13.5c1.5-1.578 3.515-2.25 6-2.25s4.5.672 6 2.25V6.75c-1.5-1.578-3.515-2.25-6-2.25z', adminOnly: true },
-  { name: 'estado-libro', label: 'Estado de Libro', icon: 'M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z', adminOnly: false },
-  { name: 'codigo-qr', label: 'Código QR', icon: 'M4 4h6v6H4V4zm10 0h6v6h-6V4zM4 14h6v6H4v-6zm10 3h3m3 0h-3m0 0v3m0-3v-3', adminOnly: false },
-  { name: 'equipos', label: 'Equipos', icon: 'M20.25 7.5l-8.25 4.5L3.75 7.5M3.75 7.5l8.25-4.5 8.25 4.5M3.75 7.5v9l8.25 4.5m0-9v9m0-9l8.25-4.5m-8.25 4.5l8.25 4.5m0 0v-9', adminOnly: true },
-  { name: 'multas-pendientes', label: 'Multas Pendientes', icon: 'M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-8.99 3.75h.008v.008h-.008v-.008z', adminOnly: false },
+type AdminColor = 'indigo' | 'amber' | 'emerald' | 'violet' | 'sky' | 'rose' | 'teal' | 'red'
+
+const adminLinks: { name: string; label: string; icon: string; adminOnly: boolean; color: AdminColor }[] = [
+  { name: 'usuarios', label: 'Usuarios', icon: 'M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1a4 4 0 100-8 4 4 0 000 8zm6 3a4 4 0 00-3-3.87M9 12a4 4 0 100-8 4 4 0 000 8z', adminOnly: false, color: 'indigo' },
+  { name: 'listado-prestamos', label: 'Listado Préstamos', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4', adminOnly: false, color: 'amber' },
+  { name: 'listado-libros', label: 'Listado Libros', icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253', adminOnly: false, color: 'emerald' },
+  { name: 'catalogacion-libros', label: 'Catalogación de Libros', icon: 'M12 4.5v15m0-15c-2.485 0-4.5.672-6 2.25v13.5c1.5-1.578 3.515-2.25 6-2.25s4.5.672 6 2.25V6.75c-1.5-1.578-3.515-2.25-6-2.25z', adminOnly: true, color: 'violet' },
+  { name: 'estado-libro', label: 'Estado de Libro', icon: 'M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z', adminOnly: false, color: 'sky' },
+  { name: 'codigo-qr', label: 'Código QR', icon: 'M4 4h6v6H4V4zm10 0h6v6h-6V4zM4 14h6v6H4v-6zm10 3h3m3 0h-3m0 0v3m0-3v-3', adminOnly: false, color: 'rose' },
+  { name: 'equipos', label: 'Equipos', icon: 'M20.25 7.5l-8.25 4.5L3.75 7.5M3.75 7.5l8.25-4.5 8.25 4.5M3.75 7.5v9l8.25 4.5m0-9v9m0-9l8.25-4.5m-8.25 4.5l8.25 4.5m0 0v-9', adminOnly: true, color: 'teal' },
+  { name: 'multas-pendientes', label: 'Multas Pendientes', icon: 'M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-8.99 3.75h.008v.008h-.008v-.008z', adminOnly: false, color: 'red' },
 ]
+
+const ADMIN_COLORS: Record<AdminColor, { icon: string; iconHover: string; border: string; topBorder: string }> = {
+  indigo: { icon: 'bg-indigo-50 text-indigo-600', iconHover: 'group-hover:bg-indigo-600', border: 'hover:border-indigo-300', topBorder: 'border-t-indigo-400' },
+  amber: { icon: 'bg-amber-50 text-amber-600', iconHover: 'group-hover:bg-amber-600', border: 'hover:border-amber-300', topBorder: 'border-t-amber-400' },
+  emerald: { icon: 'bg-emerald-50 text-emerald-600', iconHover: 'group-hover:bg-emerald-600', border: 'hover:border-emerald-300', topBorder: 'border-t-emerald-400' },
+  violet: { icon: 'bg-violet-50 text-violet-600', iconHover: 'group-hover:bg-violet-600', border: 'hover:border-violet-300', topBorder: 'border-t-violet-400' },
+  sky: { icon: 'bg-sky-50 text-sky-600', iconHover: 'group-hover:bg-sky-600', border: 'hover:border-sky-300', topBorder: 'border-t-sky-400' },
+  rose: { icon: 'bg-rose-50 text-rose-600', iconHover: 'group-hover:bg-rose-600', border: 'hover:border-rose-300', topBorder: 'border-t-rose-400' },
+  teal: { icon: 'bg-teal-50 text-teal-600', iconHover: 'group-hover:bg-teal-600', border: 'hover:border-teal-300', topBorder: 'border-t-teal-400' },
+  red: { icon: 'bg-red-50 text-red-600', iconHover: 'group-hover:bg-red-600', border: 'hover:border-red-300', topBorder: 'border-t-red-400' },
+}
 
 const adminLinksVisibles = () => adminLinks.filter((link) => !link.adminOnly || auth.staff?.rol === 'admin')
 
-const adminMenuOpen = ref(false)
-const adminMenuRef = ref<HTMLElement | null>(null)
-const adminButtonRef = ref<HTMLElement | null>(null)
-const adminMenuPos = ref({ top: 0, left: 0 })
 const adminActive = () => adminLinks.some((link) => link.name === route.name)
 
-function toggleAdminMenu() {
-  if (!adminMenuOpen.value && adminButtonRef.value) {
-    // position: fixed es relativo al viewport, igual que getBoundingClientRect(),
-    // así el menú no queda recortado por el overflow-x-auto del <nav>.
-    const rect = adminButtonRef.value.getBoundingClientRect()
-    adminMenuPos.value = { top: rect.bottom + 6, left: rect.left }
-  }
-  adminMenuOpen.value = !adminMenuOpen.value
+// El menú de gestión se muestra a pantalla completa (no un dropdown chico) —
+// se bloquea el scroll del body mientras está abierto y se puede cerrar con Esc,
+// con el botón de cerrar, o navegando a un módulo.
+const menuGestionAbierto = ref(false)
+
+function abrirMenuGestion() {
+  menuGestionAbierto.value = true
+  document.body.style.overflow = 'hidden'
 }
 
-function onClickOutside(event: MouseEvent) {
-  const target = event.target as Node
-  if (adminMenuRef.value?.contains(target)) return
-  if (adminButtonRef.value?.contains(target)) return
-  adminMenuOpen.value = false
+function cerrarMenuGestion() {
+  menuGestionAbierto.value = false
+  document.body.style.overflow = ''
 }
 
-onMounted(() => document.addEventListener('click', onClickOutside))
-onBeforeUnmount(() => document.removeEventListener('click', onClickOutside))
+function onKeyDown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && menuGestionAbierto.value) cerrarMenuGestion()
+}
+
+onMounted(() => document.addEventListener('keydown', onKeyDown))
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', onKeyDown)
+  document.body.style.overflow = ''
+})
 
 async function onLogout() {
   await auth.logout()
@@ -131,8 +145,7 @@ async function onLogout() {
 
         <div class="relative shrink-0">
           <button
-            ref="adminButtonRef"
-            @click="toggleAdminMenu"
+            @click="abrirMenuGestion"
             class="flex items-center gap-1.5 h-9 px-3 rounded-lg text-[13px] font-medium shrink-0 transition-colors"
             :class="adminActive()
               ? 'bg-[#b08d57] text-[#1a2430]'
@@ -143,10 +156,7 @@ async function onLogout() {
               <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
               <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
-            Gestiones Admin
-            <svg class="h-3 w-3 shrink-0 transition-transform" :class="adminMenuOpen ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-            </svg>
+            Menú Gestiones Admin
           </button>
         </div>
       </div>
@@ -154,24 +164,53 @@ async function onLogout() {
 
     <Teleport to="body">
       <div
-        v-if="adminMenuOpen"
-        ref="adminMenuRef"
-        class="fixed w-56 rounded-xl shadow-2xl border border-slate-200 bg-white py-1.5 z-[100]"
-        :style="{ top: `${adminMenuPos.top}px`, left: `${adminMenuPos.left}px` }"
+        v-if="menuGestionAbierto"
+        class="fixed inset-0 z-[200] flex items-start justify-center overflow-y-auto bg-black/50 backdrop-blur-sm p-4 sm:p-8"
+        @click.self="cerrarMenuGestion"
       >
-        <router-link
-          v-for="link in adminLinksVisibles()"
-          :key="link.name"
-          :to="{ name: link.name }"
-          @click="adminMenuOpen = false"
-          class="flex items-center gap-2.5 px-4 py-2.5 text-[13px] font-medium transition-colors"
-          :class="route.name === link.name ? 'text-[#4338CA] bg-indigo-50' : 'text-slate-700 hover:bg-slate-50'"
-        >
-          <svg class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" :d="link.icon" />
-          </svg>
-          {{ link.label }}
-        </router-link>
+        <div class="w-full max-w-5xl my-2 sm:my-6 rounded-3xl bg-white shadow-2xl">
+          <div class="px-6 py-8 sm:px-10 sm:py-10">
+            <div class="flex items-start justify-between gap-4 mb-8">
+              <div class="flex items-center gap-3">
+                <span class="w-1 h-8 rounded-full bg-indigo-600 shrink-0"></span>
+                <div>
+                  <h2 class="text-2xl sm:text-3xl font-serif font-bold text-gray-900">Menú de Gestión</h2>
+                  <p class="text-sm text-gray-500 mt-0.5">Selecciona un módulo administrativo para continuar</p>
+                </div>
+              </div>
+              <button
+                @click="cerrarMenuGestion"
+                class="shrink-0 h-10 w-10 flex items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 hover:text-gray-800 hover:border-gray-300 shadow-sm transition-colors"
+                aria-label="Cerrar menú de gestión"
+              >
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
+              <router-link
+                v-for="link in adminLinksVisibles()"
+                :key="link.name"
+                :to="{ name: link.name }"
+                @click="cerrarMenuGestion"
+                class="group flex flex-col items-center rounded-2xl border border-t-4 border-gray-200 bg-white p-6 text-center shadow-sm transition-all hover:shadow-md active:scale-[0.98]"
+                :class="[ADMIN_COLORS[link.color].border, ADMIN_COLORS[link.color].topBorder, route.name === link.name ? 'ring-2 ring-indigo-400' : '']"
+              >
+                <div
+                  class="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl transition-colors group-hover:text-white"
+                  :class="[ADMIN_COLORS[link.color].icon, ADMIN_COLORS[link.color].iconHover]"
+                >
+                  <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                    <path stroke-linecap="round" stroke-linejoin="round" :d="link.icon" />
+                  </svg>
+                </div>
+                <div class="text-[15px] font-semibold text-gray-900">{{ link.label }}</div>
+              </router-link>
+            </div>
+          </div>
+        </div>
       </div>
     </Teleport>
 

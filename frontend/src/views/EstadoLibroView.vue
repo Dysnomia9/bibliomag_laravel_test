@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import StaffLayout from '@/components/layout/StaffLayout.vue'
 import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
+import LibrosModuloNav from '@/components/libros/LibrosModuloNav.vue'
 import api from '@/services/api'
 import { useToast } from '@/composables/useToast'
 import type { EstadoProcesoLibro, Libro } from '@/types'
@@ -60,7 +61,14 @@ function seleccionar(libro: Libro) {
   nuevoEstado.value = libro.estado_proceso
 }
 
-async function guardarEstado() {
+const confirmandoEstado = ref(false)
+
+function pedirConfirmacionEstado() {
+  if (!libroSeleccionado.value) return
+  confirmandoEstado.value = true
+}
+
+async function confirmarGuardarEstado() {
   if (!libroSeleccionado.value) return
   guardando.value = true
   try {
@@ -71,6 +79,7 @@ async function guardarEstado() {
     const idx = resultados.value.findIndex((l) => l.id === data.id)
     if (idx !== -1) resultados.value[idx] = data
     libroSeleccionado.value = data
+    confirmandoEstado.value = false
   } catch (e: any) {
     toast.error(e?.response?.data?.message ?? 'No se pudo actualizar el estado')
   } finally {
@@ -81,7 +90,7 @@ async function guardarEstado() {
 
 <template>
   <StaffLayout>
-    <div class="max-w-4xl mx-auto">
+    <LibrosModuloNav actual="estado-libro">
       <div
         class="rounded-xl shadow-md mb-6 overflow-hidden"
         style="background: linear-gradient(135deg, #2D1B69 0%, #3B28A3 30%, #4338CA 60%, #4F46E5 100%);"
@@ -159,14 +168,44 @@ async function guardarEstado() {
 
         <div class="flex justify-end">
           <button
-            @click="guardarEstado"
+            @click="pedirConfirmacionEstado"
             :disabled="guardando || nuevoEstado === libroSeleccionado.estado_proceso"
             class="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {{ guardando ? 'Guardando…' : 'Guardar estado' }}
+            Guardar estado
           </button>
         </div>
       </div>
-    </div>
+
+      <div
+        v-if="confirmandoEstado && libroSeleccionado"
+        class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        @click.self="confirmandoEstado = false"
+      >
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+          <h3 class="text-lg font-bold text-gray-900 mb-1">¿Confirmar cambio de estado?</h3>
+          <p class="text-sm text-gray-500 mb-6">
+            <strong>{{ libroSeleccionado.titulo }}</strong> pasará de
+            <strong>{{ estadoBadges[libroSeleccionado.estado_proceso]?.label }}</strong> a
+            <strong>{{ estados.find((e) => e.value === nuevoEstado)?.label }}</strong>.
+          </p>
+          <div class="flex gap-3">
+            <button
+              @click="confirmandoEstado = false"
+              class="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors font-medium text-sm"
+            >
+              Cancelar
+            </button>
+            <button
+              @click="confirmarGuardarEstado"
+              :disabled="guardando"
+              class="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm disabled:opacity-60"
+            >
+              {{ guardando ? 'Guardando…' : 'Sí, cambiar' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </LibrosModuloNav>
   </StaffLayout>
 </template>

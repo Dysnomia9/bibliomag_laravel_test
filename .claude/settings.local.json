@@ -38,7 +38,8 @@
       "Bash(cp -r app-overlay/tests/. _generated/tests/)",
       "Bash(curl -s -o /dev/null -w \"frontend HTTP %{http_code}\\\\n\" http://localhost:5173)",
       "Bash(curl -s -X POST http://localhost:8000/api/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"admin@umag.cl\",\"password\":\"admin123\"}' -w \"\\\\nlogin HTTP %{http_code}\\\\n\")",
-      "Bash(node check3.js)"
+      "Bash(node check3.js)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:5173/)"
     ]
   }
 }

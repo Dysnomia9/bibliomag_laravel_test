@@ -2,6 +2,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import StaffLayout from '@/components/layout/StaffLayout.vue'
 import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
+import LibrosModuloNav from '@/components/libros/LibrosModuloNav.vue'
 import api from '@/services/api'
 import { useToast } from '@/composables/useToast'
 import type { Libro, TipoMaterialLibro } from '@/types'
@@ -84,11 +85,17 @@ function editar(libro: Libro) {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
-async function guardar() {
+const confirmandoGuardar = ref(false)
+
+function pedirConfirmacionGuardar() {
   if (!form.codigo_barras.trim() || !form.titulo.trim()) {
     toast.error('Ingrese al menos el código de barras y el título')
     return
   }
+  confirmandoGuardar.value = true
+}
+
+async function confirmarGuardar() {
   guardando.value = true
   try {
     const payload = {
@@ -103,6 +110,7 @@ async function guardar() {
       await api.post('/libros', payload)
       toast.success('Libro catalogado correctamente')
     }
+    confirmandoGuardar.value = false
     resetForm()
     await cargar()
   } catch (e: any) {
@@ -124,7 +132,7 @@ const estadoBadges: Record<string, { label: string; cls: string }> = {
 
 <template>
   <StaffLayout>
-    <div class="max-w-5xl mx-auto">
+    <LibrosModuloNav actual="catalogacion-libros">
       <div
         class="rounded-xl shadow-md mb-6 overflow-hidden"
         style="background: linear-gradient(135deg, #2D1B69 0%, #3B28A3 30%, #4338CA 60%, #4F46E5 100%);"
@@ -217,11 +225,11 @@ const estadoBadges: Record<string, { label: string; cls: string }> = {
 
         <div class="flex justify-end mt-4">
           <button
-            @click="guardar"
+            @click="pedirConfirmacionGuardar"
             :disabled="guardando || !form.codigo_barras.trim() || !form.titulo.trim()"
             class="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {{ guardando ? 'Guardando…' : editandoId ? 'Guardar cambios' : 'Catalogar libro' }}
+            {{ editandoId ? 'Guardar cambios' : 'Catalogar libro' }}
           </button>
         </div>
       </div>
@@ -282,6 +290,37 @@ const estadoBadges: Record<string, { label: string; cls: string }> = {
         <option value="Referencia" />
         <option value="Hemeroteca" />
       </datalist>
-    </div>
+
+      <div
+        v-if="confirmandoGuardar"
+        class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        @click.self="confirmandoGuardar = false"
+      >
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+          <h3 class="text-lg font-bold text-gray-900 mb-1">
+            {{ editandoId ? '¿Confirmar cambios?' : '¿Confirmar catalogación?' }}
+          </h3>
+          <p class="text-sm text-gray-500 mb-6">
+            {{ editandoId ? 'Se guardarán los cambios sobre' : 'Se agregará al catálogo' }}
+            <strong>{{ form.titulo }}</strong> (<span class="font-mono">{{ form.codigo_barras }}</span>).
+          </p>
+          <div class="flex gap-3">
+            <button
+              @click="confirmandoGuardar = false"
+              class="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors font-medium text-sm"
+            >
+              Cancelar
+            </button>
+            <button
+              @click="confirmarGuardar"
+              :disabled="guardando"
+              class="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm disabled:opacity-60"
+            >
+              {{ guardando ? 'Guardando…' : 'Sí, guardar' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </LibrosModuloNav>
   </StaffLayout>
 </template>

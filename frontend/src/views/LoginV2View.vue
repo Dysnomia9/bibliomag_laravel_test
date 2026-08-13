@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import logoUmag from '@/assets/logo-umag.png'
+import LoginBrandPanel from '@/components/auth/LoginBrandPanel.vue'
 import { useToast } from '@/composables/useToast'
 
 const toast = useToast()
@@ -11,24 +12,26 @@ function mockClick() {
 </script>
 
 <template>
-  <div class="relative min-h-screen flex items-center justify-center bg-biblioteca-50 px-4 py-12">
+  <div class="relative min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 via-slate-50 to-purple-50/60 px-4 py-12">
     <span
       class="absolute top-4 left-4 sm:top-6 sm:left-6 text-[11px] font-medium uppercase tracking-wide text-acento-600 bg-acento-500/10 border border-acento-500/20 rounded-full px-3 py-1"
     >
       Mockup · No funcional
     </span>
 
-    <div class="w-full max-w-sm">
-      <div class="bg-white border border-biblioteca-100 rounded-2xl shadow-lg p-8 text-center">
-        <div class="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-biblioteca-50 text-biblioteca-700">
-          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-          </svg>
-        </div>
-        <p class="text-xs font-medium uppercase tracking-wider text-biblioteca-500 mb-5">Acceso al sistema</p>
+    <router-link
+      :to="{ name: 'login' }"
+      class="absolute top-4 right-4 sm:top-6 sm:right-6 text-xs font-medium text-gray-500 hover:text-indigo-600 border border-gray-200 hover:border-indigo-300 rounded-full px-3 py-1.5 bg-white/70 backdrop-blur-sm transition-colors"
+    >
+      ← Volver al inicio de sesión
+    </router-link>
 
-        <img :src="logoUmag" alt="Universidad de Magallanes" class="mx-auto h-16 w-16 object-contain mb-3" />
-        <h1 class="text-xl font-serif font-semibold text-biblioteca-900">Biblioteca UMAG</h1>
+    <div class="w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden grid md:grid-cols-2 bg-white">
+      <LoginBrandPanel subtitulo="Sistema Digital Institucional" />
+
+      <div class="flex flex-col justify-center px-6 py-10 sm:px-10 sm:py-12 text-center">
+        <img :src="logoUmag" alt="Universidad de Magallanes" class="mx-auto h-14 w-14 object-contain mb-3" />
+        <h1 class="text-2xl font-serif font-semibold text-biblioteca-900">Biblioteca UMAG</h1>
         <p class="mt-1 text-sm text-biblioteca-500 mb-7">Sistema Digital Institucional</p>
 
         <div class="space-y-3">
@@ -65,12 +68,6 @@ function mockClick() {
           Universidad de Magallanes
         </p>
       </div>
-
-      <p class="mt-6 text-center text-sm">
-        <router-link :to="{ name: 'login' }" class="text-biblioteca-500 hover:text-biblioteca-700 font-medium hover:underline">
-          ← Volver al inicio de sesión
-        </router-link>
-      </p>
     </div>
   </div>
 </template>

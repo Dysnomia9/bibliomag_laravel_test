@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import StaffLayout from '@/components/layout/StaffLayout.vue'
 import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
+import LibrosModuloNav from '@/components/libros/LibrosModuloNav.vue'
 import api from '@/services/api'
 import type { Libro } from '@/types'
 
@@ -37,7 +38,7 @@ function onBuscarInput() {
 
 <template>
   <StaffLayout>
-    <div class="max-w-5xl mx-auto">
+    <LibrosModuloNav actual="listado-libros">
       <div
         class="rounded-xl shadow-md mb-6 overflow-hidden"
         style="background: linear-gradient(135deg, #2D1B69 0%, #3B28A3 30%, #4338CA 60%, #4F46E5 100%);"
@@ -104,6 +105,6 @@ function onBuscarInput() {
           </table>
         </div>
       </div>
-    </div>
+    </LibrosModuloNav>
   </StaffLayout>
 </template>
