@@ -13,8 +13,16 @@ const usuarios = ref<Usuario[]>([])
 const loading = ref(true)
 const apiError = ref(false)
 const generandoConstanciaRut = ref<string | null>(null)
+const usuarioParaConstancia = ref<Usuario | null>(null)
 
-async function generarConstancia(usuario: Usuario) {
+function pedirConfirmacionConstancia(usuario: Usuario) {
+  usuarioParaConstancia.value = usuario
+}
+
+async function confirmarConstancia() {
+  if (!usuarioParaConstancia.value) return
+  const usuario = usuarioParaConstancia.value
+  usuarioParaConstancia.value = null
   generandoConstanciaRut.value = usuario.rut
   try {
     const [porRutRes, configRes] = await Promise.all([
@@ -28,7 +36,7 @@ async function generarConstancia(usuario: Usuario) {
       return
     }
 
-    generarConstanciaNoMulta(porRutRes.data, configRes.data)
+    await generarConstanciaNoMulta(porRutRes.data, configRes.data)
     toast.success('Constancia generada')
   } catch {
     toast.error('No se pudo generar la constancia')
@@ -175,7 +183,7 @@ const hayResultados = computed(() => usuarios.value.length > 0)
               </td>
               <td class="px-5 py-3">
                 <button
-                  @click="generarConstancia(u)"
+                  @click="pedirConfirmacionConstancia(u)"
                   :disabled="generandoConstanciaRut === u.rut"
                   class="text-xs font-medium text-biblioteca-700 hover:text-biblioteca-900 underline disabled:opacity-50"
                 >
@@ -218,7 +226,7 @@ const hayResultados = computed(() => usuarios.value.length > 0)
             {{ u.activo ? 'Activo' : 'Inactivo' }}
           </span>
           <button
-            @click="generarConstancia(u)"
+            @click="pedirConfirmacionConstancia(u)"
             :disabled="generandoConstanciaRut === u.rut"
             class="text-xs font-medium text-biblioteca-700 hover:text-biblioteca-900 underline disabled:opacity-50"
           >
@@ -229,6 +237,34 @@ const hayResultados = computed(() => usuarios.value.length > 0)
       <p v-if="!hayResultados && !loading" class="text-center text-sm text-biblioteca-400 py-8">
         Sin usuarios que coincidan con la búsqueda.
       </p>
+    </div>
+
+    <div
+      v-if="usuarioParaConstancia"
+      class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      @click.self="usuarioParaConstancia = null"
+    >
+      <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+        <h3 class="text-lg font-bold text-gray-900 mb-1">¿Generar Constancia de No Multa?</h3>
+        <p class="text-sm text-gray-500 mb-6">
+          Se descargará un PDF con la constancia de <strong>{{ usuarioParaConstancia.nombre }} {{ usuarioParaConstancia.apellido }}</strong>,
+          RUT {{ usuarioParaConstancia.rut }}.
+        </p>
+        <div class="flex gap-3">
+          <button
+            @click="usuarioParaConstancia = null"
+            class="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors font-medium text-sm"
+          >
+            Cancelar
+          </button>
+          <button
+            @click="confirmarConstancia"
+            class="flex-1 px-4 py-2.5 bg-biblioteca-800 text-white rounded-lg hover:bg-biblioteca-900 transition-colors font-medium text-sm"
+          >
+            Sí, descargar
+          </button>
+        </div>
+      </div>
     </div>
   </StaffLayout>
 </template>

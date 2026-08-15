@@ -190,6 +190,18 @@ class PortalController extends Controller
             return response()->json(['message' => $mensaje], 409);
         }
 
+        $excedeLimite = $this->reservaSalaService->participanteExcedeLimiteDeBloques(
+            $data['ruts'],
+            $data['sala_id'],
+            $data['fecha'],
+            $data['hora_inicio'],
+            $data['hora_fin'],
+        );
+
+        if ($excedeLimite) {
+            return response()->json(['message' => $this->reservaSalaService->mensajeLimiteBloques($excedeLimite, $usuario->rut)], 409);
+        }
+
         $reserva = Reserva::create([
             'sala_id' => $data['sala_id'],
             'usuario_id' => $usuario->id,

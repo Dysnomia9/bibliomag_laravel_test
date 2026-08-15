@@ -15,6 +15,7 @@ const personasEnSala = ref(0)
 const capacidad = ref(220)
 const apiError = ref(false)
 const generandoConstancia = ref(false)
+const confirmandoConstancia = ref(false)
 
 const acciones = [
   {
@@ -51,7 +52,8 @@ async function cargar() {
 
 onMounted(cargar)
 
-async function generarConstancia() {
+async function confirmarConstancia() {
+  confirmandoConstancia.value = false
   generandoConstancia.value = true
   try {
     const [{ data: usuario }, { data: configuracion }] = await Promise.all([
@@ -62,7 +64,7 @@ async function generarConstancia() {
       toast.error(`Tienes ${usuario.multas_pendientes.cantidad} multa(s) pendiente(s) — no se puede emitir la constancia`)
       return
     }
-    generarConstanciaNoMulta(usuario, configuracion)
+    await generarConstanciaNoMulta(usuario, configuracion)
     toast.success('Constancia generada')
   } catch {
     toast.error('No se pudo generar la constancia')
@@ -150,7 +152,7 @@ async function generarConstancia() {
 
         <button
           type="button"
-          @click="generarConstancia"
+          @click="confirmandoConstancia = true"
           :disabled="generandoConstancia"
           class="w-full flex items-center gap-4 p-4 bg-white border border-gray-200 rounded-2xl shadow-sm hover:border-indigo-300 hover:shadow-md transition-all disabled:opacity-60"
         >
@@ -169,6 +171,31 @@ async function generarConstancia() {
             <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
           </svg>
         </button>
+      </div>
+    </div>
+
+    <div
+      v-if="confirmandoConstancia"
+      class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      @click.self="confirmandoConstancia = false"
+    >
+      <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+        <h3 class="text-lg font-bold text-gray-900 mb-1">¿Generar Constancia de No Multa?</h3>
+        <p class="text-sm text-gray-500 mb-6">Se descargará un PDF con tu constancia. ¿Continuar?</p>
+        <div class="flex gap-3">
+          <button
+            @click="confirmandoConstancia = false"
+            class="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors font-medium text-sm"
+          >
+            Cancelar
+          </button>
+          <button
+            @click="confirmarConstancia"
+            class="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm"
+          >
+            Sí, descargar
+          </button>
+        </div>
       </div>
     </div>
   </PortalLayout>

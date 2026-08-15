@@ -92,6 +92,18 @@ class SalaController extends Controller
             return response()->json(['message' => "El RUT {$rutConflicto} ya tiene otra sala reservada en ese horario"], 409);
         }
 
+        $excedeLimite = $this->reservaSalaService->participanteExcedeLimiteDeBloques(
+            $data['ruts'],
+            $data['sala_id'],
+            $data['fecha'],
+            $data['hora_inicio'],
+            $data['hora_fin'],
+        );
+
+        if ($excedeLimite) {
+            return response()->json(['message' => $this->reservaSalaService->mensajeLimiteBloques($excedeLimite)], 409);
+        }
+
         $usuarios = Usuario::whereIn('rut', $data['ruts'])->get()->keyBy('rut');
 
         $reserva = Reserva::create([

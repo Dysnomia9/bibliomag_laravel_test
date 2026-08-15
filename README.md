@@ -22,7 +22,9 @@ PostgreSQL** (backend API), 100% dockerizada.
   Pendientes" con el total adeudado por usuario.
 - Reservas de salas de estudio (logias, por bloques de 2 horas, con menú de
   confirmación de asistencia: 15 minutos para presentarse antes de que la
-  sala se libere sola) y de libros del catálogo para retiro — ambas
+  sala se libere sola, y un máximo de 2 bloques activos por persona —solo
+  puede extender su estadía al bloque adyacente de la misma sala, no
+  acaparar salas distintas) y de libros del catálogo para retiro — ambas
   comparten la disponibilidad del ejemplar como fuente de verdad: no se
   puede reservar ni prestar algo ya ocupado.
 - Catalogación de libros con soporte real para **múltiples copias del
@@ -206,11 +208,13 @@ npm run dev
 
 ## Tests y benchmark de rendimiento
 
-Hay una suite de Feature tests (`backend/tests/Feature/`, 163 tests al
+Hay una suite de Feature tests (`backend/tests/Feature/`, 170 tests al
 2026-08-16) que cubre login de staff/usuario, registro de entradas, reservas
 de sala (solapamiento y validación grupal, incluido el cruce entre salas
-distintas, restricción a "solo hoy" para alumnos, y el flujo completo de
-confirmación de asistencia con liberación automática por no-show), préstamos
+distintas, restricción a "solo hoy" para alumnos, el límite de bloques por
+participante —máximo 2, solo adyacentes en la misma sala—, y el flujo
+completo de confirmación de asistencia con liberación automática por
+no-show), préstamos
 y reservas de libros y equipos por código de barras (incluida la protección
 contra condición de carrera con `DB::transaction()`+`lockForUpdate()`),
 catalogación y cambio de estado de ejemplares (incluido el cambio masivo y

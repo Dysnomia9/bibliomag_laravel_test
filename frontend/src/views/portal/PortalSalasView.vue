@@ -100,7 +100,8 @@ function openReservaModal(sala: Sala, bloque: (typeof horariosBloques)[number]) 
   selectedSala.value = sala
   selectedBloque.value = bloque
   cantidadPersonas.value = CANTIDAD_MIN
-  rutsReserva.value = Array.from({ length: CANTIDAD_MIN }, () => '')
+  // La persona 1 siempre es quien está reservando — se precarga su propio RUT.
+  rutsReserva.value = Array.from({ length: CANTIDAD_MIN }, (_, idx) => (idx === 0 ? (auth.usuario?.rut ?? '') : ''))
   rutErrores.value = {}
   modalOpen.value = true
 }

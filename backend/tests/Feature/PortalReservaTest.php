@@ -74,4 +74,66 @@ class PortalReservaTest extends TestCase
 
         $response->assertStatus(201);
     }
+
+    public function test_usuario_no_puede_reservar_otra_sala_si_ya_tiene_una_activa(): void
+    {
+        $usuario = Usuario::factory()->create();
+        $otro = Usuario::factory()->create();
+        $salaVieja = Sala::factory()->create();
+        $salaNueva = Sala::factory()->create();
+
+        Reserva::factory()->conParticipantes([$usuario, $otro])->create([
+            'sala_id' => $salaVieja->id,
+            'usuario_id' => $usuario->id,
+            'rut_usuario' => $usuario->rut,
+            'fecha' => now()->toDateString(),
+            'hora_inicio' => 10,
+            'hora_fin' => 12,
+            'cantidad_personas' => 2,
+        ]);
+
+        Sanctum::actingAs($usuario);
+
+        $response = $this->postJson('/api/mi/reservas', [
+            'sala_id' => $salaNueva->id,
+            'fecha' => now()->toDateString(),
+            'hora_inicio' => 14,
+            'hora_fin' => 16,
+            'cantidad_personas' => 2,
+            'ruts' => [$usuario->rut, $otro->rut],
+        ]);
+
+        $response->assertStatus(409)
+            ->assertJsonPath('message', 'Ya tienes una reserva activa en otra sala hoy — solo puedes reservar el bloque anterior o siguiente en la misma sala.');
+    }
+
+    public function test_usuario_puede_extender_a_bloque_adyacente_de_la_misma_sala(): void
+    {
+        $usuario = Usuario::factory()->create();
+        $otro = Usuario::factory()->create();
+        $sala = Sala::factory()->create();
+
+        Reserva::factory()->conParticipantes([$usuario, $otro])->create([
+            'sala_id' => $sala->id,
+            'usuario_id' => $usuario->id,
+            'rut_usuario' => $usuario->rut,
+            'fecha' => now()->toDateString(),
+            'hora_inicio' => 10,
+            'hora_fin' => 12,
+            'cantidad_personas' => 2,
+        ]);
+
+        Sanctum::actingAs($usuario);
+
+        $response = $this->postJson('/api/mi/reservas', [
+            'sala_id' => $sala->id,
+            'fecha' => now()->toDateString(),
+            'hora_inicio' => 12,
+            'hora_fin' => 14,
+            'cantidad_personas' => 2,
+            'ruts' => [$usuario->rut, $otro->rut],
+        ]);
+
+        $response->assertStatus(201);
+    }
 }

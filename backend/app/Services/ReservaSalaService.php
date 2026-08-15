@@ -148,6 +148,88 @@ class ReservaSalaService
     }
 
     /**
+     * Un mismo participante no puede tener reservas 'activa' en salas distintas ni en
+     * bloques no adyacentes de la misma sala el mismo día — solo puede "extender" su
+     * estadía al bloque inmediatamente anterior o siguiente de la sala que ya tiene
+     * reservada, y como máximo una vez (no ambas direcciones a la vez). Las reservas
+     * ya 'finalizada' (llave devuelta) o 'no_show' no cuentan — una vez que alguien
+     * terminó, puede volver a reservar libremente más tarde ese mismo día. Devuelve
+     * `[rut, motivo]` del primer participante que violaría la regla, o null si todos
+     * pueden reservar sin problema.
+     *
+     * @return array{0: string, 1: 'otra_sala'|'no_adyacente'|'limite'}|null
+     */
+    public function participanteExcedeLimiteDeBloques(array $ruts, int $salaId, string $fecha, int $horaInicio, int $horaFin, ?int $ignorarReservaId = null): ?array
+    {
+        $idPorRut = Usuario::whereIn('rut', $ruts)->pluck('id', 'rut');
+
+        foreach ($ruts as $rut) {
+            $usuarioId = $idPorRut->get($rut);
+            if (! $usuarioId) {
+                continue; // RUT inválido — ya lo rechaza la regla 'exists' del validator.
+            }
+
+            $reservasActivas = Reserva::where('fecha', $fecha)
+                ->where('estado', 'activa')
+                ->whereHas('participantes', fn ($q) => $q->where('usuarios.id', $usuarioId))
+                ->when($ignorarReservaId, fn ($q) => $q->where('id', '!=', $ignorarReservaId))
+                ->get()
+                ->reject(fn (Reserva $r) => $this->liberarSiVencida($r))
+                ->values();
+
+            if ($reservasActivas->isEmpty()) {
+                continue;
+            }
+
+            if ($reservasActivas->count() >= 2) {
+                return [$rut, 'limite'];
+            }
+
+            $existente = $reservasActivas->first();
+            $mismaSala = (int) $existente->sala_id === $salaId;
+            $esAdyacente = (int) $existente->hora_fin === $horaInicio || (int) $existente->hora_inicio === $horaFin;
+
+            if (! $mismaSala) {
+                return [$rut, 'otra_sala'];
+            }
+
+            if (! $esAdyacente) {
+                return [$rut, 'no_adyacente'];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Arma el mensaje 409 para participanteExcedeLimiteDeBloques() — en 2ª persona
+     * ("Ya tienes...") si el RUT que violó la regla es el del propio usuario
+     * autenticado (portal), o en 3ª persona ("El RUT X ya tiene...") en cualquier
+     * otro caso (staff reservando para un grupo). Mismo criterio que el mensaje de
+     * participanteConReservaSolapada en PortalController::reservarSala().
+     *
+     * @param array{0: string, 1: 'otra_sala'|'no_adyacente'|'limite'} $excedeLimite
+     */
+    public function mensajeLimiteBloques(array $excedeLimite, ?string $rutPropio = null): string
+    {
+        [$rut, $motivo] = $excedeLimite;
+
+        if ($rut === $rutPropio) {
+            return match ($motivo) {
+                'otra_sala' => 'Ya tienes una reserva activa en otra sala hoy — solo puedes reservar el bloque anterior o siguiente en la misma sala.',
+                'no_adyacente' => 'Ya tienes una reserva activa en esta sala en un bloque no consecutivo — solo puedes agregar el bloque inmediatamente anterior o siguiente.',
+                default => 'Ya alcanzaste el máximo de bloques reservados por hoy (2, en la misma sala).',
+            };
+        }
+
+        return match ($motivo) {
+            'otra_sala' => "El RUT {$rut} ya tiene una reserva activa en otra sala hoy — solo puede reservar el bloque anterior o siguiente en la misma sala.",
+            'no_adyacente' => "El RUT {$rut} ya tiene una reserva activa en esta sala en un bloque no consecutivo — solo puede agregar el bloque inmediatamente anterior o siguiente.",
+            default => "El RUT {$rut} ya alcanzó el máximo de bloques reservados por hoy (2, en la misma sala).",
+        };
+    }
+
+    /**
      * Devuelve el primer RUT que ya participa en otra reserva (en cualquier sala)
      * cuyo horario se solape con el bloque solicitado, o null si ninguno choca.
      */

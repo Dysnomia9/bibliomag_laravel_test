@@ -394,7 +394,7 @@ frontend/
   `SalaConfirmacionAsistenciaTest`, `SalaDevolucionTest`, `SalaReservaTest`,
   `StaffAtribucionTest`, `UsuarioAuthTest`), corren contra una DB Postgres
   dedicada (`biblioteca_test`, ver `docker-entrypoint.sh`) con
-  `docker compose exec backend php artisan test` — 163 tests al 2026-08-16.
+  `docker compose exec backend php artisan test` — 170 tests al 2026-08-16.
   La catalogación de libros, el split Libro/Ejemplar, el cambio masivo de
   estado y el flujo completo de confirmación de asistencia de sala ya
   tienen cobertura completa.
@@ -953,9 +953,59 @@ frontend/
   (ya devuelve `multas_pendientes`) y **bloquea la generación con un toast
   de error** si `cantidad > 0` — verificado manualmente el 2026-08-15 con
   un usuario con multa pendiente (bloqueado) y uno sin deuda (PDF
-  descargado correctamente, sin errores de consola). Ver Deuda técnica:
-  esto vive solo del lado staff, no hay autoservicio en el portal. Tests:
-  `ConfiguracionInstitucionalTest.php`.
+  descargado correctamente, sin errores de consola). El mismo flujo ya
+  tiene autoservicio desde el portal virtual también (ver entrada
+  2026-08-16 más abajo). Tests: `ConfiguracionInstitucionalTest.php`.
+  **Actualización de formato (2026-08-16)**: el encabezado pasó a imitar un
+  membrete real — "UMAG" + "Universidad de Magallanes" a la izquierda,
+  línea vertical divisoria, "Unidad de Gestión de Recursos Educativos" a la
+  derecha (antes era texto suelto sin línea) — y el párrafo principal ya no
+  es un solo `doc.text()` con una fuente uniforme: usa
+  `dibujarParrafoConEstilos()` (helper nuevo en el mismo archivo) para
+  mezclar negrita/subrayado por tramo dentro de una misma línea — nombre
+  completo y RUT quedan subrayados, programa/carrera y fecha quedan en
+  negrita. jsPDF no soporta texto enriquecido ni subrayado nativo: el
+  helper posiciona cada palabra a mano (preservando espacios vía
+  `split(/(\s+)/)`, no `split(' ')` — perder los espacios entre segmentos
+  fue el bug real la primera vez que se escribió esto) y dibuja el
+  subrayado como una sola línea continua por segmento (no una por palabra).
+  Si agregás un campo nuevo con estilo mixto a este documento, reusá
+  `dibujarParrafoConEstilos()`/`medirAnchoSegmentos()` en vez de volver a
+  `doc.text()` plano.
+  **Segunda pasada de formato (2026-08-16)**: "Don/Doña" pasó a "Don(a)"
+  (una sola palabra en vez de dos separadas por barra). Se agregó el sello
+  institucional real como imagen —
+  `frontend/src/assets/sello-biblioteca.png` (recortado con ImageMagick al
+  círculo visible, sin el padding transparente que traía el archivo
+  original; el original vivía suelto en la raíz del repo, se movió a
+  `assets/` como cualquier otro logo del proyecto, ver `logo-umag.png` en
+  la misma carpeta) — centrado justo encima de la línea de firma. Como
+  jsPDF necesita la imagen ya en base64 para `addImage()` (no acepta una
+  URL de asset de Vite directamente), `generarConstanciaNoMulta()` pasó a
+  ser **`async`** — hace `fetch()` del asset importado y lo convierte con
+  `FileReader.readAsDataURL()` (`cargarImagenComoBase64()`, helper nuevo
+  en el mismo archivo) antes de dibujar. **Los dos callers
+  (`UsuariosView.vue`, `PortalHomeView.vue`) ahora hacen `await
+  generarConstanciaNoMulta(...)`** — si agregás un caller nuevo (ej. algún
+  día un reporte en PDF que reuse el sello), no te olvides del `await`, o
+  el archivo se dispara a descargar sin el sello (la promesa de
+  `addImage` corre en paralelo con el resto y probablemente pierda la
+  carrera). El alto del sello en el PDF se calcula con
+  `doc.getImageProperties()` (relación de aspecto real del PNG), no un
+  valor fijo — no lo hardcodees si el asset cambia de tamaño.
+  **Tercera pasada (mismo día)**: nombre completo y RUT pasaron de
+  subrayado a **negrita** (`negrita: true` en vez de `subrayado: true` en
+  esos dos segmentos, dentro de `generarConstanciaNoMulta()`) — el helper
+  `dibujarParrafoConEstilos()` sigue soportando `subrayado` para quien lo
+  necesite después, simplemente no se usa en este documento por ahora. El
+  PNG del sello traía el interior del círculo con un gris sucio/parejo
+  (textura de sello real escaneado) — se limpió con
+  `magick sello-biblioteca.png -level 20%,90% sello-biblioteca.png`
+  (empuja los grises claros a blanco sin aplanar el borde/las letras, que
+  son mucho más oscuros) antes de guardarlo en `assets/`. Si se reemplaza
+  el asset por uno nuevo con el mismo problema, este es el comando a
+  repetir — no subas el PNG del sello directo desde el escáner/celular sin
+  pasarlo por este ajuste.
 - **Sala "GACI" renombrada a "AGACI"** (2026-08-15): migración de datos
   (`2026_08_14_000001_rename_gaci_sala_to_agaci`,
   `UPDATE salas SET nombre = REPLACE(nombre, 'GACI', 'AGACI') ...`, con
@@ -1113,6 +1163,56 @@ frontend/
   `EquipoPrestamoTest.php` (ampliado con casos de cargador y
   `buscarPorCodigo`), `PrestamoConcurrenciaTest.php` ajustado al nuevo
   payload.
+- **Límite de bloques de sala por participante: máximo 2, y solo si son
+  adyacentes en la MISMA sala** (2026-08-16): antes solo existía
+  `participanteConReservaSolapada()` (rechaza reservas que se **solapan en
+  horario** para un mismo RUT, en cualquier sala) — pero no había nada que
+  impidiera a una persona reservar dos salas **distintas** en bloques que
+  no se solapan (ej. sala A 10-12 y sala B 14-16), acaparando varias logias
+  el mismo día. Se agregó
+  `ReservaSalaService::participanteExcedeLimiteDeBloques()`: cada
+  participante puede tener como máximo 2 reservas `estado = 'activa'` ese
+  día, y si ya tiene 1, la nueva solo se permite si es en la **misma
+  sala** y en el bloque **inmediatamente anterior o siguiente** (extender
+  la estadía) — no ambas direcciones a la vez (con 2 ya alcanzó el
+  máximo), y nunca una sala distinta aunque el horario no choque. Las
+  reservas `'finalizada'` (llave ya devuelta) o `'no_show'` no cuentan —
+  una vez que alguien termina, queda libre para reservar de nuevo más
+  tarde ese mismo día. "Adyacente" se calcula comparando límites de hora
+  (`existente.hora_fin === nueva.hora_inicio` o viceversa), no contra una
+  lista fija de bloques — funciona igual sin importar si el staff reserva
+  con horarios no estándar. Wireado en `SalaController::storeReserva` y
+  `PortalController::reservarSala` (mismo patrón que el chequeo de
+  solapamiento, un `Service` compartido en vez de duplicar la regla — ver
+  convención 4); el mensaje 409 usa
+  `ReservaSalaService::mensajeLimiteBloques()` en 2ª persona ("Ya
+  tienes...") si el RUT que falla es el del propio usuario autenticado del
+  portal, o en 3ª persona ("El RUT X ya tiene...") en cualquier otro caso
+  (staff reservando para un grupo) — mismo criterio que ya usaba el
+  mensaje de solapamiento. Tests: `SalaReservaTest.php` (7 casos nuevos,
+  incluye el caso borde de "ya usó su única extensión, no puede pedir la
+  otra dirección") + 2 nuevos en `PortalReservaTest.php`.
+- **Confirmación antes de generar la Constancia de No Multa** (2026-08-16):
+  antes el botón generaba y descargaba el PDF al primer click, sin aviso.
+  Se agregó un modal de confirmación ("Se descargará un PDF...") en ambos
+  lados — `UsuariosView.vue` (staff, `usuarioParaConstancia` +
+  `pedirConfirmacionConstancia()`/`confirmarConstancia()`) y
+  `PortalHomeView.vue` (portal, `confirmandoConstancia` +
+  `confirmarConstancia()`) — mismo patrón de modal que ya se usa en el
+  resto del proyecto (`@click.self` para cerrar clickeando afuera, botón
+  "Cancelar" + botón de confirmar). El chequeo de multas pendientes sigue
+  ocurriendo recién AL CONFIRMAR (no antes), así que el modal se muestra
+  siempre, incluso para un usuario que después resulte bloqueado por
+  deuda — el bloqueo se ve como el mismo toast de error de siempre tras
+  confirmar, no cambia esa lógica.
+- **RUT del usuario logueado precargado como "persona 1" al reservar sala
+  desde el portal** (2026-08-16): `PortalSalasView.vue::openReservaModal()`
+  ahora llena `rutsReserva[0]` con `auth.usuario?.rut` en vez de dejarlo
+  vacío — el campo sigue siendo editable, solo cambia el valor inicial.
+  No afecta la propiedad de la reserva: `PortalController::reservarSala()`
+  ya usaba `$request->user()->id` (no `ruts[0]`) para `usuario_id` desde
+  antes — este cambio es puramente UX, ahorra que el estudiante se
+  tipee su propio RUT cada vez.
 
 ## Checklist antes de dar un módulo por terminado
 
