@@ -21,6 +21,7 @@ class EntradaFactory extends Factory
             'via' => 'manual',
             'codigo_barras' => null,
             'es_convenio' => false,
+            'es_visita' => false,
         ];
     }
 }

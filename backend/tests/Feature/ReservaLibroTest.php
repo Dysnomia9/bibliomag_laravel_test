@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Ejemplar;
 use App\Models\Libro;
 use App\Models\ReservaLibro;
 use App\Models\Staff;
@@ -31,28 +32,28 @@ class ReservaLibroTest extends TestCase
     public function test_reservar_libro_ya_no_disponible_se_une_a_la_cola_de_espera(): void
     {
         Sanctum::actingAs(Staff::factory()->create());
-        $libro = Libro::factory()->create(['disponible' => false]);
+        $ejemplar = Ejemplar::factory()->for(Libro::factory())->create(['disponible' => false]);
 
         $response = $this->postJson('/api/reservas-libro', [
             'usuario_id' => Usuario::factory()->create()->id,
-            'codigo_barras' => $libro->codigo_barras,
+            'codigo_barras' => $ejemplar->codigo_barras,
         ]);
 
         $response->assertStatus(201)
             ->assertJsonPath('estado', 'en_cola')
             ->assertJsonPath('fecha_retiro', null);
-        // El libro no se toca: ya estaba ocupado por otra persona, sigue igual.
-        $this->assertDatabaseHas('libros', ['id' => $libro->id, 'disponible' => false]);
+        // El ejemplar no se toca: ya estaba ocupado por otra persona, sigue igual.
+        $this->assertDatabaseHas('ejemplares', ['id' => $ejemplar->id, 'disponible' => false]);
     }
 
     public function test_reservar_libro_que_no_esta_en_estante_devuelve_409(): void
     {
         Sanctum::actingAs(Staff::factory()->create());
-        $libro = Libro::factory()->create(['estado_proceso' => 'inventario']);
+        $ejemplar = Ejemplar::factory()->for(Libro::factory())->create(['estado_proceso' => 'inventario']);
 
         $response = $this->postJson('/api/reservas-libro', [
             'usuario_id' => Usuario::factory()->create()->id,
-            'codigo_barras' => $libro->codigo_barras,
+            'codigo_barras' => $ejemplar->codigo_barras,
             'fecha_reserva' => now()->toDateString(),
             'fecha_retiro' => now()->addDays(2)->toDateString(),
         ]);
@@ -63,26 +64,30 @@ class ReservaLibroTest extends TestCase
     public function test_reservar_libro_disponible_lo_marca_como_no_disponible(): void
     {
         Sanctum::actingAs(Staff::factory()->create());
-        $libro = Libro::factory()->create();
+        $ejemplar = Ejemplar::factory()->for(Libro::factory())->create();
         $usuario = Usuario::factory()->create();
 
         $response = $this->postJson('/api/reservas-libro', [
             'usuario_id' => $usuario->id,
-            'codigo_barras' => $libro->codigo_barras,
+            'codigo_barras' => $ejemplar->codigo_barras,
             'fecha_reserva' => now()->toDateString(),
             'fecha_retiro' => now()->addDays(2)->toDateString(),
         ]);
 
-        $response->assertStatus(201)->assertJsonPath('estado', 'pendiente');
-        $this->assertDatabaseHas('libros', ['id' => $libro->id, 'disponible' => false]);
+        $response->assertStatus(201)
+            ->assertJsonPath('estado', 'pendiente')
+            ->assertJsonPath('ejemplar_id', $ejemplar->id)
+            ->assertJsonPath('libro_id', $ejemplar->libro_id);
+        $this->assertDatabaseHas('ejemplares', ['id' => $ejemplar->id, 'disponible' => false]);
     }
 
-    public function test_cancelar_reserva_libera_el_libro_y_marca_cancelado(): void
+    public function test_cancelar_reserva_libera_el_ejemplar_y_marca_cancelado(): void
     {
         Sanctum::actingAs(Staff::factory()->create());
-        $libro = Libro::factory()->create(['disponible' => false]);
+        $ejemplar = Ejemplar::factory()->for(Libro::factory())->create(['disponible' => false]);
         $reserva = ReservaLibro::factory()->create([
-            'libro_id' => $libro->id,
+            'libro_id' => $ejemplar->libro_id,
+            'ejemplar_id' => $ejemplar->id,
             'usuario_id' => Usuario::factory()->create()->id,
             'estado' => 'pendiente',
         ]);
@@ -90,7 +95,7 @@ class ReservaLibroTest extends TestCase
         $response = $this->patchJson("/api/reservas-libro/{$reserva->id}/cancelar");
 
         $response->assertStatus(200)->assertJsonPath('estado', 'cancelado');
-        $this->assertDatabaseHas('libros', ['id' => $libro->id, 'disponible' => true]);
+        $this->assertDatabaseHas('ejemplares', ['id' => $ejemplar->id, 'disponible' => true]);
     }
 
     public function test_listado_filtra_por_usuario_id(): void

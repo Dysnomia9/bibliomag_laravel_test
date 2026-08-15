@@ -31,6 +31,11 @@ const rutConvenio = ref('')
 const nombreConvenio = ref('')
 const registrandoConvenio = ref(false)
 
+const visitaModalOpen = ref(false)
+const rutVisita = ref('')
+const nombreVisita = ref('')
+const registrandoVisita = ref(false)
+
 const VIA_LABELS: Record<string, string> = {
   qr: 'QR Móvil',
   manual: 'Manual',
@@ -163,6 +168,38 @@ async function registrarConvenio() {
     registrandoConvenio.value = false
   }
 }
+
+function abrirModalVisita() {
+  rutVisita.value = ''
+  nombreVisita.value = ''
+  visitaModalOpen.value = true
+}
+
+function onRutVisitaInput(event: Event) {
+  rutVisita.value = formatRut((event.target as HTMLInputElement).value)
+}
+
+async function registrarVisita() {
+  if (!rutVisita.value.trim()) {
+    toast.error('Ingrese el RUT de la visita')
+    return
+  }
+
+  registrandoVisita.value = true
+  try {
+    await api.post('/entrada/visita', {
+      rut: rutVisita.value,
+      nombre: nombreVisita.value.trim() || undefined,
+    })
+    toast.success('Entrada de visita registrada')
+    visitaModalOpen.value = false
+    await cargar()
+  } catch (e: any) {
+    toast.error(e?.response?.data?.message ?? 'No se pudo registrar la entrada')
+  } finally {
+    registrandoVisita.value = false
+  }
+}
 </script>
 
 <template>
@@ -235,6 +272,15 @@ async function registrarConvenio() {
               </svg>
               Convenio
             </button>
+            <button
+              @click="abrirModalVisita"
+              class="flex items-center gap-2 px-5 py-2.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors font-medium"
+            >
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+              </svg>
+              Visita
+            </button>
           </div>
         </div>
       </div>
@@ -288,6 +334,12 @@ async function registrarConvenio() {
                       class="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-sky-50 text-sky-700 border border-sky-200"
                     >
                       Convenio
+                    </span>
+                    <span
+                      v-else-if="e.es_visita"
+                      class="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-emerald-50 text-emerald-700 border border-emerald-200"
+                    >
+                      Visita
                     </span>
                     <span v-else class="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-amber-50 text-amber-700 border border-amber-200">
                       Externo
@@ -411,6 +463,60 @@ async function registrarConvenio() {
               class="flex-1 px-4 py-2.5 bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition-colors font-medium text-sm disabled:opacity-60"
             >
               {{ registrandoConvenio ? 'Registrando…' : 'Registrar' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div
+        v-if="visitaModalOpen"
+        class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        @click.self="visitaModalOpen = false"
+      >
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+          <h3 class="text-lg font-bold text-gray-900 mb-1">Registrar visita</h3>
+          <p class="text-sm text-gray-500 mb-5">
+            Igual que un visitante externo, pero se etiqueta aparte como "Visita" para reportería.
+          </p>
+
+          <div class="space-y-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">RUT</label>
+              <input
+                :value="rutVisita"
+                @input="onRutVisitaInput"
+                type="text"
+                placeholder="12.345.678-5"
+                maxlength="12"
+                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                @keydown.enter="registrarVisita"
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Nombre (opcional)</label>
+              <input
+                v-model="nombreVisita"
+                type="text"
+                placeholder="Nombre (opcional)"
+                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                @keydown.enter="registrarVisita"
+              />
+            </div>
+          </div>
+
+          <div class="flex gap-3 mt-6">
+            <button
+              @click="visitaModalOpen = false"
+              class="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors font-medium text-sm"
+            >
+              Cancelar
+            </button>
+            <button
+              @click="registrarVisita"
+              :disabled="registrandoVisita"
+              class="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium text-sm disabled:opacity-60"
+            >
+              {{ registrandoVisita ? 'Registrando…' : 'Registrar' }}
             </button>
           </div>
         </div>

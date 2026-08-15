@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import StaffLayout from '@/components/layout/StaffLayout.vue'
 import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import api from '@/services/api'
@@ -39,6 +39,7 @@ const selectedSala = ref<Sala | null>(null)
 const selectedBloque = ref<(typeof horariosBloques)[number] | null>(null)
 const cantidadPersonas = ref(CANTIDAD_MIN)
 const rutsReserva = ref<string[]>(Array.from({ length: CANTIDAD_MIN }, () => ''))
+const rutErrores = ref<Record<number, string>>({})
 
 const detalleOpen = ref(false)
 const detalleReserva = ref<Reserva | null>(null)
@@ -50,6 +51,17 @@ const cancelacionPendiente = ref<{ salaId: number; horaInicio: number; salaNombr
 const devolucionPendiente = ref<{ reservaId: number; salaNombre: string; bloqueLabel: string } | null>(null)
 const registradoPorDevolucion = ref('')
 const devolviendo = ref(false)
+
+const llegadaPendiente = ref<{ reservaId: number; salaNombre: string; bloqueLabel: string } | null>(null)
+const registradoPorLlegada = ref('')
+const confirmandoLlegada = ref(false)
+const liberando = ref<number | null>(null)
+
+// Reloj reactivo para que la cuenta regresiva del menú de confirmación se actualice
+// sola, sin depender de que el staff refresque la página a mano.
+const ahora = ref(new Date())
+let relojTimer: ReturnType<typeof setInterval> | undefined
+let refrescoTimer: ReturnType<typeof setInterval> | undefined
 
 const codigoLogiaScan = ref('')
 const registradoPorScan = ref('')
@@ -80,6 +92,15 @@ async function cargar() {
 onMounted(() => {
   cargar()
   cargarStaffNombres()
+  relojTimer = setInterval(() => (ahora.value = new Date()), 1000)
+  // Refresca la lista cada minuto — además de mantener el panel de confirmación al
+  // día, esto es lo que dispara la expiración perezosa del backend (SalaController::
+  // index() libera reservas vencidas al cargarlas) sin que el staff tenga que refrescar.
+  refrescoTimer = setInterval(cargar, 60000)
+})
+onUnmounted(() => {
+  clearInterval(relojTimer)
+  clearInterval(refrescoTimer)
 })
 watch(selectedDate, cargar)
 
@@ -149,6 +170,7 @@ function openReservaModal(sala: Sala, bloque: (typeof horariosBloques)[number]) 
   selectedBloque.value = bloque
   cantidadPersonas.value = CANTIDAD_MIN
   rutsReserva.value = Array.from({ length: CANTIDAD_MIN }, () => '')
+  rutErrores.value = {}
   modalOpen.value = true
 }
 
@@ -163,6 +185,11 @@ function verDetalle(sala: Sala, bloque: (typeof horariosBloques)[number]) {
 
 function onRutInput(index: number, event: Event) {
   rutsReserva.value[index] = formatRut((event.target as HTMLInputElement).value)
+  if (rutErrores.value[index]) {
+    const restantes = { ...rutErrores.value }
+    delete restantes[index]
+    rutErrores.value = restantes
+  }
 }
 
 async function confirmarReserva() {
@@ -172,6 +199,7 @@ async function confirmarReserva() {
   }
   if (!selectedSala.value || !selectedBloque.value) return
 
+  rutErrores.value = {}
   try {
     await api.post('/reservas', {
       sala_id: selectedSala.value.id,
@@ -185,7 +213,20 @@ async function confirmarReserva() {
     modalOpen.value = false
     await cargar()
   } catch (e: any) {
-    toast.error(e?.response?.data?.message ?? 'No se pudo crear la reserva')
+    const errores = e?.response?.data?.errors as Record<string, string[]> | undefined
+    const erroresRuts = Object.entries(errores ?? {}).filter(([campo]) => campo.startsWith('ruts.'))
+
+    if (erroresRuts.length) {
+      const mapa: Record<number, string> = {}
+      for (const [campo, mensajes] of erroresRuts) {
+        const idx = Number(campo.split('.')[1])
+        mapa[idx] = mensajes[0]
+      }
+      rutErrores.value = mapa
+      toast.error(erroresRuts.length === 1 ? 'Revisa el RUT marcado en rojo' : 'Revisa los RUT marcados en rojo')
+    } else {
+      toast.error(e?.response?.data?.message ?? 'No se pudo crear la reserva')
+    }
   }
 }
 
@@ -243,6 +284,70 @@ async function confirmarDevolucion() {
 function formatFechaLarga(fecha: string) {
   return fecha === hoy ? 'Hoy' : new Date(`${fecha}T12:00:00`).toLocaleDateString('es-CL')
 }
+
+function pedirLlegada(salaNombre: string, bloqueLabel: string, reservaId: number) {
+  registradoPorLlegada.value = ''
+  llegadaPendiente.value = { reservaId, salaNombre, bloqueLabel }
+}
+
+async function confirmarLlegadaAction() {
+  if (!llegadaPendiente.value) return
+  if (!registradoPorLlegada.value.trim()) {
+    toast.error('Ingrese quién confirma la llegada')
+    return
+  }
+  confirmandoLlegada.value = true
+  try {
+    await api.patch(`/reservas/${llegadaPendiente.value.reservaId}/llegada`, {
+      registrado_por: registradoPorLlegada.value.trim(),
+    })
+    toast.success('Llegada confirmada')
+    llegadaPendiente.value = null
+    detalleOpen.value = false
+    await cargar()
+  } catch (e: any) {
+    toast.error(e?.response?.data?.message ?? 'No se pudo confirmar la llegada')
+    await cargar()
+  } finally {
+    confirmandoLlegada.value = false
+  }
+}
+
+async function liberarReservaAction(reserva: Reserva) {
+  liberando.value = reserva.id
+  try {
+    await api.patch(`/reservas/${reserva.id}/liberar`)
+    toast.success('Sala liberada por no presentación')
+    detalleOpen.value = false
+    await cargar()
+  } catch (e: any) {
+    toast.error(e?.response?.data?.message ?? 'No se pudo liberar la reserva')
+  } finally {
+    liberando.value = null
+  }
+}
+
+/** "Menú de confirmación": reservas de hoy que todavía no confirman llegada, con su plazo. */
+const pendientesConfirmacion = computed(() => {
+  if (selectedDate.value !== hoy) return []
+  return reservas.value
+    .filter((r) => r.estado === 'activa' && !r.hora_prestamo_real)
+    .map((r) => ({
+      reserva: r,
+      sala: salas.value.find((s) => s.id === r.sala_id),
+      bloque: horariosBloques.find((b) => b.inicio === r.hora_inicio),
+      vencida: r.vencida_sin_confirmar ?? false,
+      segundosRestantes: r.plazo_confirmacion ? Math.floor((new Date(r.plazo_confirmacion).getTime() - ahora.value.getTime()) / 1000) : 0,
+    }))
+    .sort((a, b) => a.segundosRestantes - b.segundosRestantes)
+})
+
+function formatCuentaRegresiva(segundos: number) {
+  if (segundos <= 0) return 'Vencido'
+  const m = Math.floor(segundos / 60)
+  const s = segundos % 60
+  return `${m}:${String(s).padStart(2, '0')}`
+}
 </script>
 
 <template>
@@ -254,7 +359,7 @@ function formatFechaLarga(fecha: string) {
       >
         <div class="px-6 py-5">
           <h1 class="text-2xl font-serif font-bold tracking-tight text-white">Salas de Estudio</h1>
-          <p class="text-sm text-white/60 mt-1">15 logias de estudio, Sala de Seminarios, Sala de Postgrado y Sala GACI · Horario 08:00 – 21:00</p>
+          <p class="text-sm text-white/60 mt-1">15 logias de estudio, Sala de Seminarios, Sala de Postgrado y Sala AGACI · Horario 08:00 – 21:00</p>
         </div>
       </div>
 
@@ -298,6 +403,53 @@ function formatFechaLarga(fecha: string) {
             class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
           />
         </div>
+      </div>
+
+      <div v-if="selectedDate === hoy" class="bg-white rounded-xl shadow-md p-5 mb-6">
+        <h3 class="text-sm font-semibold text-gray-900 mb-1">Menú de confirmación de asistencia</h3>
+        <p class="text-xs text-gray-400 mb-4">
+          Cada reserva tiene 15 minutos desde el inicio del bloque (o desde que se creó, si fue "reservar ahora") para
+          confirmar que el grupo llegó. Pasado ese plazo, la sala se libera sola.
+        </p>
+
+        <div v-if="pendientesConfirmacion.length" class="rounded-lg border border-gray-200 divide-y divide-gray-100">
+          <div
+            v-for="p in pendientesConfirmacion"
+            :key="p.reserva.id"
+            class="flex items-center justify-between gap-3 px-4 py-3 flex-wrap"
+          >
+            <div class="min-w-0">
+              <p class="text-sm font-medium text-gray-900">
+                {{ p.sala?.nombre ?? 'Sala' }} · {{ p.bloque?.label }}
+              </p>
+              <p class="text-xs text-gray-400">{{ p.reserva.cantidad_personas }} persona(s) · {{ p.reserva.rut_usuario }}</p>
+            </div>
+            <div class="flex items-center gap-3 shrink-0">
+              <span
+                class="text-xs font-mono font-semibold px-2.5 py-1 rounded-full"
+                :class="p.vencida ? 'bg-red-100 text-red-700' : p.segundosRestantes < 300 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'"
+              >
+                {{ formatCuentaRegresiva(p.segundosRestantes) }}
+              </span>
+              <button
+                v-if="!p.vencida"
+                @click="pedirLlegada(p.sala?.nombre ?? 'Sala', p.bloque?.label ?? '', p.reserva.id)"
+                class="text-xs font-medium px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+              >
+                Confirmar llegada
+              </button>
+              <button
+                v-else
+                @click="liberarReservaAction(p.reserva)"
+                :disabled="liberando === p.reserva.id"
+                class="text-xs font-medium px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-60"
+              >
+                {{ liberando === p.reserva.id ? 'Liberando…' : 'Liberar ahora' }}
+              </button>
+            </div>
+          </div>
+        </div>
+        <p v-else class="text-sm text-gray-400 text-center py-4">Sin reservas pendientes de confirmar por ahora.</p>
       </div>
 
       <div class="bg-white rounded-xl shadow-md p-5 mb-6">
@@ -483,16 +635,18 @@ function formatFechaLarga(fecha: string) {
             </div>
             <div class="space-y-2">
               <label class="block text-sm font-medium text-gray-700">RUT de cada persona</label>
-              <input
-                v-for="(_, idx) in rutsReserva"
-                :key="idx"
-                :value="rutsReserva[idx]"
-                @input="onRutInput(idx, $event)"
-                type="text"
-                :placeholder="`RUT persona ${idx + 1}`"
-                maxlength="12"
-                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-              />
+              <div v-for="(_, idx) in rutsReserva" :key="idx">
+                <input
+                  :value="rutsReserva[idx]"
+                  @input="onRutInput(idx, $event)"
+                  type="text"
+                  :placeholder="`RUT persona ${idx + 1}`"
+                  maxlength="12"
+                  class="w-full px-4 py-2.5 border rounded-lg focus:ring-2 outline-none"
+                  :class="rutErrores[idx] ? 'border-red-400 ring-1 ring-red-200 focus:ring-red-400' : 'border-gray-300 focus:ring-indigo-500'"
+                />
+                <p v-if="rutErrores[idx]" class="text-xs text-red-600 mt-1">{{ rutErrores[idx] }}</p>
+              </div>
             </div>
           </div>
 
@@ -552,6 +706,16 @@ function formatFechaLarga(fecha: string) {
             </svg>
             Devolución de llave confirmada
           </div>
+          <div
+            v-else-if="!detalleReserva.hora_prestamo_real"
+            class="mb-6 flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm"
+            :class="detalleReserva.vencida_sin_confirmar ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-amber-50 border border-amber-200 text-amber-700'"
+          >
+            <svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+            </svg>
+            {{ detalleReserva.vencida_sin_confirmar ? 'Venció el plazo de 15 minutos sin confirmar llegada' : 'Todavía no se confirma la llegada del grupo' }}
+          </div>
 
           <div class="flex gap-3">
             <button
@@ -562,17 +726,35 @@ function formatFechaLarga(fecha: string) {
             </button>
             <template v-if="!detalleReserva.hora_devolucion_real">
               <button
-                @click="pedirCancelacion(detalleSala.nombre, detalleBloque.label, detalleSala.id, detalleBloque.inicio)"
-                class="flex-1 px-4 py-2.5 border border-red-300 text-red-700 rounded-lg hover:bg-red-50 transition-colors font-medium text-sm"
+                v-if="!detalleReserva.hora_prestamo_real && detalleReserva.vencida_sin_confirmar"
+                @click="liberarReservaAction(detalleReserva)"
+                :disabled="liberando === detalleReserva.id"
+                class="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium text-sm disabled:opacity-60"
               >
-                Cancelar reserva
+                {{ liberando === detalleReserva.id ? 'Liberando…' : 'Liberar (no llegó)' }}
               </button>
-              <button
-                @click="pedirDevolucion(detalleSala.nombre, detalleBloque.label, detalleReserva.id)"
-                class="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium text-sm"
-              >
-                Confirmar devolución
-              </button>
+              <template v-else>
+                <button
+                  @click="pedirCancelacion(detalleSala.nombre, detalleBloque.label, detalleSala.id, detalleBloque.inicio)"
+                  class="flex-1 px-4 py-2.5 border border-red-300 text-red-700 rounded-lg hover:bg-red-50 transition-colors font-medium text-sm"
+                >
+                  Cancelar reserva
+                </button>
+                <button
+                  v-if="!detalleReserva.hora_prestamo_real"
+                  @click="pedirLlegada(detalleSala.nombre, detalleBloque.label, detalleReserva.id)"
+                  class="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm"
+                >
+                  Confirmar llegada
+                </button>
+                <button
+                  v-else
+                  @click="pedirDevolucion(detalleSala.nombre, detalleBloque.label, detalleReserva.id)"
+                  class="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium text-sm"
+                >
+                  Confirmar devolución
+                </button>
+              </template>
             </template>
           </div>
         </div>
@@ -642,6 +824,46 @@ function formatFechaLarga(fecha: string) {
               class="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium text-sm disabled:opacity-60"
             >
               {{ devolviendo ? 'Guardando…' : 'Confirmar' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div
+        v-if="llegadaPendiente"
+        class="fixed inset-0 bg-black/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4"
+        @click.self="llegadaPendiente = null"
+      >
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+          <h3 class="text-lg font-bold text-gray-900 mb-1">Confirmar llegada</h3>
+          <p class="text-sm text-gray-500 mb-4">
+            Se registrará que el grupo se presentó en <strong>{{ llegadaPendiente.salaNombre }}</strong> para el bloque
+            <strong>{{ llegadaPendiente.bloqueLabel }}</strong>.
+          </p>
+          <div class="mb-6">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Registrado por</label>
+            <input
+              v-model="registradoPorLlegada"
+              type="text"
+              list="staff-nombres"
+              placeholder="Nombre de quien registra"
+              class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+              @keydown.enter="confirmarLlegadaAction"
+            />
+          </div>
+          <div class="flex gap-3">
+            <button
+              @click="llegadaPendiente = null"
+              class="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors font-medium text-sm"
+            >
+              Cancelar
+            </button>
+            <button
+              @click="confirmarLlegadaAction"
+              :disabled="confirmandoLlegada"
+              class="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm disabled:opacity-60"
+            >
+              {{ confirmandoLlegada ? 'Guardando…' : 'Confirmar' }}
             </button>
           </div>
         </div>

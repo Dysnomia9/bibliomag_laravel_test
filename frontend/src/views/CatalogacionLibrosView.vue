@@ -3,9 +3,10 @@ import { onMounted, reactive, ref } from 'vue'
 import StaffLayout from '@/components/layout/StaffLayout.vue'
 import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import LibrosModuloNav from '@/components/libros/LibrosModuloNav.vue'
+import MultiSelectCombobox from '@/components/libros/MultiSelectCombobox.vue'
 import api from '@/services/api'
 import { useToast } from '@/composables/useToast'
-import type { Libro, TipoMaterialLibro } from '@/types'
+import type { Autor, Carrera, Categoria, Libro, TipoMaterialLibro, Ubicacion } from '@/types'
 
 const toast = useToast()
 
@@ -14,19 +15,28 @@ const cargando = ref(true)
 const apiError = ref(false)
 const busqueda = ref('')
 
+const autoresOpciones = ref<Autor[]>([])
+const categoriasOpciones = ref<Categoria[]>([])
+const carrerasOpciones = ref<Carrera[]>([])
+const ubicacionesOpciones = ref<Ubicacion[]>([])
+
+const modo = ref<'nuevo' | 'copia'>('nuevo')
+
 const editandoId = ref<number | null>(null)
 const guardando = ref(false)
 
 const formVacio = {
   codigo_barras: '',
   titulo: '',
-  autor: '',
-  categoria: '',
+  isbn: '',
+  autores: [] as string[],
+  categorias: [] as string[],
+  carreras: [] as string[],
   clasificacion: '',
   coleccion: '',
   editorial: '',
   anio_publicacion: '' as number | '',
-  ubicacion: '',
+  ubicacion_id: '' as number | '',
   tipo_material: 'libro' as TipoMaterialLibro,
   volumen: '',
   precio: '' as number | '',
@@ -34,6 +44,13 @@ const formVacio = {
   nota_interna: '',
 }
 const form = reactive({ ...formVacio })
+
+// Modo "Agregar copia": se busca la obra ya catalogada y solo se piden los datos
+// propios de la copia física nueva.
+const libroParaCopia = ref<Libro | null>(null)
+const busquedaCopia = ref('')
+const resultadosCopia = ref<Libro[]>([])
+const formCopia = reactive({ codigo_barras: '', ubicacion_id: '' as number | '', volumen: '', precio: '' as number | '' })
 
 async function cargar() {
   cargando.value = true
@@ -51,7 +68,27 @@ async function cargar() {
   }
 }
 
-onMounted(cargar)
+async function cargarCatalogos() {
+  try {
+    const [autoresRes, categoriasRes, carrerasRes, ubicacionesRes] = await Promise.all([
+      api.get<Autor[]>('/autores'),
+      api.get<Categoria[]>('/categorias'),
+      api.get<Carrera[]>('/carreras'),
+      api.get<Ubicacion[]>('/ubicaciones'),
+    ])
+    autoresOpciones.value = autoresRes.data
+    categoriasOpciones.value = categoriasRes.data
+    carrerasOpciones.value = carrerasRes.data
+    ubicacionesOpciones.value = ubicacionesRes.data
+  } catch {
+    // Los combobox simplemente no ofrecen sugerencias — no bloquea catalogar.
+  }
+}
+
+onMounted(() => {
+  cargar()
+  cargarCatalogos()
+})
 
 let buscarTimer: ReturnType<typeof setTimeout> | undefined
 function onBuscarInput() {
@@ -59,26 +96,39 @@ function onBuscarInput() {
   buscarTimer = setTimeout(cargar, 250)
 }
 
+async function generarCodigoBarras(destino: 'nuevo' | 'copia') {
+  try {
+    const { data } = await api.get<{ codigo_barras: string }>('/ejemplares/siguiente-codigo-barras')
+    if (destino === 'nuevo') form.codigo_barras = data.codigo_barras
+    else formCopia.codigo_barras = data.codigo_barras
+  } catch {
+    toast.error('No se pudo generar un código de barras')
+  }
+}
+
 function resetForm() {
-  Object.assign(form, formVacio)
+  Object.assign(form, formVacio, { autores: [], categorias: [], carreras: [] })
   editandoId.value = null
 }
 
 function editar(libro: Libro) {
+  modo.value = 'nuevo'
   editandoId.value = libro.id
   Object.assign(form, {
-    codigo_barras: libro.codigo_barras,
+    codigo_barras: '',
     titulo: libro.titulo,
-    autor: libro.autor ?? '',
-    categoria: libro.categoria ?? '',
+    isbn: libro.isbn ?? '',
+    autores: (libro.autores ?? []).map((a) => a.nombre),
+    categorias: (libro.categorias ?? []).map((c) => c.nombre),
+    carreras: (libro.carreras ?? []).map((c) => c.nombre),
     clasificacion: libro.clasificacion ?? '',
     coleccion: libro.coleccion ?? '',
     editorial: libro.editorial ?? '',
     anio_publicacion: libro.anio_publicacion ?? '',
-    ubicacion: libro.ubicacion ?? '',
+    ubicacion_id: '',
     tipo_material: libro.tipo_material ?? 'libro',
-    volumen: libro.volumen ?? '',
-    precio: libro.precio ?? '',
+    volumen: '',
+    precio: '',
     nota_publica: libro.nota_publica ?? '',
     nota_interna: libro.nota_interna ?? '',
   })
@@ -88,7 +138,11 @@ function editar(libro: Libro) {
 const confirmandoGuardar = ref(false)
 
 function pedirConfirmacionGuardar() {
-  if (!form.codigo_barras.trim() || !form.titulo.trim()) {
+  if (!editandoId.value && !form.codigo_barras.trim()) {
+    toast.error('Ingrese al menos el código de barras y el título')
+    return
+  }
+  if (!form.titulo.trim()) {
     toast.error('Ingrese al menos el código de barras y el título')
     return
   }
@@ -102,6 +156,7 @@ async function confirmarGuardar() {
       ...form,
       anio_publicacion: form.anio_publicacion === '' ? null : Number(form.anio_publicacion),
       precio: form.precio === '' ? null : Number(form.precio),
+      ubicacion_id: form.ubicacion_id === '' ? null : Number(form.ubicacion_id),
     }
     if (editandoId.value) {
       await api.patch(`/libros/${editandoId.value}`, payload)
@@ -112,9 +167,69 @@ async function confirmarGuardar() {
     }
     confirmandoGuardar.value = false
     resetForm()
-    await cargar()
+    await Promise.all([cargar(), cargarCatalogos()])
   } catch (e: any) {
     toast.error(e?.response?.data?.message ?? 'No se pudo guardar el libro')
+  } finally {
+    guardando.value = false
+  }
+}
+
+let buscarCopiaTimer: ReturnType<typeof setTimeout> | undefined
+function onBuscarCopiaInput() {
+  clearTimeout(buscarCopiaTimer)
+  buscarCopiaTimer = setTimeout(async () => {
+    if (!busquedaCopia.value.trim()) {
+      resultadosCopia.value = []
+      return
+    }
+    try {
+      const { data } = await api.get<Libro[]>('/libros', { params: { q: busquedaCopia.value.trim() } })
+      resultadosCopia.value = data
+    } catch {
+      resultadosCopia.value = []
+    }
+  }, 250)
+}
+
+function seleccionarLibroParaCopia(libro: Libro) {
+  libroParaCopia.value = libro
+  resultadosCopia.value = []
+  busquedaCopia.value = libro.titulo
+}
+
+const confirmandoCopia = ref(false)
+function pedirConfirmacionCopia() {
+  if (!libroParaCopia.value) {
+    toast.error('Busca y selecciona el libro al que quieres agregarle una copia')
+    return
+  }
+  if (!formCopia.codigo_barras.trim()) {
+    toast.error('Ingresa el código de barras de la nueva copia')
+    return
+  }
+  confirmandoCopia.value = true
+}
+
+async function confirmarAgregarCopia() {
+  if (!libroParaCopia.value) return
+  guardando.value = true
+  try {
+    await api.post('/ejemplares', {
+      libro_id: libroParaCopia.value.id,
+      codigo_barras: formCopia.codigo_barras,
+      ubicacion_id: formCopia.ubicacion_id === '' ? null : Number(formCopia.ubicacion_id),
+      volumen: formCopia.volumen || null,
+      precio: formCopia.precio === '' ? null : Number(formCopia.precio),
+    })
+    toast.success('Copia agregada correctamente')
+    confirmandoCopia.value = false
+    libroParaCopia.value = null
+    busquedaCopia.value = ''
+    Object.assign(formCopia, { codigo_barras: '', ubicacion_id: '', volumen: '', precio: '' })
+    await cargar()
+  } catch (e: any) {
+    toast.error(e?.response?.data?.message ?? 'No se pudo agregar la copia')
   } finally {
     guardando.value = false
   }
@@ -127,6 +242,8 @@ const estadoBadges: Record<string, { label: string; cls: string }> = {
   en_estante: { label: 'En estante', cls: 'bg-emerald-100 text-emerald-700' },
   estanteria_auxiliar: { label: 'Estantería auxiliar', cls: 'bg-indigo-100 text-indigo-700' },
   de_baja: { label: 'De baja', cls: 'bg-red-100 text-red-700' },
+  coleccion_movil: { label: 'Colección móvil', cls: 'bg-teal-100 text-teal-700' },
+  personalizado: { label: 'Personalizado', cls: 'bg-fuchsia-100 text-fuchsia-700' },
 }
 </script>
 
@@ -143,7 +260,24 @@ const estadoBadges: Record<string, { label: string; cls: string }> = {
         </div>
       </div>
 
-      <div class="bg-white rounded-xl shadow-md p-6 mb-6">
+      <div class="flex gap-2 mb-6 border-b border-gray-200">
+        <button
+          @click="modo = 'nuevo'"
+          class="px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors"
+          :class="modo === 'nuevo' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500 hover:text-gray-800'"
+        >
+          {{ editandoId ? 'Editando libro' : 'Catalogar libro nuevo' }}
+        </button>
+        <button
+          @click="modo = 'copia'"
+          class="px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors"
+          :class="modo === 'copia' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500 hover:text-gray-800'"
+        >
+          Agregar copia a libro existente
+        </button>
+      </div>
+
+      <div v-if="modo === 'nuevo'" class="bg-white rounded-xl shadow-md p-6 mb-6">
         <div class="flex items-center justify-between mb-4">
           <h3 class="font-semibold text-gray-900">
             {{ editandoId ? 'Editando libro' : 'Nuevo libro' }}
@@ -154,23 +288,39 @@ const estadoBadges: Record<string, { label: string; cls: string }> = {
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          <div>
-            <label class="block text-xs font-medium text-gray-600 mb-1">Código de barras *</label>
-            <input v-model="form.codigo_barras" placeholder="978..." class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none font-mono text-sm" />
+          <div v-if="!editandoId">
+            <label class="block text-xs font-medium text-gray-600 mb-1">Código de barras (primera copia) *</label>
+            <div class="flex gap-2">
+              <input v-model="form.codigo_barras" placeholder="UMAG000001" class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none font-mono text-sm" />
+              <button type="button" @click="generarCodigoBarras('nuevo')" title="Generar código de barras" class="shrink-0 px-3 py-2.5 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+            </div>
           </div>
-          <div class="sm:col-span-2">
+          <div :class="editandoId ? 'sm:col-span-2' : ''">
             <label class="block text-xs font-medium text-gray-600 mb-1">Título *</label>
             <input v-model="form.titulo" placeholder="Título del libro" class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm" />
           </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">ISBN</label>
+            <input v-model="form.isbn" placeholder="978..." class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-mono" />
+          </div>
 
           <div>
-            <label class="block text-xs font-medium text-gray-600 mb-1">Autor</label>
-            <input v-model="form.autor" class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm" />
+            <label class="block text-xs font-medium text-gray-600 mb-1">Autor(es)</label>
+            <MultiSelectCombobox v-model="form.autores" :opciones="autoresOpciones" placeholder="Escribe para buscar o crear..." />
           </div>
           <div>
-            <label class="block text-xs font-medium text-gray-600 mb-1">Categoría / Área</label>
-            <input v-model="form.categoria" placeholder="Ej: Ciencia, Historia..." class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm" />
+            <label class="block text-xs font-medium text-gray-600 mb-1">Categoría(s) / Área</label>
+            <MultiSelectCombobox v-model="form.categorias" :opciones="categoriasOpciones" placeholder="Ej: Ciencia, Historia..." />
           </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Carrera(s) asociadas</label>
+            <MultiSelectCombobox v-model="form.carreras" :opciones="carrerasOpciones" placeholder="Escribe para buscar..." />
+          </div>
+
           <div>
             <label class="block text-xs font-medium text-gray-600 mb-1">Tipo de material</label>
             <select v-model="form.tipo_material" class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm">
@@ -181,16 +331,15 @@ const estadoBadges: Record<string, { label: string; cls: string }> = {
               <option value="otro">Otro</option>
             </select>
           </div>
-
           <div class="sm:col-span-2">
             <label class="block text-xs font-medium text-gray-600 mb-1">Clasificación (Dewey + Cutter + año)</label>
             <input v-model="form.clasificacion" placeholder="Ej: 813.54 G216n 2020" class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-mono" />
           </div>
+
           <div>
             <label class="block text-xs font-medium text-gray-600 mb-1">Colección</label>
             <input v-model="form.coleccion" list="colecciones" placeholder="General, Referencia..." class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm" />
           </div>
-
           <div>
             <label class="block text-xs font-medium text-gray-600 mb-1">Editorial</label>
             <input v-model="form.editorial" class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm" />
@@ -199,19 +348,24 @@ const estadoBadges: Record<string, { label: string; cls: string }> = {
             <label class="block text-xs font-medium text-gray-600 mb-1">Año de publicación</label>
             <input v-model="form.anio_publicacion" type="number" placeholder="2024" class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm" />
           </div>
-          <div>
-            <label class="block text-xs font-medium text-gray-600 mb-1">Volumen</label>
-            <input v-model="form.volumen" placeholder="Tomo I" class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm" />
-          </div>
 
-          <div>
-            <label class="block text-xs font-medium text-gray-600 mb-1">Ubicación física</label>
-            <input v-model="form.ubicacion" placeholder="1er Piso - Estante 4" class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm" />
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-gray-600 mb-1">Precio (CLP)</label>
-            <input v-model="form.precio" type="number" min="0" class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm" />
-          </div>
+          <template v-if="!editandoId">
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Volumen</label>
+              <input v-model="form.volumen" placeholder="Tomo I" class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Ubicación física</label>
+              <select v-model="form.ubicacion_id" class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm">
+                <option value="">Sin especificar</option>
+                <option v-for="u in ubicacionesOpciones" :key="u.id" :value="u.id">{{ u.nombre }}</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Precio (CLP)</label>
+              <input v-model="form.precio" type="number" min="0" class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm" />
+            </div>
+          </template>
 
           <div class="sm:col-span-2 lg:col-span-3">
             <label class="block text-xs font-medium text-gray-600 mb-1">Nota pública (visible en el catálogo del portal)</label>
@@ -226,10 +380,80 @@ const estadoBadges: Record<string, { label: string; cls: string }> = {
         <div class="flex justify-end mt-4">
           <button
             @click="pedirConfirmacionGuardar"
-            :disabled="guardando || !form.codigo_barras.trim() || !form.titulo.trim()"
+            :disabled="guardando || !form.titulo.trim()"
             class="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {{ editandoId ? 'Guardar cambios' : 'Catalogar libro' }}
+          </button>
+        </div>
+      </div>
+
+      <div v-else class="bg-white rounded-xl shadow-md p-6 mb-6">
+        <h3 class="font-semibold text-gray-900 mb-4">Agregar copia a libro existente</h3>
+
+        <label class="block text-xs font-medium text-gray-600 mb-1">Buscar libro por título o ISBN</label>
+        <div class="relative mb-4">
+          <input
+            v-model="busquedaCopia"
+            @input="onBuscarCopiaInput"
+            type="text"
+            placeholder="Título o ISBN del libro..."
+            class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+          />
+          <div v-if="resultadosCopia.length" class="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+            <button
+              v-for="l in resultadosCopia"
+              :key="l.id"
+              @click="seleccionarLibroParaCopia(l)"
+              class="w-full text-left px-3 py-2.5 text-sm hover:bg-indigo-50 border-b border-gray-100 last:border-0"
+            >
+              <p class="font-medium text-gray-900">{{ l.titulo }}</p>
+              <p class="text-xs text-gray-500">{{ l.ejemplares_count ?? l.ejemplares?.length ?? 0 }} copia(s) existente(s)</p>
+            </button>
+          </div>
+        </div>
+
+        <div v-if="libroParaCopia" class="rounded-lg border border-indigo-200 bg-indigo-50/50 p-4 mb-4">
+          <p class="text-sm font-semibold text-gray-900">{{ libroParaCopia.titulo }}</p>
+          <p class="text-xs text-gray-500">{{ libroParaCopia.ejemplares_count ?? libroParaCopia.ejemplares?.length ?? 0 }} copia(s) ya catalogada(s)</p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Código de barras de la nueva copia *</label>
+            <div class="flex gap-2">
+              <input v-model="formCopia.codigo_barras" placeholder="UMAG000042" class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none font-mono text-sm" />
+              <button type="button" @click="generarCodigoBarras('copia')" title="Generar código de barras" class="shrink-0 px-3 py-2.5 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Ubicación física</label>
+            <select v-model="formCopia.ubicacion_id" class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm">
+              <option value="">Sin especificar</option>
+              <option v-for="u in ubicacionesOpciones" :key="u.id" :value="u.id">{{ u.nombre }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Volumen</label>
+            <input v-model="formCopia.volumen" class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Precio (CLP)</label>
+            <input v-model="formCopia.precio" type="number" min="0" class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm" />
+          </div>
+        </div>
+
+        <div class="flex justify-end mt-4">
+          <button
+            @click="pedirConfirmacionCopia"
+            :disabled="guardando"
+            class="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Agregar copia
           </button>
         </div>
       </div>
@@ -256,29 +480,38 @@ const estadoBadges: Record<string, { label: string; cls: string }> = {
           <table class="w-full">
             <thead>
               <tr class="bg-gray-100 border-b-2 border-gray-200">
-                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Código</th>
                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Título</th>
                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Clasificación</th>
-                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Estado</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Copias</th>
                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Acción</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-200">
-              <tr v-for="l in libros" :key="l.id" class="hover:bg-indigo-50/40 transition-colors">
-                <td class="px-4 py-3 text-sm font-mono text-gray-900">{{ l.codigo_barras }}</td>
-                <td class="px-4 py-3 text-sm text-gray-900">{{ l.titulo }}</td>
+              <tr v-for="l in libros" :key="l.id" class="hover:bg-indigo-50/40 transition-colors align-top">
+                <td class="px-4 py-3 text-sm text-gray-900">
+                  {{ l.titulo }}
+                  <p v-if="l.autores?.length" class="text-xs text-gray-500">{{ l.autores.map((a) => a.nombre).join(', ') }}</p>
+                </td>
                 <td class="px-4 py-3 text-xs font-mono text-gray-500">{{ l.clasificacion ?? '—' }}</td>
                 <td class="px-4 py-3">
-                  <span class="text-xs px-2.5 py-1 rounded-full font-medium" :class="estadoBadges[l.estado_proceso]?.cls">
-                    {{ estadoBadges[l.estado_proceso]?.label }}
-                  </span>
+                  <div class="flex flex-wrap gap-1">
+                    <span
+                      v-for="e in l.ejemplares"
+                      :key="e.id"
+                      class="text-xs px-2 py-0.5 rounded-full font-mono font-medium"
+                      :class="estadoBadges[e.estado_proceso]?.cls"
+                      :title="`Copia ${e.numero_copia} · ${e.codigo_barras}`"
+                    >
+                      c.{{ e.numero_copia }}
+                    </span>
+                  </div>
                 </td>
                 <td class="px-4 py-3">
                   <button @click="editar(l)" class="text-sm text-indigo-700 hover:text-indigo-800 font-medium">Editar</button>
                 </td>
               </tr>
               <tr v-if="!cargando && !libros.length">
-                <td colspan="5" class="px-6 py-8 text-center text-sm text-gray-400">Sin libros que coincidan con la búsqueda.</td>
+                <td colspan="4" class="px-6 py-8 text-center text-sm text-gray-400">Sin libros que coincidan con la búsqueda.</td>
               </tr>
             </tbody>
           </table>
@@ -302,7 +535,7 @@ const estadoBadges: Record<string, { label: string; cls: string }> = {
           </h3>
           <p class="text-sm text-gray-500 mb-6">
             {{ editandoId ? 'Se guardarán los cambios sobre' : 'Se agregará al catálogo' }}
-            <strong>{{ form.titulo }}</strong> (<span class="font-mono">{{ form.codigo_barras }}</span>).
+            <strong>{{ form.titulo }}</strong>.
           </p>
           <div class="flex gap-3">
             <button
@@ -317,6 +550,35 @@ const estadoBadges: Record<string, { label: string; cls: string }> = {
               class="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm disabled:opacity-60"
             >
               {{ guardando ? 'Guardando…' : 'Sí, guardar' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div
+        v-if="confirmandoCopia && libroParaCopia"
+        class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        @click.self="confirmandoCopia = false"
+      >
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+          <h3 class="text-lg font-bold text-gray-900 mb-1">¿Confirmar copia nueva?</h3>
+          <p class="text-sm text-gray-500 mb-6">
+            Se agregará una copia nueva de <strong>{{ libroParaCopia.titulo }}</strong> con código
+            <span class="font-mono">{{ formCopia.codigo_barras }}</span>.
+          </p>
+          <div class="flex gap-3">
+            <button
+              @click="confirmandoCopia = false"
+              class="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors font-medium text-sm"
+            >
+              Cancelar
+            </button>
+            <button
+              @click="confirmarAgregarCopia"
+              :disabled="guardando"
+              class="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm disabled:opacity-60"
+            >
+              {{ guardando ? 'Guardando…' : 'Sí, agregar' }}
             </button>
           </div>
         </div>

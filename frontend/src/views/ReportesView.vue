@@ -5,6 +5,7 @@ import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import BarChart from '@/components/reportes/BarChart.vue'
 import BreakdownList from '@/components/reportes/BreakdownList.vue'
 import ReporteTabla from '@/components/reportes/ReporteTabla.vue'
+import Heatmap from '@/components/reportes/Heatmap.vue'
 import api from '@/services/api'
 import { useToast } from '@/composables/useToast'
 import { descargarExcel } from '@/utils/excel'
@@ -37,6 +38,9 @@ const resumenVacio: ReporteResumen = {
   porAnioIngreso: [],
   porTipoUsuario: [],
   porHora: [],
+  porSala: [],
+  porLibro: [],
+  porHoraPorSala: [],
 }
 
 const resumen = ref<ReporteResumen>({ ...resumenVacio })
@@ -46,6 +50,7 @@ const TABS: { id: ReporteTab; label: string; color: string }[] = [
   { id: 'prestamos', label: 'Número de Préstamos', color: 'emerald' },
   { id: 'ingresos', label: 'Ingresos a Biblioteca', color: 'emerald' },
   { id: 'logias', label: 'Uso de Logias', color: 'amber' },
+  { id: 'libros', label: 'Top de Libros', color: 'indigo' },
 ]
 
 const PERIODOS: { id: Periodo; label: string }[] = [
@@ -56,8 +61,8 @@ const PERIODOS: { id: Periodo; label: string }[] = [
   { id: 'anio', label: 'Año' },
 ]
 
-const colorBar: Record<ReporteTab, string> = { prestamos: '#065F46', ingresos: '#059669', logias: '#D97706' }
-const tabTitulo: Record<ReporteTab, string> = { prestamos: 'Total préstamos', ingresos: 'Total ingresos', logias: 'Total usos de logias' }
+const colorBar: Record<ReporteTab, string> = { prestamos: '#065F46', ingresos: '#059669', logias: '#D97706', libros: '#4338CA' }
+const tabTitulo: Record<ReporteTab, string> = { prestamos: 'Total préstamos', ingresos: 'Total ingresos', logias: 'Total usos de logias', libros: 'Total préstamos de libros' }
 
 const PERIODO_ADJETIVO: Record<Periodo, string> = {
   dia: 'diaria',
@@ -158,6 +163,15 @@ function porcentaje(valor: number, total: number) {
   return total ? Math.round((valor / total) * 100) : 0
 }
 
+// Vista tabular alternativa al heatmap (respeta el toggle Gráfico/Tabla de la página):
+// aplana sala x hora a filas ordenadas por cantidad, reutilizando ReporteTabla.
+const porHoraPorSalaFlat = computed(() => {
+  return resumen.value.porHoraPorSala
+    .flatMap((fila) => fila.horas.map((h) => ({ label: `${fila.sala} · ${h.label}`, value: h.value })))
+    .filter((item) => item.value > 0)
+    .sort((a, b) => b.value - a.value)
+})
+
 async function confirmarExportar() {
   const tabLabel = TABS.find((t) => t.id === tab.value)?.label ?? tab.value
   const periodoLabel = PERIODOS.find((p) => p.id === periodo.value)?.label ?? periodo.value
@@ -207,6 +221,27 @@ async function confirmarExportar() {
       filas: resumen.value.porHora.map((d) => [d.label, d.value, porcentaje(d.value, total)]),
     },
   ]
+
+  if (tab.value === 'logias') {
+    secciones.push({
+      titulo: 'Por sala',
+      columnas: ['Sala', 'Cantidad', '%'],
+      filas: resumen.value.porSala.map((d) => [d.label, d.value, porcentaje(d.value, total)]),
+    })
+    secciones.push({
+      titulo: 'Horas más solicitadas por logia',
+      columnas: ['Sala y hora', 'Cantidad', '%'],
+      filas: porHoraPorSalaFlat.value.map((d) => [d.label, d.value, porcentaje(d.value, total)]),
+    })
+  }
+
+  if (tab.value === 'libros') {
+    secciones.push({
+      titulo: 'Top de libros',
+      columnas: ['Libro', 'Cantidad', '%'],
+      filas: resumen.value.porLibro.map((d) => [d.label, d.value, porcentaje(d.value, total)]),
+    })
+  }
 
   const fecha = new Date().toISOString().slice(0, 10)
   exportando.value = true
@@ -392,6 +427,26 @@ async function confirmarExportar() {
           <h3 class="font-medium text-gray-900 mb-4">Por tipo de usuario</h3>
           <BreakdownList v-if="vista === 'grafico'" :data="resumen.porTipoUsuario" :total="resumen.total" :color="tab === 'ingresos' ? 'emerald' : 'amber'" />
           <ReporteTabla v-else :data="resumen.porTipoUsuario" :total="resumen.total" columna="Tipo de usuario" :item-color="() => (tab === 'ingresos' ? '#10b981' : '#f59e0b')" />
+        </div>
+
+        <div v-if="tab === 'logias'" class="bg-white rounded-xl shadow-md p-6 md:col-span-2">
+          <h3 class="font-medium text-gray-900 mb-4">Sala más solicitada</h3>
+          <BreakdownList v-if="vista === 'grafico'" :data="resumen.porSala" :total="resumen.total" color="amber" />
+          <ReporteTabla v-else :data="resumen.porSala" :total="resumen.total" columna="Sala" :item-color="() => '#D97706'" />
+        </div>
+
+        <div v-if="tab === 'logias'" class="bg-white rounded-xl shadow-md p-6 md:col-span-2">
+          <h3 class="font-medium text-gray-900 mb-1">Horas más solicitadas por logia</h3>
+          <p class="text-xs text-gray-400 mb-4">Cantidad de reservas por bloque horario, desglosado por sala (08:00 – 21:00)</p>
+          <Heatmap v-if="vista === 'grafico'" :data="resumen.porHoraPorSala" />
+          <ReporteTabla v-else :data="porHoraPorSalaFlat" :total="resumen.total" columna="Sala y hora" :item-color="() => '#3987e5'" />
+        </div>
+
+        <div v-if="tab === 'libros'" class="bg-white rounded-xl shadow-md p-6 md:col-span-2">
+          <h3 class="font-medium text-gray-900 mb-1">Top de libros más solicitados</h3>
+          <p class="text-xs text-gray-400 mb-4">Ranking por cantidad de préstamos (incluye cada copia por separado)</p>
+          <BreakdownList v-if="vista === 'grafico'" :data="resumen.porLibro" :total="resumen.total" color="indigo" />
+          <ReporteTabla v-else :data="resumen.porLibro" :total="resumen.total" columna="Libro" :item-color="() => '#4338CA'" />
         </div>
 
         <div class="bg-white rounded-xl shadow-md p-6 md:col-span-2">

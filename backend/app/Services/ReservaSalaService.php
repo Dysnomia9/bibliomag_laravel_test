@@ -74,14 +74,77 @@ class ReservaSalaService
         return $reserva->fresh();
     }
 
+    /**
+     * Confirma que el grupo se presentó a retirar la sala (check-in manual, sin código de
+     * barras — sirve tanto para logias como para las salas con nombre propio que no
+     * tienen codigo_barras). Rechaza la confirmación si ya pasó el plazo de 15 minutos
+     * (ver Reserva::plazoConfirmacion()) y en ese caso libera la reserva de una vez
+     * (mismo efecto que liberarPorNoPresentacion()) para que quede disponible de inmediato.
+     */
+    public function registrarLlegada(Reserva $reserva, string $registradoPor): Reserva
+    {
+        if ($reserva->hora_prestamo_real) {
+            throw new \RuntimeException('Esta reserva ya tiene registrada su llegada');
+        }
+
+        if ($reserva->estaVencidaSinConfirmar()) {
+            $reserva->update(['estado' => 'no_show']);
+            throw new \RuntimeException('El plazo de 15 minutos para confirmar esta reserva ya venció — la sala quedó liberada');
+        }
+
+        $reserva->update([
+            'prestado_por' => $registradoPor,
+            'hora_prestamo_real' => now(),
+            'via' => 'manual',
+        ]);
+
+        return $reserva->fresh();
+    }
+
+    /**
+     * Acción manual del staff para liberar de inmediato una reserva vencida sin
+     * confirmar, sin esperar a que alguien más intente reservar ese mismo bloque (que
+     * es cuando existeSolapamiento() la liberaría de todos modos, de forma perezosa).
+     */
+    public function liberarPorNoPresentacion(Reserva $reserva): Reserva
+    {
+        if (! $reserva->estaVencidaSinConfirmar()) {
+            throw new \RuntimeException('Esta reserva todavía está dentro del plazo de confirmación');
+        }
+
+        $reserva->update(['estado' => 'no_show']);
+
+        return $reserva->fresh();
+    }
+
+    /** Si la reserva está vencida sin confirmar, la marca 'no_show' (libera el bloque) y devuelve true. */
+    public function liberarSiVencida(Reserva $reserva): bool
+    {
+        if (! $reserva->estaVencidaSinConfirmar()) {
+            return false;
+        }
+
+        $reserva->update(['estado' => 'no_show']);
+
+        return true;
+    }
+
     public function existeSolapamiento(int $salaId, string $fecha, int $horaInicio, int $horaFin, ?int $ignorarReservaId = null): bool
     {
-        return Reserva::where('sala_id', $salaId)
+        $candidatas = Reserva::where('sala_id', $salaId)
             ->where('fecha', $fecha)
             ->where('hora_inicio', '<', $horaFin)
             ->where('hora_fin', '>', $horaInicio)
             ->when($ignorarReservaId, fn ($query) => $query->where('id', '!=', $ignorarReservaId))
-            ->exists();
+            ->get();
+
+        foreach ($candidatas as $candidata) {
+            if (! $this->liberarSiVencida($candidata)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -99,6 +162,7 @@ class ReservaSalaService
             ->whereHas('participantes', fn ($q) => $q->whereIn('usuarios.id', $idPorRut->values()))
             ->with(['participantes' => fn ($q) => $q->whereIn('usuarios.id', $idPorRut->values())])
             ->get()
+            ->reject(fn (Reserva $r) => $this->liberarSiVencida($r))
             ->flatMap(fn ($r) => $r->participantes->pluck('id'))
             ->unique();
 

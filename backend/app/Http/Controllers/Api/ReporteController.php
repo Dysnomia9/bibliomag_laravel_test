@@ -58,7 +58,7 @@ class ReporteController extends Controller
                 ]);
             })(),
             'logias' => (function () use ($aplicarFiltros) {
-                $query = Reserva::with('usuario');
+                $query = Reserva::with(['usuario', 'sala']);
                 $aplicarFiltros($query);
 
                 return $query->get()->map(fn ($r) => [
@@ -68,6 +68,24 @@ class ReporteController extends Controller
                     'anioIngreso' => $r->usuario->anio_ingreso ?? 'Sin dato',
                     'sexo' => $r->usuario->sexo ?? 'Sin dato',
                     'tipoUsuario' => $r->usuario->tipo ?? 'Sin dato',
+                    'sala' => $r->sala->nombre ?? 'Sin dato',
+                ]);
+            })(),
+            'libros' => (function () use ($aplicarFiltros) {
+                $query = Prestamo::with(['usuario', 'ejemplar.libro'])->where('tipo_item', 'libro');
+                $aplicarFiltros($query);
+
+                return $query->get()->map(fn ($p) => [
+                    'fecha' => Carbon::parse($p->fecha_prestamo),
+                    'hora' => Carbon::parse($p->fecha_prestamo)->hour,
+                    'carrera' => $p->usuario->carrera ?? 'Sin dato',
+                    'anioIngreso' => $p->usuario->anio_ingreso ?? 'Sin dato',
+                    'sexo' => $p->usuario->sexo ?? 'Sin dato',
+                    'tipoUsuario' => $p->usuario->tipo ?? 'Sin dato',
+                    // Snapshot de texto (libro_titulo), no la relación viva — así el
+                    // ranking sigue siendo correcto aunque el préstamo sea de una copia
+                    // cuyo ejemplar ya no exista o cuyo libro haya cambiado de título.
+                    'tituloLibro' => $p->libro_titulo,
                 ]);
             })(),
             default => (function () use ($aplicarFiltros) {
@@ -109,6 +127,9 @@ class ReporteController extends Controller
         $porSexo = $groupBy('sexo');
         $porAnioIngreso = $groupBy('anioIngreso')->sortBy('label')->values();
         $porTipoUsuario = $groupBy('tipoUsuario');
+        // Solo tienen sentido en su tab correspondiente — arrays vacíos en el resto.
+        $porSala = $tab === 'logias' ? $groupBy('sala')->take(10) : collect();
+        $porLibro = $tab === 'libros' ? $groupBy('tituloLibro')->take(10) : collect();
 
         // no tiene sentido mostrar horas
         $horaApertura = 8;
@@ -124,6 +145,27 @@ class ReporteController extends Controller
             'value' => $value,
         ])->values();
 
+        // Igual que porHora, pero desglosado por sala — para el heatmap "qué hora es
+        // la más pedida EN CADA logia" (no solo el agregado de todas juntas).
+        $porHoraPorSala = $tab === 'logias'
+            ? $registros->groupBy('sala')->map(function ($grupo, $sala) use ($horaApertura, $horaCierre) {
+                $horaMapSala = array_fill_keys(range($horaApertura, $horaCierre), 0);
+                foreach ($grupo as $r) {
+                    if ($r['hora'] >= $horaApertura && $r['hora'] <= $horaCierre) {
+                        $horaMapSala[$r['hora']]++;
+                    }
+                }
+
+                return [
+                    'sala' => $sala,
+                    'horas' => collect($horaMapSala)->map(fn ($value, $hora) => [
+                        'label' => str_pad((string) $hora, 2, '0', STR_PAD_LEFT).'h',
+                        'value' => $value,
+                    ])->values(),
+                ];
+            })->sortBy('sala')->values()
+            : collect();
+
         $total = $registros->count();
         $numBuckets = max(1, $serie->count());
 
@@ -137,6 +179,9 @@ class ReporteController extends Controller
             'porAnioIngreso' => $porAnioIngreso,
             'porTipoUsuario' => $porTipoUsuario,
             'porHora' => $porHora,
+            'porSala' => $porSala,
+            'porLibro' => $porLibro,
+            'porHoraPorSala' => $porHoraPorSala,
         ]);
     }
 

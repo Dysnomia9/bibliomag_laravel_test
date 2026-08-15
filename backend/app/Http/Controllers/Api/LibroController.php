@@ -3,88 +3,205 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Autor;
+use App\Models\Carrera;
+use App\Models\Categoria;
+use App\Models\Ejemplar;
 use App\Models\Libro;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class LibroController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Libro::query();
+        $query = Libro::query()->with(['autores', 'categorias', 'carreras', 'ejemplares.ubicacion'])
+            ->withCount('ejemplares');
 
         if ($busqueda = $request->query('q')) {
             $query->where(function ($q) use ($busqueda) {
                 $q->where('titulo', 'ilike', "%{$busqueda}%")
-                    ->orWhere('autor', 'ilike', "%{$busqueda}%")
-                    ->orWhere('codigo_barras', 'ilike', "%{$busqueda}%");
+                    ->orWhere('isbn', 'ilike', "%{$busqueda}%")
+                    ->orWhereHas('autores', fn ($a) => $a->where('nombre', 'ilike', "%{$busqueda}%"))
+                    ->orWhereHas('ejemplares', fn ($e) => $e->where('codigo_barras', 'ilike', "%{$busqueda}%"));
             });
         }
 
-        return response()->json(
-            $query->orderBy('titulo')->get()
-        );
-    }
-
-    public function buscarPorCodigo(string $codigo)
-    {
-        $libro = Libro::where('codigo_barras', $codigo)->first();
-
-        if (! $libro) {
-            return response()->json(['message' => 'Código de barras no encontrado en el sistema'], 404);
+        if ($categoriaId = $request->query('categoria_id')) {
+            $query->whereHas('categorias', fn ($q) => $q->where('categorias.id', $categoriaId));
         }
 
-        return response()->json($libro);
+        if ($autorId = $request->query('autor_id')) {
+            $query->whereHas('autores', fn ($q) => $q->where('autores.id', $autorId));
+        }
+
+        if ($carreraId = $request->query('carrera_id')) {
+            $query->whereHas('carreras', fn ($q) => $q->where('carreras.id', $carreraId));
+        }
+
+        if ($tipoMaterial = $request->query('tipo_material')) {
+            $query->where('tipo_material', $tipoMaterial);
+        }
+
+        // Estado vive en el ejemplar (copia física), no en la obra — "buscar libros por
+        // estado" devuelve los títulos que tienen al menos una copia en ese estado.
+        if ($estadoProceso = $request->query('estado_proceso')) {
+            $query->whereHas('ejemplares', function ($q) use ($request, $estadoProceso) {
+                $q->where('estado_proceso', $estadoProceso);
+
+                if ($estadoProceso === 'personalizado' && $estadoPersonalizadoId = $request->query('estado_personalizado_id')) {
+                    $q->where('estado_personalizado_id', $estadoPersonalizadoId);
+                }
+            });
+        }
+
+        $orden = $request->query('orden') === 'tipo_material' ? 'tipo_material' : 'titulo';
+        $query->orderBy($orden)->orderBy('titulo');
+
+        return response()->json($query->get());
+    }
+
+    public function show(Libro $libro)
+    {
+        return response()->json(
+            $libro->load(['autores', 'categorias', 'carreras', 'ejemplares.estadoPersonalizado', 'ejemplares.ubicacion'])
+        );
     }
 
     public function store(Request $request)
     {
         $data = $request->validate($this->reglasCatalogacion());
 
-        $libro = Libro::create($data);
+        $libro = DB::transaction(function () use ($data) {
+            $libro = Libro::create($this->soloCamposBibliograficos($data));
 
-        return response()->json($libro, 201);
+            $this->sincronizarPivotes($libro, $data);
+
+            Ejemplar::create([
+                'libro_id' => $libro->id,
+                'numero_copia' => 1,
+                'codigo_barras' => $data['codigo_barras'],
+                'ubicacion_id' => $data['ubicacion_id'] ?? null,
+                'volumen' => $data['volumen'] ?? null,
+                'precio' => $data['precio'] ?? null,
+                'estado_proceso' => 'inventario',
+            ]);
+
+            return $libro;
+        });
+
+        return response()->json($libro->load(['autores', 'categorias', 'carreras', 'ejemplares.ubicacion']), 201);
     }
 
     public function update(Request $request, Libro $libro)
     {
         $data = $request->validate($this->reglasCatalogacion($libro->id));
 
-        $libro->update($data);
+        DB::transaction(function () use ($libro, $data) {
+            $libro->update($this->soloCamposBibliograficos($data));
+            $this->sincronizarPivotes($libro, $data);
+        });
 
-        return response()->json($libro);
+        return response()->json($libro->load(['autores', 'categorias', 'carreras']));
     }
 
-    public function cambiarEstado(Request $request, Libro $libro)
+    /** Búsqueda por título o código de barras de cualquiera de sus copias, con historial de préstamos por ejemplar. */
+    public function historial(Request $request)
     {
-        $data = $request->validate([
-            'estado_proceso' => ['required', 'in:inventario,procesos_tecnicos,por_colocar,en_estante,estanteria_auxiliar,de_baja'],
+        $busqueda = $request->query('q');
+
+        $query = Libro::query()->with([
+            'ejemplares' => fn ($q) => $q->orderBy('numero_copia'),
+            'ejemplares.prestamos' => fn ($q) => $q->with('usuario:id,nombre,apellido,rut')->orderByDesc('fecha_prestamo'),
         ]);
 
-        // No se puede dar de baja un libro que en este momento está en manos de otra
-        // persona (prestado o reservado) — primero debe devolverse/cancelarse.
-        if ($data['estado_proceso'] === 'de_baja' && ! $libro->disponible) {
-            return response()->json(['message' => 'No se puede dar de baja un libro actualmente prestado o reservado'], 409);
+        if ($busqueda) {
+            $query->where(function ($q) use ($busqueda) {
+                $q->where('titulo', 'ilike', "%{$busqueda}%")
+                    ->orWhereHas('ejemplares', fn ($e) => $e->where('codigo_barras', 'ilike', "%{$busqueda}%"));
+            });
         }
 
-        $data['fecha_inventario'] = $data['estado_proceso'] === 'inventario' ? now() : $libro->fecha_inventario;
+        $libros = $query->orderBy('titulo')->get()->map(function (Libro $libro) {
+            $totalPrestamos = $libro->ejemplares->sum(fn ($e) => $e->prestamos->count());
 
-        $libro->update($data);
+            return [
+                'libro' => $libro->only(['id', 'titulo', 'isbn']),
+                'ejemplares' => $libro->ejemplares->map(fn (Ejemplar $e) => [
+                    'id' => $e->id,
+                    'numero_copia' => $e->numero_copia,
+                    'codigo_barras' => $e->codigo_barras,
+                    'total_prestamos' => $e->prestamos->count(),
+                    'prestamos' => $e->prestamos->map(fn ($p) => [
+                        'id' => $p->id,
+                        'usuario' => $p->usuario ? "{$p->usuario->nombre} {$p->usuario->apellido}" : null,
+                        'fecha_prestamo' => $p->fecha_prestamo,
+                        'fecha_devolucion_real' => $p->fecha_devolucion_real,
+                        'estado' => $p->estado,
+                    ]),
+                ]),
+                'total_prestamos' => $totalPrestamos,
+            ];
+        });
 
-        return response()->json($libro);
+        return response()->json($libros->values());
+    }
+
+    private function soloCamposBibliograficos(array $data): array
+    {
+        return array_intersect_key($data, array_flip([
+            'titulo', 'isbn', 'clasificacion', 'coleccion', 'editorial',
+            'anio_publicacion', 'tipo_material', 'nota_interna', 'nota_publica',
+        ]));
+    }
+
+    /** Sincroniza autores/categorías/carreras por nombre — crea el catálogo si no existe todavía (combobox "escribe y crea" del frontend). */
+    private function sincronizarPivotes(Libro $libro, array $data): void
+    {
+        if (array_key_exists('autores', $data)) {
+            $libro->autores()->sync($this->idsPorNombre(Autor::class, $data['autores'] ?? []));
+        }
+
+        if (array_key_exists('categorias', $data)) {
+            $libro->categorias()->sync($this->idsPorNombre(Categoria::class, $data['categorias'] ?? []));
+        }
+
+        if (array_key_exists('carreras', $data)) {
+            $libro->carreras()->sync($this->idsPorNombre(Carrera::class, $data['carreras'] ?? []));
+        }
+    }
+
+    /** @return array<int> */
+    private function idsPorNombre(string $modelClass, array $nombres): array
+    {
+        return collect($nombres)
+            ->map(fn ($nombre) => trim((string) $nombre))
+            ->filter()
+            ->unique()
+            ->map(fn ($nombre) => $modelClass::firstOrCreate(['nombre' => $nombre])->id)
+            ->values()
+            ->all();
     }
 
     private function reglasCatalogacion(?int $ignorarLibroId = null): array
     {
         return [
-            'codigo_barras' => ['required', 'string', 'max:255', 'unique:libros,codigo_barras,' . ($ignorarLibroId ?? 'NULL') . ',id'],
+            'codigo_barras' => $ignorarLibroId
+                ? ['sometimes']
+                : ['required', 'string', 'max:255', 'unique:ejemplares,codigo_barras'],
             'titulo' => ['required', 'string', 'max:255'],
-            'autor' => ['nullable', 'string', 'max:255'],
-            'categoria' => ['nullable', 'string', 'max:255'],
+            'isbn' => ['nullable', 'string', 'max:32', 'unique:libros,isbn,' . ($ignorarLibroId ?? 'NULL') . ',id'],
+            'autores' => ['nullable', 'array'],
+            'autores.*' => ['string', 'max:255'],
+            'categorias' => ['nullable', 'array'],
+            'categorias.*' => ['string', 'max:255'],
+            'carreras' => ['nullable', 'array'],
+            'carreras.*' => ['string', 'max:255'],
             'clasificacion' => ['nullable', 'string', 'max:255'],
             'coleccion' => ['nullable', 'string', 'max:255'],
             'editorial' => ['nullable', 'string', 'max:255'],
             'anio_publicacion' => ['nullable', 'integer', 'min:1000', 'max:9999'],
-            'ubicacion' => ['nullable', 'string', 'max:255'],
+            'ubicacion_id' => ['nullable', 'exists:ubicaciones,id'],
             'tipo_material' => ['nullable', 'in:libro,revista,tesis,dvd,otro'],
             'volumen' => ['nullable', 'string', 'max:100'],
             'nota_interna' => ['nullable', 'string'],

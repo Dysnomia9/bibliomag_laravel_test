@@ -3,11 +3,39 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import StaffLayout from '@/components/layout/StaffLayout.vue'
 import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import api from '@/services/api'
-import type { Usuario } from '@/types'
+import { useToast } from '@/composables/useToast'
+import { generarConstanciaNoMulta } from '@/utils/constancia'
+import type { ConfiguracionInstitucional, Usuario } from '@/types'
+
+const toast = useToast()
 
 const usuarios = ref<Usuario[]>([])
 const loading = ref(true)
 const apiError = ref(false)
+const generandoConstanciaRut = ref<string | null>(null)
+
+async function generarConstancia(usuario: Usuario) {
+  generandoConstanciaRut.value = usuario.rut
+  try {
+    const [porRutRes, configRes] = await Promise.all([
+      api.get<Usuario>(`/usuarios/rut/${usuario.rut}`),
+      api.get<ConfiguracionInstitucional>('/configuracion'),
+    ])
+
+    const multas = porRutRes.data.multas_pendientes
+    if (multas && multas.cantidad > 0) {
+      toast.error(`${usuario.nombre} tiene ${multas.cantidad} multa(s) pendiente(s) — no se puede emitir la constancia`)
+      return
+    }
+
+    generarConstanciaNoMulta(porRutRes.data, configRes.data)
+    toast.success('Constancia generada')
+  } catch {
+    toast.error('No se pudo generar la constancia')
+  } finally {
+    generandoConstanciaRut.value = null
+  }
+}
 
 const filtros = reactive({
   q: '',
@@ -61,11 +89,24 @@ const hayResultados = computed(() => usuarios.value.length > 0)
 
 <template>
   <StaffLayout>
-    <div class="mb-5 sm:mb-6">
-      <h1 class="text-xl sm:text-2xl font-serif font-semibold text-biblioteca-900">Usuarios</h1>
-      <p class="text-sm text-biblioteca-500 mt-0.5">
-        Información de usuarios registrados en el sistema institucional (solo lectura)
-      </p>
+    <div class="mb-5 sm:mb-6 flex items-start justify-between gap-3 flex-wrap">
+      <div>
+        <h1 class="text-xl sm:text-2xl font-serif font-semibold text-biblioteca-900">Usuarios</h1>
+        <p class="text-sm text-biblioteca-500 mt-0.5">
+          Información de usuarios registrados en el sistema institucional (solo lectura)
+        </p>
+      </div>
+      <a
+        href="https://umag.elogim.com/"
+        target="_blank"
+        rel="noopener"
+        class="flex items-center gap-2 px-4 py-2.5 bg-biblioteca-800 text-white rounded-lg hover:bg-biblioteca-900 transition-colors font-medium text-sm shrink-0"
+      >
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+        </svg>
+        Base de Datos Digital
+      </a>
     </div>
 
     <ApiErrorBanner v-if="apiError" />
@@ -108,6 +149,7 @@ const hayResultados = computed(() => usuarios.value.length > 0)
               <th class="px-5 py-3 font-medium">Carrera</th>
               <th class="px-5 py-3 font-medium">Tipo</th>
               <th class="px-5 py-3 font-medium">Estado</th>
+              <th class="px-5 py-3 font-medium">Acciones</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-biblioteca-100">
@@ -131,9 +173,18 @@ const hayResultados = computed(() => usuarios.value.length > 0)
                   {{ u.activo ? 'Activo' : 'Inactivo' }}
                 </span>
               </td>
+              <td class="px-5 py-3">
+                <button
+                  @click="generarConstancia(u)"
+                  :disabled="generandoConstanciaRut === u.rut"
+                  class="text-xs font-medium text-biblioteca-700 hover:text-biblioteca-900 underline disabled:opacity-50"
+                >
+                  {{ generandoConstanciaRut === u.rut ? 'Generando…' : 'Constancia de No Multa' }}
+                </button>
+              </td>
             </tr>
             <tr v-if="!hayResultados && !loading">
-              <td colspan="5" class="px-5 py-8 text-center text-sm text-biblioteca-400">
+              <td colspan="6" class="px-5 py-8 text-center text-sm text-biblioteca-400">
                 Sin usuarios que coincidan con la búsqueda.
               </td>
             </tr>
@@ -159,13 +210,20 @@ const hayResultados = computed(() => usuarios.value.length > 0)
           </span>
         </div>
         <p class="text-xs text-biblioteca-500 mt-2">{{ u.carrera ?? 'Sin carrera' }} · {{ u.email ?? 'Sin email' }}</p>
-        <div class="mt-3">
+        <div class="mt-3 flex items-center justify-between gap-2">
           <span
             class="text-xs font-medium px-2 py-0.5 rounded-full"
             :class="u.activo ? 'bg-biblioteca-100 text-biblioteca-700' : 'bg-red-100 text-red-700'"
           >
             {{ u.activo ? 'Activo' : 'Inactivo' }}
           </span>
+          <button
+            @click="generarConstancia(u)"
+            :disabled="generandoConstanciaRut === u.rut"
+            class="text-xs font-medium text-biblioteca-700 hover:text-biblioteca-900 underline disabled:opacity-50"
+          >
+            {{ generandoConstanciaRut === u.rut ? 'Generando…' : 'Constancia de No Multa' }}
+          </button>
         </div>
       </div>
       <p v-if="!hayResultados && !loading" class="text-center text-sm text-biblioteca-400 py-8">

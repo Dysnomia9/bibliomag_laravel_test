@@ -20,13 +20,23 @@ class SalaController extends Controller
         $fecha = $request->query('fecha', now()->toDateString());
 
         $salas = Sala::orderBy('id')->get();
-        $reservas = Reserva::with('participantes:id,nombre,apellido,rut')->where('fecha', $fecha)->get();
+        $reservas = Reserva::with('participantes:id,nombre,apellido,rut')
+            ->where('fecha', $fecha)
+            ->where('estado', '!=', 'no_show')
+            ->get();
+
+        // Expiración perezosa: si al cargar la vista alguna reserva ya venció su plazo de
+        // 15 minutos sin confirmar, se libera de inmediato en vez de esperar a que otra
+        // persona intente reservar ese mismo bloque.
+        $reservas = $reservas->reject(fn ($r) => $this->reservaSalaService->liberarSiVencida($r))->values();
 
         $reservas = $reservas->map(function ($r) {
             $r->personas = $r->participantes->map(fn ($u) => [
                 'rut' => $u->rut,
                 'nombre' => "{$u->nombre} {$u->apellido}",
             ])->values();
+            $r->plazo_confirmacion = $r->plazoConfirmacion();
+            $r->vencida_sin_confirmar = $r->estaVencidaSinConfirmar();
 
             return $r;
         });
@@ -120,6 +130,39 @@ class SalaController extends Controller
 
         try {
             $reserva = $this->reservaSalaService->registrarDevolucion($reserva, $data['registrado_por']);
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 409);
+        }
+
+        return response()->json($reserva);
+    }
+
+    /**
+     * Confirmación manual de llegada (sin escaneo de código de barras) — sirve para
+     * cualquier sala, incluidas las que no tienen codigo_barras (Seminarios, Postgrado,
+     * AGACI). Es el "menú de confirmación": el staff ve el listado de reservas del día
+     * y marca aquí quién sí se presentó dentro del plazo de 15 minutos.
+     */
+    public function confirmarLlegada(Request $request, Reserva $reserva)
+    {
+        $data = $request->validate([
+            'registrado_por' => ['required', 'string', 'max:255'],
+        ]);
+
+        try {
+            $reserva = $this->reservaSalaService->registrarLlegada($reserva, $data['registrado_por']);
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 409);
+        }
+
+        return response()->json($reserva);
+    }
+
+    /** Libera de inmediato una reserva vencida sin confirmar, sin esperar a un nuevo intento de reserva sobre el mismo bloque. */
+    public function liberarReserva(Reserva $reserva)
+    {
+        try {
+            $reserva = $this->reservaSalaService->liberarPorNoPresentacion($reserva);
         } catch (\RuntimeException $e) {
             return response()->json(['message' => $e->getMessage()], 409);
         }

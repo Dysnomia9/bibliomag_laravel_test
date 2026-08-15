@@ -20,6 +20,7 @@ class Entrada extends Model
         'via',
         'codigo_barras',
         'es_convenio',
+        'es_visita',
     ];
 
     protected function casts(): array
@@ -28,6 +29,7 @@ class Entrada extends Model
             'fecha_hora_entrada' => 'datetime',
             'fecha_hora_salida' => 'datetime',
             'es_convenio' => 'boolean',
+            'es_visita' => 'boolean',
         ];
     }
 

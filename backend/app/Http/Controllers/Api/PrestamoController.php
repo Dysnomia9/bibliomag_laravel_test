@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Ejemplar;
 use App\Models\Equipo;
-use App\Models\Libro;
 use App\Models\Prestamo;
 use App\Services\MultaService;
 use App\Services\ReservaLibroService;
@@ -42,17 +42,16 @@ class PrestamoController extends Controller
 
     public function store(Request $request)
     {
-        // Los libros del catálogo se prestan escaneando su código de barras (y con fecha de
-        // préstamo/devolución acordadas en el calendario); los equipos tecnológicos
-        // (audífonos, notebooks) no están en el catálogo y se identifican por código de
-        // inventario en texto libre, sin fecha de vencimiento fija.
+        // Tanto los libros del catálogo como los equipos tecnológicos (audífonos,
+        // notebooks, cargadores) se prestan escaneando un código de barras real —
+        // los libros además llevan fecha de préstamo/devolución acordadas en el
+        // calendario, los equipos no tienen fecha de vencimiento fija.
         $request->merge(['tipo_item' => $request->input('tipo_item', 'libro')]);
 
         $data = $request->validate([
             'usuario_id' => ['required', 'exists:usuarios,id'],
-            'tipo_item' => ['required', 'in:libro,audifonos,notebook'],
-            'codigo_barras' => ['required_if:tipo_item,libro', 'nullable', 'string'],
-            'libro_titulo' => ['required_if:tipo_item,audifonos,notebook', 'nullable', 'string', 'max:255'],
+            'tipo_item' => ['required', 'in:libro,audifonos,notebook,cargador'],
+            'codigo_barras' => ['required', 'string'],
             'fecha_prestamo' => ['required_if:tipo_item,libro', 'nullable', 'date'],
             'fecha_devolucion' => ['required_if:tipo_item,libro', 'nullable', 'date', 'after_or_equal:fecha_prestamo'],
         ]);
@@ -62,32 +61,33 @@ class PrestamoController extends Controller
 
         // Todo el ciclo lectura→decisión→escritura va en una transacción con
         // lockForUpdate(): sin esto, dos requests concurrentes sobre el mismo
-        // codigo_barras/codigo_inventario pueden pasar ambas el chequeo
-        // "disponible" antes de que la primera escriba, resultando en doble
-        // préstamo del mismo ejemplar único (no hay modelo Ejemplar, ver CLAUDE.md).
+        // codigo_barras pueden pasar ambas el chequeo "disponible" antes de que
+        // la primera escriba, resultando en doble préstamo del mismo ejemplar/equipo.
         [$response, $status] = DB::transaction(function () use ($data, $esLibro, $staff) {
-            $libro = null;
+            $ejemplar = null;
             $equipo = null;
 
             if ($esLibro) {
-                $libro = Libro::where('codigo_barras', $data['codigo_barras'])->lockForUpdate()->first();
+                $ejemplar = Ejemplar::where('codigo_barras', $data['codigo_barras'])->lockForUpdate()->first();
 
-                if (! $libro) {
+                if (! $ejemplar) {
                     return [['message' => 'Código de barras no encontrado en el sistema'], 404];
                 }
 
-                if (! $libro->disponible) {
+                if (! $ejemplar->disponible) {
                     return [['message' => 'Este libro ya está reservado/prestado por otra persona'], 409];
                 }
 
-                if ($libro->estado_proceso !== 'en_estante') {
-                    return [['message' => "Este libro no está disponible para préstamo (estado: {$libro->estado_proceso})"], 409];
+                if ($ejemplar->estado_proceso !== 'en_estante') {
+                    return [['message' => "Este libro no está disponible para préstamo (estado: {$ejemplar->estado_proceso})"], 409];
                 }
+
+                $ejemplar->loadMissing('libro');
             } else {
-                $equipo = Equipo::where('codigo_inventario', $data['libro_titulo'])->where('tipo', $data['tipo_item'])->lockForUpdate()->first();
+                $equipo = Equipo::where('codigo_barras', $data['codigo_barras'])->where('tipo', $data['tipo_item'])->lockForUpdate()->first();
 
                 if (! $equipo) {
-                    return [['message' => 'Código de inventario no encontrado en el sistema'], 404];
+                    return [['message' => 'Código de barras no encontrado en el sistema'], 404];
                 }
 
                 if (! $equipo->activo) {
@@ -101,11 +101,11 @@ class PrestamoController extends Controller
 
             $prestamo = Prestamo::create([
                 'usuario_id' => $data['usuario_id'],
-                'libro_id' => $libro?->id,
+                'ejemplar_id' => $ejemplar?->id,
                 'equipo_id' => $equipo?->id,
-                'libro_titulo' => $esLibro ? $libro->titulo : $equipo->codigo_inventario,
+                'libro_titulo' => $esLibro ? $ejemplar->tituloConCopia() : $equipo->codigo_inventario,
                 'tipo_item' => $data['tipo_item'],
-                'codigo_barras' => $esLibro ? $libro->codigo_barras : null,
+                'codigo_barras' => $esLibro ? $ejemplar->codigo_barras : $equipo->codigo_barras,
                 'fecha_prestamo' => $esLibro ? $data['fecha_prestamo'] : now(),
                 'fecha_devolucion' => $esLibro ? $data['fecha_devolucion'] : null,
                 'estado' => 'activo',
@@ -113,7 +113,7 @@ class PrestamoController extends Controller
                 'prestado_por_staff_id' => $staff->id,
             ]);
 
-            $libro?->update(['disponible' => false]);
+            $ejemplar?->update(['disponible' => false]);
             $equipo?->update(['disponible' => false]);
 
             $prestamo->load('usuario:id,nombre,apellido,rut');
@@ -141,12 +141,12 @@ class PrestamoController extends Controller
                 'multa_estado' => $multa ? 'pendiente' : null,
             ]);
 
-            if ($prestamo->libro_id) {
-                // liberarLibro() no siempre deja el libro "disponible": si hay alguien en
-                // la cola de espera, lo promueve a 'pendiente' en vez de liberarlo del todo.
-                $libro = Libro::whereKey($prestamo->libro_id)->lockForUpdate()->first();
-                if ($libro) {
-                    $this->reservaLibroService->liberarLibro($libro);
+            if ($prestamo->ejemplar_id) {
+                // liberarLibro() no siempre deja la copia "disponible": si hay alguien en
+                // la cola de espera, la promueve a 'pendiente' en vez de liberarla del todo.
+                $ejemplar = Ejemplar::whereKey($prestamo->ejemplar_id)->lockForUpdate()->first();
+                if ($ejemplar) {
+                    $this->reservaLibroService->liberarLibro($ejemplar);
                 }
             }
 

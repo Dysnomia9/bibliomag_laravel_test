@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Libro extends Model
 {
@@ -12,36 +14,38 @@ class Libro extends Model
     protected $table = 'libros';
 
     protected $fillable = [
-        'codigo_barras',
-        'titulo',
-        'autor',
-        'categoria',
-        'disponible',
-        'clasificacion',
-        'coleccion',
-        'editorial',
-        'anio_publicacion',
-        'ubicacion',
-        'tipo_material',
-        'volumen',
-        'nota_interna',
-        'nota_publica',
-        'precio',
-        'estado_proceso',
-        'fecha_inventario',
+        'titulo', 'isbn', 'clasificacion', 'coleccion', 'editorial',
+        'anio_publicacion', 'tipo_material', 'nota_interna', 'nota_publica',
     ];
 
     protected function casts(): array
     {
         return [
-            'disponible' => 'boolean',
             'anio_publicacion' => 'integer',
-            'precio' => 'decimal:2',
-            'fecha_inventario' => 'date',
         ];
     }
 
-    public function reservas()
+    public function ejemplares(): HasMany
+    {
+        return $this->hasMany(Ejemplar::class);
+    }
+
+    public function autores(): BelongsToMany
+    {
+        return $this->belongsToMany(Autor::class, 'libro_autor');
+    }
+
+    public function categorias(): BelongsToMany
+    {
+        return $this->belongsToMany(Categoria::class, 'libro_categoria');
+    }
+
+    public function carreras(): BelongsToMany
+    {
+        return $this->belongsToMany(Carrera::class, 'libro_carrera');
+    }
+
+    public function reservas(): HasMany
     {
         return $this->hasMany(ReservaLibro::class);
     }

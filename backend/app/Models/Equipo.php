@@ -13,6 +13,7 @@ class Equipo extends Model
 
     protected $fillable = [
         'codigo_inventario',
+        'codigo_barras',
         'tipo',
         'disponible',
         'activo',

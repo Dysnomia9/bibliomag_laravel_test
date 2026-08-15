@@ -29,11 +29,24 @@ class EquipoController extends Controller
         );
     }
 
+    /** Busca un equipo por su código de barras (escaneo en préstamo). */
+    public function buscarPorCodigo(string $codigo)
+    {
+        $equipo = Equipo::where('codigo_barras', $codigo)->first();
+
+        if (! $equipo) {
+            return response()->json(['message' => 'Código de barras no encontrado en el sistema'], 404);
+        }
+
+        return response()->json($equipo);
+    }
+
     public function store(Request $request)
     {
         $data = $request->validate([
             'codigo_inventario' => ['required', 'string', 'max:255', 'unique:equipos,codigo_inventario'],
-            'tipo' => ['required', 'in:audifonos,notebook'],
+            'codigo_barras' => ['required', 'string', 'max:255', 'unique:equipos,codigo_barras'],
+            'tipo' => ['required', 'in:audifonos,notebook,cargador'],
         ]);
 
         $equipo = Equipo::create($data + ['disponible' => true, 'activo' => true]);

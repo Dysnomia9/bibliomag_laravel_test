@@ -82,10 +82,14 @@ class PrestamoMultaTest extends TestCase
     {
         Sanctum::actingAs(Staff::factory()->create());
 
+        // Días de atraso suficientes para superar el tope sea cual sea la tarifa
+        // diaria configurada (evita que el test dependa de un monto_dia hardcodeado).
+        $diasParaSuperarTope = (int) ceil(config('multas.tope_maximo') / config('multas.monto_dia')) + 10;
+
         $prestamo = Prestamo::factory()->create([
             'usuario_id' => Usuario::factory()->create()->id,
             'tipo_item' => 'libro',
-            'fecha_devolucion' => now()->subDays(200),
+            'fecha_devolucion' => now()->subDays($diasParaSuperarTope),
             'estado' => 'activo',
         ]);
 

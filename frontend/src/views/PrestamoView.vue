@@ -38,24 +38,30 @@ const fechaRetiro = ref('')
 const prestamosLibros = computed(() => prestamos.value.filter((p) => p.tipo_item === 'libro' || !p.tipo_item))
 const prestamosAudifonos = computed(() => prestamos.value.filter((p) => p.tipo_item === 'audifonos'))
 const prestamosNotebooks = computed(() => prestamos.value.filter((p) => p.tipo_item === 'notebook'))
+const prestamosCargadores = computed(() => prestamos.value.filter((p) => p.tipo_item === 'cargador'))
 
 const codigoAudifonos = ref('')
 const codigoNotebook = ref('')
+const codigoCargador = ref('')
 
 const equiposAudifonos = ref<Equipo[]>([])
 const equiposNotebook = ref<Equipo[]>([])
+const equiposCargador = ref<Equipo[]>([])
 
 async function cargarEquiposDisponibles() {
   try {
-    const [{ data: audifonos }, { data: notebooks }] = await Promise.all([
+    const [{ data: audifonos }, { data: notebooks }, { data: cargadores }] = await Promise.all([
       api.get<Equipo[]>('/equipos', { params: { tipo: 'audifonos', activo: 1, disponible: 1 } }),
       api.get<Equipo[]>('/equipos', { params: { tipo: 'notebook', activo: 1, disponible: 1 } }),
+      api.get<Equipo[]>('/equipos', { params: { tipo: 'cargador', activo: 1, disponible: 1 } }),
     ])
     equiposAudifonos.value = audifonos
     equiposNotebook.value = notebooks
+    equiposCargador.value = cargadores
   } catch {
     equiposAudifonos.value = []
     equiposNotebook.value = []
+    equiposCargador.value = []
   }
 }
 
@@ -103,8 +109,9 @@ async function buscarUsuario() {
 
 async function buscarLibroApi(codigo: string): Promise<{ titulo: string; disponible: boolean } | null> {
   try {
-    const { data } = await api.get(`/libros/${codigo}`)
-    return { titulo: data.titulo, disponible: data.disponible }
+    const { data } = await api.get(`/ejemplares/${codigo}`)
+    const titulo = data.numero_copia > 1 ? `${data.libro?.titulo} (Copia ${data.numero_copia})` : data.libro?.titulo
+    return { titulo, disponible: data.disponible && data.estado_proceso === 'en_estante' }
   } catch {
     return null
   }
@@ -208,17 +215,23 @@ async function confirmarPagoMulta() {
   }
 }
 
-async function crearPrestamoEquipo(tipo: 'audifonos' | 'notebook') {
-  const codigo = tipo === 'audifonos' ? codigoAudifonos : codigoNotebook
+const EQUIPO_LABELS: Record<'audifonos' | 'notebook' | 'cargador', string> = {
+  audifonos: 'audífono',
+  notebook: 'notebook',
+  cargador: 'cargador',
+}
+
+async function crearPrestamoEquipo(tipo: 'audifonos' | 'notebook' | 'cargador') {
+  const codigo = tipo === 'audifonos' ? codigoAudifonos : tipo === 'notebook' ? codigoNotebook : codigoCargador
 
   if (!codigo.value.trim()) {
-    toast.error(`Ingrese el código del ${tipo === 'audifonos' ? 'audífono' : 'notebook'}`)
+    toast.error(`Escanee o ingrese el código de barras del ${EQUIPO_LABELS[tipo]}`)
     return
   }
   try {
     await api.post('/prestamos', {
       usuario_id: usuario.value!.id,
-      libro_titulo: codigo.value,
+      codigo_barras: codigo.value.trim(),
       tipo_item: tipo,
     })
     toast.success('Préstamo de equipo registrado')
@@ -616,7 +629,7 @@ function formatFecha(iso: string | null) {
               <tbody class="divide-y divide-gray-100">
                 <tr v-for="r in reservas" :key="r.id" class="hover:bg-gray-50">
                   <td class="px-6 py-3 text-sm text-gray-900">{{ r.libro?.titulo }}</td>
-                  <td class="px-6 py-3 text-xs font-mono text-gray-500">{{ r.libro?.codigo_barras }}</td>
+                  <td class="px-6 py-3 text-xs font-mono text-gray-500">{{ r.ejemplar?.codigo_barras ?? '—' }}</td>
                   <td class="px-6 py-3 text-sm font-mono text-gray-600">{{ formatFecha(r.fecha_reserva) }}</td>
                   <td class="px-6 py-3 text-sm font-mono text-gray-600">{{ formatFecha(r.fecha_retiro) }}</td>
                   <td class="px-6 py-3">
@@ -645,7 +658,7 @@ function formatFecha(iso: string | null) {
           </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
           <div class="bg-white rounded-xl shadow-md p-6">
             <h4 class="font-semibold text-gray-900 mb-1 flex items-center gap-2">
               <svg class="w-4 h-4 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -653,13 +666,14 @@ function formatFecha(iso: string | null) {
               </svg>
               Préstamo de Audífonos
             </h4>
-            <p class="text-xs text-gray-400 mb-4">Se identifican por código de inventario · se devuelven al término de la estadía</p>
+            <p class="text-xs text-gray-400 mb-4">Escanee o ingrese el código de barras · se devuelven al término de la estadía</p>
             <div class="flex gap-2 flex-wrap mb-4">
               <input
                 v-model="codigoAudifonos"
                 list="equipos-audifonos"
-                placeholder="Código (ej: AUD-003)"
+                placeholder="Código de barras"
                 class="flex-1 min-w-[160px] px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
+                @keydown.enter="crearPrestamoEquipo('audifonos')"
               />
               <button
                 @click="crearPrestamoEquipo('audifonos')"
@@ -697,13 +711,14 @@ function formatFecha(iso: string | null) {
               </svg>
               Préstamo de Notebooks
             </h4>
-            <p class="text-xs text-gray-400 mb-4">Se identifican por código de inventario · se devuelven al término de la estadía</p>
+            <p class="text-xs text-gray-400 mb-4">Escanee o ingrese el código de barras · se devuelven al término de la estadía</p>
             <div class="flex gap-2 flex-wrap mb-4">
               <input
                 v-model="codigoNotebook"
                 list="equipos-notebook"
-                placeholder="Código (ej: NB-012)"
+                placeholder="Código de barras"
                 class="flex-1 min-w-[160px] px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
+                @keydown.enter="crearPrestamoEquipo('notebook')"
               />
               <button
                 @click="crearPrestamoEquipo('notebook')"
@@ -731,6 +746,51 @@ function formatFecha(iso: string | null) {
                 </div>
               </div>
               <p v-if="!prestamosNotebooks.length" class="text-xs text-gray-400 text-center py-2">Sin préstamos de notebooks.</p>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-xl shadow-md p-6">
+            <h4 class="font-semibold text-gray-900 mb-1 flex items-center gap-2">
+              <svg class="w-4 h-4 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              Préstamo de Cargadores
+            </h4>
+            <p class="text-xs text-gray-400 mb-4">Escanee o ingrese el código de barras · se devuelven al término de la estadía</p>
+            <div class="flex gap-2 flex-wrap mb-4">
+              <input
+                v-model="codigoCargador"
+                list="equipos-cargador"
+                placeholder="Código de barras"
+                class="flex-1 min-w-[160px] px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
+                @keydown.enter="crearPrestamoEquipo('cargador')"
+              />
+              <button
+                @click="crearPrestamoEquipo('cargador')"
+                class="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium"
+              >
+                Pedir
+              </button>
+            </div>
+            <div class="space-y-2">
+              <div
+                v-for="p in prestamosCargadores"
+                :key="p.id"
+                class="flex items-center justify-between text-sm border-t border-gray-100 pt-2 first:border-t-0 first:pt-0"
+              >
+                <span class="text-gray-900 font-mono">{{ p.libro_titulo }}</span>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs px-2 py-0.5 rounded-full font-medium" :class="getBadge(p).cls">{{ getBadge(p).label }}</span>
+                  <button
+                    v-if="p.estado !== 'devuelto'"
+                    @click="pedirConfirmacionDevolucion(p)"
+                    class="text-xs text-indigo-700 hover:text-indigo-800 font-medium"
+                  >
+                    Devolver
+                  </button>
+                </div>
+              </div>
+              <p v-if="!prestamosCargadores.length" class="text-xs text-gray-400 text-center py-2">Sin préstamos de cargadores.</p>
             </div>
           </div>
         </div>
@@ -794,10 +854,13 @@ function formatFecha(iso: string | null) {
       </div>
 
       <datalist id="equipos-audifonos">
-        <option v-for="e in equiposAudifonos" :key="e.id" :value="e.codigo_inventario" />
+        <option v-for="e in equiposAudifonos" :key="e.id" :value="e.codigo_barras">{{ e.codigo_inventario }}</option>
       </datalist>
       <datalist id="equipos-notebook">
-        <option v-for="e in equiposNotebook" :key="e.id" :value="e.codigo_inventario" />
+        <option v-for="e in equiposNotebook" :key="e.id" :value="e.codigo_barras">{{ e.codigo_inventario }}</option>
+      </datalist>
+      <datalist id="equipos-cargador">
+        <option v-for="e in equiposCargador" :key="e.id" :value="e.codigo_barras">{{ e.codigo_inventario }}</option>
       </datalist>
     </div>
   </StaffLayout>

@@ -40,10 +40,14 @@ async function registrar(via: 'manual' | 'qr', codigoQr?: string) {
   try {
     await apiUsuario.post('/mi/entrada', via === 'manual' ? { rut: rut.value, via } : { codigo: codigoQr, via })
     modo.value = 'success'
+    rut.value = ''
+    // Antes esto volvía al mismo "menú" de esta pantalla (Escanear QR / Ingresar RUT),
+    // que se veía igual a como si hubiera que registrar la entrada de nuevo — confuso
+    // justo después de confirmar. Ahora se va al inicio del portal, dejando el mensaje
+    // de éxito visible unos segundos antes de navegar.
     setTimeout(() => {
-      modo.value = 'menu'
-      rut.value = ''
-    }, 3500)
+      router.push({ name: 'portal-home' })
+    }, 2500)
   } catch (e: any) {
     errorMsg.value = e?.response?.data?.message ?? 'No se pudo registrar la entrada'
     modo.value = 'error'

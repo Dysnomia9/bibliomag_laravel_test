@@ -10,43 +10,65 @@ PostgreSQL** (backend API), 100% dockerizada.
 
 - Dashboard con indicadores en tiempo real: usuarios activos, entradas de
   hoy, personas en sala, préstamos activos y atrasados.
-- Registro de entradas por RUT, QR o manual — incluye visitantes externos y
-  de convenio.
-- Préstamos y devoluciones de libros (por código de barras, con fecha de
-  préstamo/devolución acordada) y de equipos — audífonos y notebooks —
+- Registro de entradas por RUT, QR o manual — incluye visitantes externos,
+  de convenio y visitas.
+- Préstamos y devoluciones de libros (por código de barras de la copia
+  física, con fecha de préstamo/devolución acordada) y de equipos —
+  audífonos, notebooks y cargadores — también por código de barras real,
   desde un inventario real con control de disponibilidad.
 - Multas automáticas por atraso al devolver un libro: tarifa configurable
-  en `config/multas.php`, aviso al staff si el usuario ya tiene deuda
-  pendiente al crear un préstamo nuevo, y una vista "Multas Pendientes" con
-  el total adeudado por usuario.
-- Reservas de salas de estudio (logias, por bloques de 2 horas) y de libros
-  del catálogo para retiro — ambas comparten `libros.disponible` como
-  fuente de verdad: no se puede reservar ni prestar algo ya ocupado.
-- Catalogación de libros (formato MARC/Dewey simplificado — solo admin) y
-  gestión del estado físico de cada ejemplar (inventario → en estante → de
-  baja, etc.), como eje independiente de su disponibilidad.
-- Gestión de usuarios, equipos (agregar/dar de baja), listado de préstamos
-  y listado de libros — agrupados en el menú "Gestiones Admin".
-- Reportes con gráficos (préstamos, ingresos, uso de logias) filtrables por
+  en `config/multas.php` ($15/día), aviso al staff si el usuario ya tiene
+  deuda pendiente al crear un préstamo nuevo, y una vista "Multas
+  Pendientes" con el total adeudado por usuario.
+- Reservas de salas de estudio (logias, por bloques de 2 horas, con menú de
+  confirmación de asistencia: 15 minutos para presentarse antes de que la
+  sala se libere sola) y de libros del catálogo para retiro — ambas
+  comparten la disponibilidad del ejemplar como fuente de verdad: no se
+  puede reservar ni prestar algo ya ocupado.
+- Catalogación de libros con soporte real para **múltiples copias del
+  mismo título** (registro bibliográfico separado de cada copia física,
+  con su propio código de barras y estado), autor/categoría/carrera
+  múltiples por libro, ISBN, generador de código de barras, y gestión del
+  estado físico de cada copia (inventario → en estante → de baja, colección
+  móvil, o un estado personalizado administrable), como eje independiente
+  de su disponibilidad.
+- Cambio masivo de estado de copias (por ubicación/estado actual/tipo/
+  categoría, con confirmación seria) e historial de cada cambio de estado,
+  además de un historial de préstamos por libro/copia.
+- Gestión de usuarios (con botón de acceso a la base de datos digital
+  externa y generación de Constancia de No Multa en PDF), equipos
+  (agregar/dar de baja), listado de préstamos y listado de libros —
+  agrupados en el menú "Gestiones Admin".
+- Reportes con gráficos (préstamos, ingresos, uso de logias, top de libros
+  más prestados, heatmap de horas más solicitadas por sala) filtrables por
   período, carrera, sexo y tipo de usuario.
 - Código QR de acceso compartido y regenerable, para que los usuarios
   marquen su entrada por su cuenta.
+- Panel de Administración (solo admin): nombre/cargo de quien firma la
+  Constancia de No Multa, catálogo de estados personalizados de ejemplar, y
+  catálogo de ubicaciones físicas.
 
 **Portal virtual de autoservicio (usuarios finales, sin ser staff)**
 
-- Login propio, independiente del panel de personal.
+- Login propio, independiente del panel de personal, con pantalla de
+  ingreso claramente diferenciada de la del staff.
 - Marcar entrada/salida por RUT o escaneando el QR con la cámara.
-- Consultar el catálogo de libros disponibles.
-- Reservar salas de estudio.
+- Consultar el catálogo de libros disponibles, y acceder a la base de datos
+  digital externa de la universidad.
+- Reservar salas de estudio — solo para el mismo día (no se puede elegir
+  fecha futura), con la misma ventana de 15 minutos para confirmar
+  asistencia que ve el staff.
 - Reservar un libro por su cuenta, o unirse a la cola de espera si ya está
   prestado/reservado por otra persona — cuando se libera, se promueve
   automáticamente al primero en la fila (sin tener que ir a mesón).
+- Descargar su propia Constancia de No Multa en PDF, sin pasar por mesón
+  (bloqueada si tiene una multa pendiente).
 
 **Backend / integraciones**
 
 - Dos guards de autenticación independientes vía Sanctum (`staff` y
   `usuario`), más un rol `admin` dentro de `staff` que restringe acciones
-  como la catalogación de libros.
+  como la catalogación de libros y la administración de catálogos.
 - Compatibilidad con los lectores de código de barras de Horizon para
   logias y puestos de trabajo (sin sincronizar datos con Horizon — ver
   Deuda técnica).
@@ -78,8 +100,12 @@ biblioteca-vue-laravel/
 | Reportes | `/reportes` | `ReporteController` |
 | Código QR de acceso | `/codigo-qr` (dropdown) | `CodigoAccesoController` |
 | Listado de libros | `/libros/listado` (dropdown) | `LibroController` |
-| Catalogación de libros | `/libros/catalogacion` (dropdown, **solo admin**) | `LibroController::store/update` |
-| Estado de libro | `/libros/estado` (dropdown) | `LibroController::cambiarEstado` |
+| Catalogación de libros | `/libros/catalogacion` (dropdown, **solo admin**) | `LibroController::store/update`, `EjemplarController::store` |
+| Estado de libro | `/libros/estado` (dropdown) | `EjemplarController::cambiarEstado` |
+| Cambio masivo de estado | `/libros/cambio-masivo` (dropdown, **solo admin**) | `EjemplarController::cambioMasivo*` |
+| Historial de estado | `/libros/historial-estado` (dropdown) | `EjemplarController::historialEstado` |
+| Historial de libros | `/libros/historial-prestamos` (dropdown) | `LibroController::historial` |
+| Administración | `/administracion` (dropdown, **solo admin**) | `ConfiguracionInstitucionalController`, `EstadoLibroPersonalizadoController`, `UbicacionController` |
 
 ### Cómo se arma la imagen del backend
 
@@ -151,13 +177,16 @@ Este comando (`app/Console/Commands/SeedMockupData.php`) genera:
 - 30 `usuarios` con RUT válido (con dígito verificador calculado), carrera (de las
   8 carreras UMAG), año de ingreso y sexo
 - Entradas y préstamos distribuidos en los últimos días, con sesgo horario
-  (más tráfico 10–13h y 15–18h), incluyendo ejemplos de entrada externa y de
-  convenio para hoy
-- 7 equipos (audífonos y notebooks) y sus préstamos asociados
+  (más tráfico 10–13h y 15–18h), incluyendo ejemplos de entrada externa, de
+  convenio y de visita para hoy
+- 10 equipos (audífonos, notebooks y cargadores, cada uno con nombre
+  legible y código de barras propio) y sus préstamos asociados
 - 18 salas: 15 logias de estudio (capacidades variables, cada una con su
   propio `codigo_barras` inventado — Horizon aún no entrega los reales) más
-  Sala de Seminarios, Sala de Postgrado y Sala GACI (apoyo a la inclusión) —
+  Sala de Seminarios, Sala de Postgrado y Sala AGACI (apoyo a la inclusión) —
   y reservas de los últimos días, con sus participantes reales
+- Libros catalogados con autor(es)/categoría(s)/carrera(s), algunos con más
+  de una copia física (ejemplares con su propio código de barras y estado)
 
 Si necesitas empezar completamente de cero (esquema incluido):
 
@@ -177,18 +206,21 @@ npm run dev
 
 ## Tests y benchmark de rendimiento
 
-Hay una suite de Feature tests (`backend/tests/Feature/`, 87 tests al
-2026-08-13) que cubre login de staff/usuario, registro de entradas, reservas
+Hay una suite de Feature tests (`backend/tests/Feature/`, 163 tests al
+2026-08-16) que cubre login de staff/usuario, registro de entradas, reservas
 de sala (solapamiento y validación grupal, incluido el cruce entre salas
-distintas), préstamos y reservas de libros y equipos (incluida la protección
+distintas, restricción a "solo hoy" para alumnos, y el flujo completo de
+confirmación de asistencia con liberación automática por no-show), préstamos
+y reservas de libros y equipos por código de barras (incluida la protección
 contra condición de carrera con `DB::transaction()`+`lockForUpdate()`),
-catalogación y cambio de estado de libros, CHECK constraints de las columnas
-tipo enum, cascadas de borrado `RESTRICT` en el historial, atribución real
-de staff en préstamos, cálculo/cobro de multas por atraso y su reporte
-consolidado, y la separación de middlewares `staff`/`usuario`. Corre contra
-una base Postgres de pruebas dedicada (`biblioteca_test`, separada de
-`biblioteca`), que `docker-entrypoint.sh` crea automáticamente al levantar
-el backend.
+catalogación y cambio de estado de ejemplares (incluido el cambio masivo y
+su historial), CHECK constraints de las columnas tipo enum, cascadas de
+borrado `RESTRICT` en el historial, atribución real de staff en préstamos,
+cálculo/cobro de multas por atraso y su reporte consolidado, configuración
+institucional, la Constancia de No Multa en autoservicio desde el portal, y
+la separación de middlewares `staff`/`usuario`. Corre contra una base
+Postgres de pruebas dedicada (`biblioteca_test`, separada de `biblioteca`),
+que `docker-entrypoint.sh` crea automáticamente al levantar el backend.
 
 ```bash
 docker compose exec backend php artisan test
@@ -202,18 +234,19 @@ tests.
 
 ## Deuda técnica conocida
 
-- **Sin múltiples copias de un mismo libro**: una fila `Libro` sigue siendo
-  una sola copia física (un solo `disponible`/`estado_proceso`); no hay
-  modelo de "ejemplar", ni separación entre registro bibliográfico e ítem
-  físico (sin "Bib No." / "Item No." estilo Horizon). Fuera del alcance
-  actual — ver `CLAUDE.md` si se retoma.
+- **Múltiples copias de un mismo libro: ya resuelto (2026-08-15)** — el
+  modelo `Ejemplar` separa la copia física (código de barras, estado,
+  disponibilidad) del registro bibliográfico `Libro` (obra). Lo que sigue
+  fuera de alcance es la separación estilo Horizon "Bib No." / "Item No."
+  como identificadores formales — hoy es simplemente `libro_id` +
+  `numero_copia`.
 - **Multas sin bloqueo duro**: se avisa al staff al crear un préstamo si el
   usuario tiene deuda pendiente, y existe una vista consolidada por usuario,
   pero ningún préstamo se rechaza por eso — es una decisión deliberada, no
   un bug.
 - **Contadores históricos de préstamo** (cantidad, última fecha) no se
-  guardan como columnas — son derivables por query sobre `prestamos` si
-  algún día hacen falta.
+  guardan como columnas — son derivables por query sobre `prestamos`, y ya
+  hay una vista dedicada para verlos on-demand (Historial de Libros).
 - **Credenciales de Postgres hardcodeadas** en `docker-compose.yml` —
   aceptable en desarrollo local, a propósito. Para un despliegue real usar
   `docker-compose.prod.yml` + `backend/.env.production.example` (plantillas,
@@ -221,6 +254,9 @@ tests.
 - **`PortalController` concentra varias responsabilidades** (estado/aforo,
   entrada/salida, catálogo, salas y reservas del usuario). Si crece más,
   conviene separar por dominio en vez de agregar más métodos ahí.
+- **Historial de entradas sin rango de fechas ni búsqueda por persona**:
+  `EntradaController::index` solo admite un día exacto — sigue siendo el
+  módulo con la búsqueda más débil del sistema.
 - **Sin backups automatizados ni soft deletes** — decisión de alcance
   deliberada por ahora, no un olvido. La integridad de datos (transacciones,
   locks, CHECK constraints, cascadas `RESTRICT`) ya está resuelta; ver

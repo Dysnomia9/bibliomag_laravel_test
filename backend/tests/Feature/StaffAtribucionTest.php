@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Ejemplar;
 use App\Models\Libro;
 use App\Models\Prestamo;
 use App\Models\Staff;
@@ -19,13 +20,13 @@ class StaffAtribucionTest extends TestCase
         $staffA = Staff::factory()->create(['nombre' => 'Ana Pérez']);
         Sanctum::actingAs($staffA);
 
-        $libro = Libro::factory()->create();
+        $ejemplar = Ejemplar::factory()->for(Libro::factory())->create();
         $usuario = Usuario::factory()->create();
 
         $response = $this->postJson('/api/prestamos', [
             'usuario_id' => $usuario->id,
             'tipo_item' => 'libro',
-            'codigo_barras' => $libro->codigo_barras,
+            'codigo_barras' => $ejemplar->codigo_barras,
             'fecha_prestamo' => now()->toDateString(),
             'fecha_devolucion' => now()->addDays(7)->toDateString(),
             // Un intento de suplantar a otro staff vía el body no debe tener efecto.

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Ejemplar;
 use App\Models\Libro;
 use App\Models\ReservaLibro;
 use App\Models\Usuario;
@@ -17,36 +18,36 @@ class PortalReservaLibroTest extends TestCase
     {
         $usuario = Usuario::factory()->create();
         Sanctum::actingAs($usuario);
-        $libro = Libro::factory()->create();
+        $ejemplar = Ejemplar::factory()->for(Libro::factory())->create();
 
-        $response = $this->postJson('/api/mi/reservas-libro', ['codigo_barras' => $libro->codigo_barras]);
+        $response = $this->postJson('/api/mi/reservas-libro', ['libro_id' => $ejemplar->libro_id]);
 
         $response->assertStatus(201)->assertJsonPath('estado', 'pendiente');
-        $this->assertDatabaseHas('libros', ['id' => $libro->id, 'disponible' => false]);
-        $this->assertDatabaseHas('reservas_libro', ['usuario_id' => $usuario->id, 'libro_id' => $libro->id, 'estado' => 'pendiente']);
+        $this->assertDatabaseHas('ejemplares', ['id' => $ejemplar->id, 'disponible' => false]);
+        $this->assertDatabaseHas('reservas_libro', ['usuario_id' => $usuario->id, 'libro_id' => $ejemplar->libro_id, 'ejemplar_id' => $ejemplar->id, 'estado' => 'pendiente']);
     }
 
     public function test_usuario_puede_unirse_a_la_cola_de_un_libro_ocupado_por_su_cuenta(): void
     {
         $usuario = Usuario::factory()->create();
         Sanctum::actingAs($usuario);
-        $libro = Libro::factory()->create(['disponible' => false]);
+        $ejemplar = Ejemplar::factory()->for(Libro::factory())->create(['disponible' => false]);
 
-        $response = $this->postJson('/api/mi/reservas-libro', ['codigo_barras' => $libro->codigo_barras]);
+        $response = $this->postJson('/api/mi/reservas-libro', ['libro_id' => $ejemplar->libro_id]);
 
         $response->assertStatus(201)->assertJsonPath('estado', 'en_cola');
     }
 
     public function test_usuario_ve_su_posicion_en_la_cola_en_su_listado(): void
     {
-        $libro = Libro::factory()->create(['disponible' => false]);
+        $ejemplar = Ejemplar::factory()->for(Libro::factory())->create(['disponible' => false]);
         $otro = Usuario::factory()->create();
         Sanctum::actingAs($otro);
-        $this->postJson('/api/mi/reservas-libro', ['codigo_barras' => $libro->codigo_barras])->assertStatus(201);
+        $this->postJson('/api/mi/reservas-libro', ['libro_id' => $ejemplar->libro_id])->assertStatus(201);
 
         $usuario = Usuario::factory()->create();
         Sanctum::actingAs($usuario);
-        $this->postJson('/api/mi/reservas-libro', ['codigo_barras' => $libro->codigo_barras])->assertStatus(201);
+        $this->postJson('/api/mi/reservas-libro', ['libro_id' => $ejemplar->libro_id])->assertStatus(201);
 
         $response = $this->getJson('/api/mi/reservas-libro');
 
@@ -57,10 +58,11 @@ class PortalReservaLibroTest extends TestCase
     public function test_usuario_no_puede_cancelar_la_reserva_de_otro(): void
     {
         $dueno = Usuario::factory()->create();
-        $libro = Libro::factory()->create(['disponible' => false]);
+        $ejemplar = Ejemplar::factory()->for(Libro::factory())->create(['disponible' => false]);
         $reserva = ReservaLibro::factory()->create([
             'usuario_id' => $dueno->id,
-            'libro_id' => $libro->id,
+            'libro_id' => $ejemplar->libro_id,
+            'ejemplar_id' => $ejemplar->id,
             'estado' => 'pendiente',
         ]);
 
@@ -76,10 +78,11 @@ class PortalReservaLibroTest extends TestCase
     public function test_usuario_puede_cancelar_su_propia_reserva(): void
     {
         $usuario = Usuario::factory()->create();
-        $libro = Libro::factory()->create(['disponible' => false]);
+        $ejemplar = Ejemplar::factory()->for(Libro::factory())->create(['disponible' => false]);
         $reserva = ReservaLibro::factory()->create([
             'usuario_id' => $usuario->id,
-            'libro_id' => $libro->id,
+            'libro_id' => $ejemplar->libro_id,
+            'ejemplar_id' => $ejemplar->id,
             'estado' => 'pendiente',
         ]);
 
@@ -87,7 +90,33 @@ class PortalReservaLibroTest extends TestCase
         $response = $this->patchJson("/api/mi/reservas-libro/{$reserva->id}/cancelar");
 
         $response->assertStatus(200)->assertJsonPath('estado', 'cancelado');
-        $this->assertDatabaseHas('libros', ['id' => $libro->id, 'disponible' => true]);
+        $this->assertDatabaseHas('ejemplares', ['id' => $ejemplar->id, 'disponible' => true]);
+    }
+
+    public function test_reservar_por_libro_prefiere_una_copia_disponible_sobre_una_ocupada(): void
+    {
+        $usuario = Usuario::factory()->create();
+        Sanctum::actingAs($usuario);
+        $libro = Libro::factory()->create();
+        $ocupada = Ejemplar::factory()->for($libro)->create(['disponible' => false]);
+        $disponible = Ejemplar::factory()->for($libro)->create(['disponible' => true]);
+
+        $response = $this->postJson('/api/mi/reservas-libro', ['libro_id' => $libro->id]);
+
+        $response->assertStatus(201)->assertJsonPath('estado', 'pendiente')->assertJsonPath('ejemplar_id', $disponible->id);
+        $this->assertDatabaseHas('ejemplares', ['id' => $ocupada->id, 'disponible' => false]);
+    }
+
+    public function test_reservar_libro_sin_ejemplares_en_estante_devuelve_404(): void
+    {
+        $usuario = Usuario::factory()->create();
+        Sanctum::actingAs($usuario);
+        $libro = Libro::factory()->create();
+        Ejemplar::factory()->for($libro)->create(['estado_proceso' => 'inventario']);
+
+        $response = $this->postJson('/api/mi/reservas-libro', ['libro_id' => $libro->id]);
+
+        $response->assertStatus(404);
     }
 
     public function test_staff_no_puede_usar_las_rutas_del_portal(): void

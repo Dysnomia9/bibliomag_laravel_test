@@ -63,11 +63,15 @@ onMounted(() => {
   cargarMisReservas()
 })
 
+function hayDisponible(libro: Libro) {
+  return (libro.ejemplares_disponibles ?? 0) > 0
+}
+
 async function reservar(libro: Libro) {
   reservandoId.value = libro.id
   try {
-    await apiUsuario.post('/mi/reservas-libro', { codigo_barras: libro.codigo_barras })
-    toast.success(libro.disponible ? `Reservaste "${libro.titulo}"` : `Te uniste a la lista de espera de "${libro.titulo}"`)
+    await apiUsuario.post('/mi/reservas-libro', { libro_id: libro.id })
+    toast.success(hayDisponible(libro) ? `Reservaste "${libro.titulo}"` : `Te uniste a la lista de espera de "${libro.titulo}"`)
     await Promise.all([cargar(), cargarMisReservas()])
   } catch (e: any) {
     toast.error(e?.response?.data?.message ?? 'No se pudo registrar la reserva')
@@ -167,17 +171,17 @@ async function cancelar(reserva: ReservaLibro) {
           >
             <div class="min-w-0">
               <p class="font-medium text-gray-900 text-sm truncate">{{ libro.titulo }}</p>
-              <p class="text-xs text-gray-500 truncate">{{ libro.autor }}</p>
+              <p class="text-xs text-gray-500 truncate">{{ libro.autores?.map((a) => a.nombre).join(', ') }}</p>
             </div>
             <div class="text-xs text-gray-600 flex items-center sm:block">
-              <span class="sm:hidden text-gray-400 mr-1">Área:</span>{{ libro.categoria }}
+              <span class="sm:hidden text-gray-400 mr-1">Área:</span>{{ libro.categorias?.map((c) => c.nombre).join(', ') }}
             </div>
             <div>
               <span
                 class="inline-block text-xs font-medium px-2 py-0.5 rounded border"
-                :class="libro.disponible ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'"
+                :class="hayDisponible(libro) ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'"
               >
-                {{ libro.disponible ? 'Disponible' : 'Prestado' }}
+                {{ hayDisponible(libro) ? `Disponible (${libro.ejemplares_disponibles})` : 'Prestado' }}
               </span>
             </div>
             <div class="sm:text-right">
@@ -189,11 +193,11 @@ async function cancelar(reserva: ReservaLibro) {
                 @click="reservar(libro)"
                 :disabled="reservandoId === libro.id"
                 class="text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-50"
-                :class="libro.disponible
+                :class="hayDisponible(libro)
                   ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
                   : 'bg-white text-sky-700 border-sky-300 hover:bg-sky-50'"
               >
-                {{ libro.disponible ? 'Reservar' : 'Unirme a la espera' }}
+                {{ hayDisponible(libro) ? 'Reservar' : 'Unirme a la espera' }}
               </button>
             </div>
           </div>

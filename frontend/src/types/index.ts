@@ -23,7 +23,8 @@ export type Usuario = {
 export type Equipo = {
   id: number
   codigo_inventario: string
-  tipo: 'audifonos' | 'notebook'
+  codigo_barras: string
+  tipo: 'audifonos' | 'notebook' | 'cargador'
   disponible: boolean
   activo: boolean
 }
@@ -38,16 +39,17 @@ export type Entrada = {
   via: 'manual' | 'qr'
   codigo_barras: string | null
   es_convenio: boolean
+  es_visita: boolean
   usuario?: Pick<Usuario, 'id' | 'nombre' | 'apellido' | 'rut' | 'tipo'>
 }
 
 export type Prestamo = {
   id: number
   usuario_id: number
-  libro_id: number | null
+  ejemplar_id: number | null
   equipo_id: number | null
   libro_titulo: string
-  tipo_item: 'libro' | 'audifonos' | 'notebook'
+  tipo_item: 'libro' | 'audifonos' | 'notebook' | 'cargador'
   fecha_prestamo: string
   fecha_devolucion: string | null
   fecha_devolucion_real: string | null
@@ -74,35 +76,125 @@ export type ResumenDashboard = {
   ultimosPrestamos: Prestamo[]
 }
 
-export type EstadoProcesoLibro =
+export type EstadoProcesoEjemplar =
   | 'inventario'
   | 'procesos_tecnicos'
   | 'por_colocar'
   | 'en_estante'
   | 'estanteria_auxiliar'
   | 'de_baja'
+  | 'coleccion_movil'
+  | 'personalizado'
 
 export type TipoMaterialLibro = 'libro' | 'revista' | 'tesis' | 'dvd' | 'otro'
 
+export type Autor = { id: number; nombre: string }
+export type Categoria = { id: number; nombre: string }
+export type Carrera = { id: number; nombre: string }
+export type Ubicacion = { id: number; nombre: string }
+
+export type EstadoLibroPersonalizado = {
+  id: number
+  nombre: string
+  descripcion: string | null
+  activo: boolean
+}
+
+/** Copia física de un `Libro` — cada una con su propio código de barras y estado. */
+export type Ejemplar = {
+  id: number
+  libro_id: number
+  numero_copia: number
+  codigo_barras: string
+  disponible: boolean
+  estado_proceso: EstadoProcesoEjemplar
+  estado_personalizado_id: number | null
+  estado_personalizado?: EstadoLibroPersonalizado | null
+  ubicacion_id: number | null
+  ubicacion?: Ubicacion | null
+  volumen: string | null
+  precio: string | null
+  fecha_inventario: string | null
+  libro?: Libro
+}
+
+/** Registro bibliográfico (la "obra") — puede tener una o varias copias físicas (`Ejemplar`). */
 export type Libro = {
   id: number
-  codigo_barras: string
   titulo: string
-  autor: string | null
-  categoria: string | null
-  disponible: boolean
+  isbn: string | null
   clasificacion: string | null
   coleccion: string | null
   editorial: string | null
   anio_publicacion: number | null
-  ubicacion: string | null
   tipo_material: TipoMaterialLibro
-  volumen: string | null
   nota_interna: string | null
   nota_publica: string | null
-  precio: string | null
-  estado_proceso: EstadoProcesoLibro
-  fecha_inventario: string | null
+  autores?: Autor[]
+  categorias?: Categoria[]
+  carreras?: Carrera[]
+  ejemplares?: Ejemplar[]
+  ejemplares_count?: number
+  ejemplares_total?: number
+  ejemplares_disponibles?: number
+}
+
+export type EjemplarEstadoHistorial = {
+  id: number
+  ejemplar_id: number
+  estado_anterior: EstadoProcesoEjemplar
+  estado_nuevo: EstadoProcesoEjemplar
+  estado_personalizado_anterior_id: number | null
+  estado_personalizado_nuevo_id: number | null
+  staff_id: number | null
+  lote_id: string | null
+  motivo: string | null
+  created_at: string
+  ejemplar?: Ejemplar & { libro?: Pick<Libro, 'id' | 'titulo'> }
+  staff?: { id: number; nombre: string }
+  estado_personalizado_anterior?: Pick<EstadoLibroPersonalizado, 'id' | 'nombre'> | null
+  estado_personalizado_nuevo?: Pick<EstadoLibroPersonalizado, 'id' | 'nombre'> | null
+}
+
+export type CambioMasivoFiltro = {
+  ubicacion_id?: number
+  estado_proceso_actual?: string
+  tipo_material?: string
+  categoria_id?: number
+  q?: string
+}
+
+export type CambioMasivoPreview = {
+  total: number
+  muestra: (Pick<Ejemplar, 'id' | 'libro_id' | 'codigo_barras' | 'numero_copia' | 'estado_proceso' | 'ubicacion_id' | 'ubicacion'> & {
+    libro?: Pick<Libro, 'id' | 'titulo'>
+  })[]
+}
+
+export type LibroHistorialEjemplar = {
+  id: number
+  numero_copia: number
+  codigo_barras: string
+  total_prestamos: number
+  prestamos: {
+    id: number
+    usuario: string | null
+    fecha_prestamo: string
+    fecha_devolucion_real: string | null
+    estado: string
+  }[]
+}
+
+export type LibroHistorial = {
+  libro: Pick<Libro, 'id' | 'titulo' | 'isbn'>
+  ejemplares: LibroHistorialEjemplar[]
+  total_prestamos: number
+}
+
+export type ConfiguracionInstitucional = {
+  id: number
+  jefe_unidad_nombre: string
+  jefe_unidad_cargo: string
 }
 
 export type EstadoPortal = {
@@ -115,12 +207,14 @@ export type ReservaLibro = {
   id: number
   usuario_id: number
   libro_id: number
+  ejemplar_id: number | null
   fecha_reserva: string
   fecha_retiro: string | null
   estado: 'pendiente' | 'retirado' | 'cancelado' | 'en_cola'
   // Solo presente cuando estado === 'en_cola' — lugar en la fila (1 = siguiente).
   posicion?: number | null
   libro?: Libro
+  ejemplar?: Ejemplar
 }
 
 export type Sala = {
@@ -147,11 +241,19 @@ export type Reserva = {
   hora_prestamo_real: string | null
   hora_devolucion_real: string | null
   via: 'manual' | 'BC'
+  // Solo presentes en la respuesta de SalaController::index()/PortalController::salas().
+  plazo_confirmacion?: string
+  vencida_sin_confirmar?: boolean
 }
 
 export type SerieItem = {
   label: string
   value: number
+}
+
+export type HoraPorSala = {
+  sala: string
+  horas: SerieItem[]
 }
 
 export type ReporteResumen = {
@@ -164,6 +266,10 @@ export type ReporteResumen = {
   porAnioIngreso: SerieItem[]
   porTipoUsuario: SerieItem[]
   porHora: SerieItem[]
+  // Solo con contenido cuando tab === 'logias' / tab === 'libros' respectivamente.
+  porSala: SerieItem[]
+  porLibro: SerieItem[]
+  porHoraPorSala: HoraPorSala[]
 }
 
 export type ReporteOpciones = {
@@ -174,7 +280,7 @@ export type ReporteOpciones = {
 }
 
 export type Periodo = 'dia' | 'semana' | 'mes' | 'semestre' | 'anio'
-export type ReporteTab = 'prestamos' | 'ingresos' | 'logias'
+export type ReporteTab = 'prestamos' | 'ingresos' | 'logias' | 'libros'
 
 export type MultaPendienteUsuario = {
   usuario_id: number

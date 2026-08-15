@@ -21,7 +21,7 @@ class EquipoPrestamoTest extends TestCase
         $response = $this->postJson('/api/prestamos', [
             'usuario_id' => Usuario::factory()->create()->id,
             'tipo_item' => 'audifonos',
-            'libro_titulo' => 'AUD-999',
+            'codigo_barras' => '7509999999999',
         ]);
 
         $response->assertStatus(404);
@@ -36,7 +36,7 @@ class EquipoPrestamoTest extends TestCase
         $response = $this->postJson('/api/prestamos', [
             'usuario_id' => Usuario::factory()->create()->id,
             'tipo_item' => 'audifonos',
-            'libro_titulo' => $equipo->codigo_inventario,
+            'codigo_barras' => $equipo->codigo_barras,
         ]);
 
         $response->assertStatus(409);
@@ -51,7 +51,7 @@ class EquipoPrestamoTest extends TestCase
         $response = $this->postJson('/api/prestamos', [
             'usuario_id' => Usuario::factory()->create()->id,
             'tipo_item' => 'notebook',
-            'libro_titulo' => $equipo->codigo_inventario,
+            'codigo_barras' => $equipo->codigo_barras,
         ]);
 
         $response->assertStatus(409);
@@ -66,12 +66,49 @@ class EquipoPrestamoTest extends TestCase
         $response = $this->postJson('/api/prestamos', [
             'usuario_id' => Usuario::factory()->create()->id,
             'tipo_item' => 'notebook',
-            'libro_titulo' => $equipo->codigo_inventario,
+            'codigo_barras' => $equipo->codigo_barras,
         ]);
 
         $response->assertStatus(201)->assertJsonPath('equipo_id', $equipo->id);
 
         $this->assertDatabaseHas('equipos', ['id' => $equipo->id, 'disponible' => false]);
+    }
+
+    public function test_prestamo_de_cargador_funciona_igual_que_otros_equipos(): void
+    {
+        Sanctum::actingAs(Staff::factory()->create());
+
+        $equipo = Equipo::factory()->create(['tipo' => 'cargador']);
+
+        $response = $this->postJson('/api/prestamos', [
+            'usuario_id' => Usuario::factory()->create()->id,
+            'tipo_item' => 'cargador',
+            'codigo_barras' => $equipo->codigo_barras,
+        ]);
+
+        $response->assertStatus(201)->assertJsonPath('equipo_id', $equipo->id);
+
+        $this->assertDatabaseHas('equipos', ['id' => $equipo->id, 'disponible' => false]);
+    }
+
+    public function test_buscar_equipo_por_codigo_de_barras(): void
+    {
+        Sanctum::actingAs(Staff::factory()->create());
+
+        $equipo = Equipo::factory()->create(['tipo' => 'notebook']);
+
+        $response = $this->getJson("/api/equipos/{$equipo->codigo_barras}");
+
+        $response->assertStatus(200)->assertJsonPath('id', $equipo->id);
+    }
+
+    public function test_buscar_equipo_por_codigo_de_barras_no_encontrado_devuelve_404(): void
+    {
+        Sanctum::actingAs(Staff::factory()->create());
+
+        $response = $this->getJson('/api/equipos/7509999999999');
+
+        $response->assertStatus(404);
     }
 
     public function test_devolver_prestamo_de_equipo_libera_disponibilidad(): void

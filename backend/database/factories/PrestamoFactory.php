@@ -14,7 +14,7 @@ class PrestamoFactory extends Factory
     {
         return [
             'usuario_id' => Usuario::factory(),
-            'libro_id' => null,
+            'ejemplar_id' => null,
             'equipo_id' => null,
             'libro_titulo' => fake()->sentence(3),
             'tipo_item' => 'libro',

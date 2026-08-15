@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Ejemplar;
 use App\Models\Equipo;
 use App\Models\Libro;
 use App\Models\Prestamo;
@@ -51,10 +52,20 @@ class EnumCheckConstraintsTest extends TestCase
         Libro::factory()->create(['tipo_material' => 'invalido']);
     }
 
-    public function test_libros_estado_proceso_invalido_falla_a_nivel_de_base_de_datos(): void
+    public function test_ejemplares_estado_proceso_invalido_falla_a_nivel_de_base_de_datos(): void
     {
         $this->expectException(QueryException::class);
-        Libro::factory()->create(['estado_proceso' => 'invalido']);
+        Ejemplar::factory()->for(Libro::factory())->create(['estado_proceso' => 'invalido']);
+    }
+
+    public function test_ejemplares_estado_proceso_coleccion_movil_y_personalizado_son_validos(): void
+    {
+        $libro = Libro::factory()->create();
+        $movil = Ejemplar::factory()->for($libro)->create(['estado_proceso' => 'coleccion_movil']);
+        $personalizado = Ejemplar::factory()->for($libro)->create(['estado_proceso' => 'personalizado']);
+
+        $this->assertSame('coleccion_movil', $movil->estado_proceso);
+        $this->assertSame('personalizado', $personalizado->estado_proceso);
     }
 
     public function test_reservas_libro_estado_invalido_falla_a_nivel_de_base_de_datos(): void

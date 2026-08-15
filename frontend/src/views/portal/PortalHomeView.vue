@@ -4,13 +4,17 @@ import PortalLayout from '@/components/layout/PortalLayout.vue'
 import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import apiUsuario from '@/services/apiUsuario'
 import { useUsuarioAuthStore } from '@/stores/usuarioAuth'
-import type { EstadoPortal } from '@/types'
+import { useToast } from '@/composables/useToast'
+import { generarConstanciaNoMulta } from '@/utils/constancia'
+import type { ConfiguracionInstitucional, EstadoPortal, Usuario } from '@/types'
 
 const auth = useUsuarioAuthStore()
+const toast = useToast()
 
 const personasEnSala = ref(0)
 const capacidad = ref(220)
 const apiError = ref(false)
+const generandoConstancia = ref(false)
 
 const acciones = [
   {
@@ -46,6 +50,26 @@ async function cargar() {
 }
 
 onMounted(cargar)
+
+async function generarConstancia() {
+  generandoConstancia.value = true
+  try {
+    const [{ data: usuario }, { data: configuracion }] = await Promise.all([
+      apiUsuario.get<Usuario & { multas_pendientes: { cantidad: number; monto_total: number } }>('/mi/multas'),
+      apiUsuario.get<ConfiguracionInstitucional>('/mi/configuracion'),
+    ])
+    if (usuario.multas_pendientes.cantidad > 0) {
+      toast.error(`Tienes ${usuario.multas_pendientes.cantidad} multa(s) pendiente(s) — no se puede emitir la constancia`)
+      return
+    }
+    generarConstanciaNoMulta(usuario, configuracion)
+    toast.success('Constancia generada')
+  } catch {
+    toast.error('No se pudo generar la constancia')
+  } finally {
+    generandoConstancia.value = false
+  }
+}
 </script>
 
 <template>
@@ -103,6 +127,48 @@ onMounted(cargar)
             <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
           </svg>
         </router-link>
+
+        <a
+          href="https://umag.elogim.com/"
+          target="_blank"
+          rel="noopener"
+          class="w-full flex items-center gap-4 p-4 bg-white border border-gray-200 rounded-2xl shadow-sm hover:border-indigo-300 hover:shadow-md transition-all"
+        >
+          <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-50/80 text-indigo-600 shrink-0">
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+            </svg>
+          </div>
+          <div class="text-left min-w-0">
+            <p class="font-semibold text-gray-900">Recursos Digitales</p>
+            <p class="text-xs text-gray-500 truncate mt-0.5">Base de datos electrónica de la biblioteca</p>
+          </div>
+          <svg class="ml-auto w-5 h-5 text-gray-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
+          </svg>
+        </a>
+
+        <button
+          type="button"
+          @click="generarConstancia"
+          :disabled="generandoConstancia"
+          class="w-full flex items-center gap-4 p-4 bg-white border border-gray-200 rounded-2xl shadow-sm hover:border-indigo-300 hover:shadow-md transition-all disabled:opacity-60"
+        >
+          <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-50/80 text-indigo-600 shrink-0">
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </div>
+          <div class="text-left min-w-0">
+            <p class="font-semibold text-gray-900">Constancia de No Multa</p>
+            <p class="text-xs text-gray-500 truncate mt-0.5">
+              {{ generandoConstancia ? 'Generando…' : 'Descarga tu constancia en PDF' }}
+            </p>
+          </div>
+          <svg class="ml-auto w-5 h-5 text-gray-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
       </div>
     </div>
   </PortalLayout>

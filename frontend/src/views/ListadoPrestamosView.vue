@@ -21,12 +21,14 @@ const TIPO_LABELS: Record<string, string> = {
   libro: 'Libro',
   audifonos: 'Audífonos',
   notebook: 'Notebook',
+  cargador: 'Cargador',
 }
 
 const TIPO_BADGES: Record<string, string> = {
   libro: 'bg-purple-100 text-purple-700',
   audifonos: 'bg-indigo-100 text-indigo-700',
   notebook: 'bg-sky-100 text-sky-700',
+  cargador: 'bg-teal-100 text-teal-700',
 }
 
 async function cargar() {
@@ -144,6 +146,7 @@ const filtrados = computed(() => prestamos.value)
             <option value="libro">Libro</option>
             <option value="audifonos">Audífonos</option>
             <option value="notebook">Notebook</option>
+            <option value="cargador">Cargador</option>
           </select>
         </div>
         <div>

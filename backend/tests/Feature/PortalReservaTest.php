@@ -36,4 +36,42 @@ class PortalReservaTest extends TestCase
 
         $this->assertDatabaseHas('reservas', ['id' => $reserva->id]);
     }
+
+    public function test_usuario_no_puede_reservar_para_un_dia_futuro(): void
+    {
+        $usuario = Usuario::factory()->create();
+        Sanctum::actingAs($usuario);
+        $sala = Sala::factory()->create();
+
+        $response = $this->postJson('/api/mi/reservas', [
+            'sala_id' => $sala->id,
+            'fecha' => now()->addDay()->toDateString(),
+            'hora_inicio' => 10,
+            'hora_fin' => 12,
+            'cantidad_personas' => 2,
+            'ruts' => [$usuario->rut, Usuario::factory()->create()->rut],
+        ]);
+
+        $response->assertStatus(422)->assertJsonPath('message', 'Solo puedes reservar una sala para el día de hoy');
+        $this->assertDatabaseMissing('reservas', ['sala_id' => $sala->id]);
+    }
+
+    public function test_usuario_puede_reservar_para_el_dia_de_hoy(): void
+    {
+        $usuario = Usuario::factory()->create();
+        Sanctum::actingAs($usuario);
+        $sala = Sala::factory()->create();
+        $otro = Usuario::factory()->create();
+
+        $response = $this->postJson('/api/mi/reservas', [
+            'sala_id' => $sala->id,
+            'fecha' => now()->toDateString(),
+            'hora_inicio' => 10,
+            'hora_fin' => 12,
+            'cantidad_personas' => 2,
+            'ruts' => [$usuario->rut, $otro->rut],
+        ]);
+
+        $response->assertStatus(201);
+    }
 }

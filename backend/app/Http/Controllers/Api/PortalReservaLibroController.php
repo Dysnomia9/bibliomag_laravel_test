@@ -48,13 +48,15 @@ class PortalReservaLibroController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'codigo_barras' => ['required', 'string'],
+            'libro_id' => ['required', 'integer', 'exists:libros,id'],
         ]);
 
-        // Sin fecha_reserva/fecha_retiro: a diferencia del staff, el usuario del portal
-        // no elige fechas — se calculan automáticamente (ver ReservaLibroService).
-        [$reserva, $error, $status] = $this->reservaLibroService->reservarOEncolar(
-            $data['codigo_barras'],
+        // A diferencia del staff (que escanea el código de barras de una copia
+        // concreta), el usuario del portal navega el catálogo por título — no le
+        // importa cuál copia física le toque (ver ReservaLibroService::reservarOEncolarPorLibro()).
+        // Tampoco elige fechas, se calculan automáticamente.
+        [$reserva, $error, $status] = $this->reservaLibroService->reservarOEncolarPorLibro(
+            $data['libro_id'],
             $request->user()->id,
         );
 

@@ -28,7 +28,8 @@ const horariosBloques = [
 const salas = ref<Sala[]>([])
 const reservas = ref<Reserva[]>([])
 const apiError = ref(false)
-const selectedDate = ref(hoy)
+// Los alumnos solo pueden reservar (y ver) el día de hoy — no hay selector de fecha.
+const selectedDate = hoy
 const busqueda = ref('')
 
 const CANTIDAD_MIN = 2
@@ -40,6 +41,7 @@ const selectedBloque = ref<(typeof horariosBloques)[number] | null>(null)
 const enviando = ref(false)
 const cantidadPersonas = ref(CANTIDAD_MIN)
 const rutsReserva = ref<string[]>(Array.from({ length: CANTIDAD_MIN }, () => ''))
+const rutErrores = ref<Record<number, string>>({})
 
 watch(cantidadPersonas, (nueva) => {
   const actuales = rutsReserva.value.length
@@ -52,7 +54,7 @@ watch(cantidadPersonas, (nueva) => {
 
 async function cargar() {
   try {
-    const { data } = await apiUsuario.get('/mi/salas', { params: { fecha: selectedDate.value } })
+    const { data } = await apiUsuario.get('/mi/salas', { params: { fecha: selectedDate } })
     salas.value = data.salas
     reservas.value = data.reservas
     apiError.value = false
@@ -64,7 +66,6 @@ async function cargar() {
 }
 
 onMounted(cargar)
-watch(selectedDate, cargar)
 
 const filteredSalas = computed(() => {
   if (!busqueda.value.trim()) return salas.value
@@ -83,8 +84,8 @@ const horaActual = new Date().getHours()
 const bloqueActual = horariosBloques.find((b) => horaActual >= b.inicio && horaActual < b.fin)
 
 function reservarAhora() {
-  if (!bloqueActual || selectedDate.value !== hoy) {
-    toast.error('Solo puedes reservar "ahora" para el día de hoy, dentro del horario de atención')
+  if (!bloqueActual) {
+    toast.error('Solo puedes reservar dentro del horario de atención')
     return
   }
   const salaLibre = filteredSalas.value.find((s) => !getReserva(s.id, bloqueActual!.inicio))
@@ -100,11 +101,17 @@ function openReservaModal(sala: Sala, bloque: (typeof horariosBloques)[number]) 
   selectedBloque.value = bloque
   cantidadPersonas.value = CANTIDAD_MIN
   rutsReserva.value = Array.from({ length: CANTIDAD_MIN }, () => '')
+  rutErrores.value = {}
   modalOpen.value = true
 }
 
 function onRutInput(index: number, event: Event) {
   rutsReserva.value[index] = formatRut((event.target as HTMLInputElement).value)
+  if (rutErrores.value[index]) {
+    const restantes = { ...rutErrores.value }
+    delete restantes[index]
+    rutErrores.value = restantes
+  }
 }
 
 function primerMensajeError(e: any): string | undefined {
@@ -123,10 +130,11 @@ async function confirmarReserva() {
     return
   }
   enviando.value = true
+  rutErrores.value = {}
   try {
     await apiUsuario.post('/mi/reservas', {
       sala_id: selectedSala.value.id,
-      fecha: selectedDate.value,
+      fecha: selectedDate,
       hora_inicio: selectedBloque.value.inicio,
       hora_fin: selectedBloque.value.fin,
       cantidad_personas: cantidadPersonas.value,
@@ -136,7 +144,20 @@ async function confirmarReserva() {
     modalOpen.value = false
     await cargar()
   } catch (e: any) {
-    toast.error(primerMensajeError(e) ?? 'No se pudo crear la reserva')
+    const errores = e?.response?.data?.errors as Record<string, string[]> | undefined
+    const erroresRuts = Object.entries(errores ?? {}).filter(([campo]) => campo.startsWith('ruts.'))
+
+    if (erroresRuts.length) {
+      const mapa: Record<number, string> = {}
+      for (const [campo, mensajes] of erroresRuts) {
+        const idx = Number(campo.split('.')[1])
+        mapa[idx] = mensajes[0]
+      }
+      rutErrores.value = mapa
+      toast.error(erroresRuts.length === 1 ? 'Revisa el RUT marcado en rojo' : 'Revisa los RUT marcados en rojo')
+    } else {
+      toast.error(primerMensajeError(e) ?? 'No se pudo crear la reserva')
+    }
   } finally {
     enviando.value = false
   }
@@ -182,6 +203,16 @@ function formatFechaLarga(fecha: string) {
 
       <ApiErrorBanner v-if="apiError" />
 
+      <div class="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-5 text-sm text-amber-800">
+        <svg class="w-4 h-4 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+        </svg>
+        <p>
+          Tienes <strong>15 minutos</strong> desde que empieza el bloque para presentarte y que el personal confirme tu
+          llegada. Si nadie se presenta dentro de ese plazo, la sala queda disponible para otra persona.
+        </p>
+      </div>
+
       <div class="bg-white border border-gray-200 rounded-lg p-4 mb-5 flex flex-col sm:flex-row gap-3 sm:items-end">
         <div class="flex-1">
           <label class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Buscar sala</label>
@@ -192,17 +223,11 @@ function formatFechaLarga(fecha: string) {
             class="w-full px-3.5 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none text-sm"
           />
         </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Fecha</label>
-          <input
-            v-model="selectedDate"
-            type="date"
-            :min="hoy"
-            class="w-full px-3.5 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none text-sm"
-          />
-        </div>
+        <p class="text-xs text-gray-400 sm:pb-2.5">
+          Solo puedes reservar para <strong>hoy</strong>
+        </p>
         <button
-          v-if="bloqueActual && selectedDate === hoy"
+          v-if="bloqueActual"
           @click="reservarAhora"
           class="px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium shrink-0"
         >
@@ -220,10 +245,10 @@ function formatFechaLarga(fecha: string) {
                   v-for="b in horariosBloques"
                   :key="b.inicio"
                   class="px-3 py-3 text-center text-xs font-medium uppercase min-w-[110px]"
-                  :class="selectedDate === hoy && b.inicio === bloqueActual?.inicio ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500'"
+                  :class="b.inicio === bloqueActual?.inicio ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500'"
                 >
                   {{ b.label }}
-                  <span v-if="selectedDate === hoy && b.inicio === bloqueActual?.inicio" class="block text-[10px] normal-case font-semibold text-indigo-500">Ahora</span>
+                  <span v-if="b.inicio === bloqueActual?.inicio" class="block text-[10px] normal-case font-semibold text-indigo-500">Ahora</span>
                 </th>
               </tr>
             </thead>
@@ -302,16 +327,18 @@ function formatFechaLarga(fecha: string) {
             <div class="space-y-2">
               <label class="block text-sm font-medium text-gray-700">RUT de cada persona</label>
               <p class="text-xs text-gray-400 -mt-1 mb-1">Deben ser RUT de usuarios registrados en el sistema</p>
-              <input
-                v-for="(_, idx) in rutsReserva"
-                :key="idx"
-                :value="rutsReserva[idx]"
-                @input="onRutInput(idx, $event)"
-                type="text"
-                :placeholder="`RUT persona ${idx + 1}`"
-                maxlength="12"
-                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-              />
+              <div v-for="(_, idx) in rutsReserva" :key="idx">
+                <input
+                  :value="rutsReserva[idx]"
+                  @input="onRutInput(idx, $event)"
+                  type="text"
+                  :placeholder="`RUT persona ${idx + 1}`"
+                  maxlength="12"
+                  class="w-full px-4 py-2.5 border rounded-lg focus:ring-2 outline-none"
+                  :class="rutErrores[idx] ? 'border-red-400 ring-1 ring-red-200 focus:ring-red-400' : 'border-gray-300 focus:ring-indigo-500'"
+                />
+                <p v-if="rutErrores[idx]" class="text-xs text-red-600 mt-1">{{ rutErrores[idx] }}</p>
+              </div>
             </div>
           </div>
 

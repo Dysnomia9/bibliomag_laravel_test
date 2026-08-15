@@ -2,7 +2,7 @@
 
 return [
     //  ajustar aquí sintocar código si la biblioteca define una tarifa oficial distinta.
-    'monto_dia' => 300,
+    'monto_dia' => 15,
 
     // Días de gracia antes de empezar a cobrar (0 = se cobra desde el primer día).
     'dias_gracia' => 0,

@@ -19,7 +19,7 @@ const moduleLinks = [
   { name: 'reportes', label: 'Reportes', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z', shortcut: '6' },
 ]
 
-type AdminColor = 'indigo' | 'amber' | 'emerald' | 'violet' | 'sky' | 'rose' | 'teal' | 'red'
+type AdminColor = 'indigo' | 'amber' | 'emerald' | 'violet' | 'sky' | 'rose' | 'teal' | 'red' | 'orange' | 'fuchsia' | 'slate'
 
 const adminLinks: { name: string; label: string; icon: string; adminOnly: boolean; color: AdminColor }[] = [
   { name: 'usuarios', label: 'Usuarios', icon: 'M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1a4 4 0 100-8 4 4 0 000 8zm6 3a4 4 0 00-3-3.87M9 12a4 4 0 100-8 4 4 0 000 8z', adminOnly: false, color: 'indigo' },
@@ -27,9 +27,13 @@ const adminLinks: { name: string; label: string; icon: string; adminOnly: boolea
   { name: 'listado-libros', label: 'Listado Libros', icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253', adminOnly: false, color: 'emerald' },
   { name: 'catalogacion-libros', label: 'Catalogación de Libros', icon: 'M12 4.5v15m0-15c-2.485 0-4.5.672-6 2.25v13.5c1.5-1.578 3.515-2.25 6-2.25s4.5.672 6 2.25V6.75c-1.5-1.578-3.515-2.25-6-2.25z', adminOnly: true, color: 'violet' },
   { name: 'estado-libro', label: 'Estado de Libro', icon: 'M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z', adminOnly: false, color: 'sky' },
+  { name: 'cambio-masivo-estado', label: 'Cambio Masivo de Estado', icon: 'M4 7h16M4 12h10m-10 5h16', adminOnly: true, color: 'orange' },
+  { name: 'historial-estado-libro', label: 'Historial de Estado', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z', adminOnly: false, color: 'slate' },
+  { name: 'historial-prestamos-libro', label: 'Historial de Libros', icon: 'M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25', adminOnly: false, color: 'fuchsia' },
   { name: 'codigo-qr', label: 'Código QR', icon: 'M4 4h6v6H4V4zm10 0h6v6h-6V4zM4 14h6v6H4v-6zm10 3h3m3 0h-3m0 0v3m0-3v-3', adminOnly: false, color: 'rose' },
   { name: 'equipos', label: 'Equipos', icon: 'M20.25 7.5l-8.25 4.5L3.75 7.5M3.75 7.5l8.25-4.5 8.25 4.5M3.75 7.5v9l8.25 4.5m0-9v9m0-9l8.25-4.5m-8.25 4.5l8.25 4.5m0 0v-9', adminOnly: true, color: 'teal' },
   { name: 'multas-pendientes', label: 'Multas Pendientes', icon: 'M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-8.99 3.75h.008v.008h-.008v-.008z', adminOnly: false, color: 'red' },
+  { name: 'administracion', label: 'Administración', icon: 'M10.343 3.94c.09-.542.56-.94 1.11-.94h1.093c.55 0 1.02.398 1.11.94l.149.894c.07.424.384.764.78.93.398.164.855.142 1.205-.108l.737-.527a1.125 1.125 0 011.45.12l.773.774c.39.389.44 1.002.12 1.45l-.527.737c-.25.35-.272.806-.107 1.204.165.397.505.71.93.78l.893.15c.543.09.94.559.94 1.109v1.094c0 .55-.397 1.02-.94 1.11l-.893.149c-.425.07-.765.383-.93.78-.165.398-.143.854.107 1.204l.527.738c.32.447.269 1.06-.12 1.45l-.774.773a1.125 1.125 0 01-1.449.12l-.738-.527c-.35-.25-.806-.272-1.203-.107-.397.165-.71.505-.781.929l-.149.894c-.09.542-.56.94-1.11.94h-1.094c-.55 0-1.019-.398-1.11-.94l-.148-.894c-.071-.424-.384-.764-.781-.93-.398-.164-.854-.142-1.204.108l-.738.527c-.447.32-1.06.269-1.45-.12l-.773-.774a1.125 1.125 0 01-.12-1.45l.527-.737c.25-.35.273-.806.108-1.204-.165-.397-.505-.71-.93-.78l-.894-.15c-.542-.09-.94-.56-.94-1.109v-1.094c0-.55.398-1.02.94-1.11l.894-.149c.424-.07.765-.383.93-.78.165-.398.143-.854-.107-1.204l-.527-.738a1.125 1.125 0 01.12-1.45l.773-.773a1.125 1.125 0 011.45-.12l.737.527c.35.25.807.272 1.204.107.397-.165.71-.505.78-.929l.15-.894z', adminOnly: true, color: 'slate' },
 ]
 
 const ADMIN_COLORS: Record<AdminColor, { icon: string; iconHover: string; border: string; topBorder: string }> = {
@@ -41,6 +45,9 @@ const ADMIN_COLORS: Record<AdminColor, { icon: string; iconHover: string; border
   rose: { icon: 'bg-rose-50 text-rose-600', iconHover: 'group-hover:bg-rose-600', border: 'hover:border-rose-300', topBorder: 'border-t-rose-400' },
   teal: { icon: 'bg-teal-50 text-teal-600', iconHover: 'group-hover:bg-teal-600', border: 'hover:border-teal-300', topBorder: 'border-t-teal-400' },
   red: { icon: 'bg-red-50 text-red-600', iconHover: 'group-hover:bg-red-600', border: 'hover:border-red-300', topBorder: 'border-t-red-400' },
+  orange: { icon: 'bg-orange-50 text-orange-600', iconHover: 'group-hover:bg-orange-600', border: 'hover:border-orange-300', topBorder: 'border-t-orange-400' },
+  fuchsia: { icon: 'bg-fuchsia-50 text-fuchsia-600', iconHover: 'group-hover:bg-fuchsia-600', border: 'hover:border-fuchsia-300', topBorder: 'border-t-fuchsia-400' },
+  slate: { icon: 'bg-slate-100 text-slate-600', iconHover: 'group-hover:bg-slate-600', border: 'hover:border-slate-300', topBorder: 'border-t-slate-400' },
 }
 
 const adminLinksVisibles = () => adminLinks.filter((link) => !link.adminOnly || auth.staff?.rol === 'admin')

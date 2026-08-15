@@ -12,12 +12,7 @@ class LibroFactory extends Factory
     public function definition(): array
     {
         return [
-            'codigo_barras' => fake()->unique()->ean13(),
             'titulo' => fake()->sentence(3),
-            'autor' => fake()->name(),
-            'categoria' => fake()->randomElement(['Novela', 'Ciencia', 'Historia', 'Tecnología']),
-            'disponible' => true,
-            'estado_proceso' => 'en_estante',
         ];
     }
 }

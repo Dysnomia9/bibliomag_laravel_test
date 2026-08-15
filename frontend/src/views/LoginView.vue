@@ -35,8 +35,8 @@ async function onSubmit() {
           <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-gray-200 bg-white shadow-md overflow-hidden">
             <img :src="logoUmag" alt="Universidad de Magallanes" class="h-full w-full object-cover" />
           </div>
-          <h2 class="text-2xl font-serif font-bold text-gray-900">Bienvenido</h2>
-          <p class="mt-1 text-sm text-gray-500">Panel de administración</p>
+          <h2 class="text-2xl font-serif font-bold text-gray-900">Administración</h2>
+          <p class="mt-1 text-sm text-gray-500">Panel para personal de biblioteca</p>
         </div>
 
         <form @submit.prevent="onSubmit" class="space-y-5">

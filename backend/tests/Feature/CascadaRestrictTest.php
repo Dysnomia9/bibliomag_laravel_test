@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Ejemplar;
 use App\Models\Entrada;
 use App\Models\Equipo;
 use App\Models\Libro;
@@ -43,13 +44,22 @@ class CascadaRestrictTest extends TestCase
         $usuario->delete();
     }
 
-    public function test_no_se_puede_borrar_un_libro_con_prestamos(): void
+    public function test_no_se_puede_borrar_un_ejemplar_con_prestamos(): void
     {
-        $libro = Libro::factory()->create();
-        Prestamo::factory()->create(['libro_id' => $libro->id, 'tipo_item' => 'libro']);
+        $ejemplar = Ejemplar::factory()->for(Libro::factory())->create();
+        Prestamo::factory()->create(['ejemplar_id' => $ejemplar->id, 'tipo_item' => 'libro']);
 
         $this->expectException(QueryException::class);
-        $libro->delete();
+        $ejemplar->delete();
+    }
+
+    public function test_no_se_puede_borrar_un_ejemplar_con_reservas(): void
+    {
+        $ejemplar = Ejemplar::factory()->for(Libro::factory())->create();
+        ReservaLibro::factory()->create(['libro_id' => $ejemplar->libro_id, 'ejemplar_id' => $ejemplar->id]);
+
+        $this->expectException(QueryException::class);
+        $ejemplar->delete();
     }
 
     public function test_no_se_puede_borrar_un_libro_con_reservas(): void
@@ -61,10 +71,19 @@ class CascadaRestrictTest extends TestCase
         $libro->delete();
     }
 
+    public function test_no_se_puede_borrar_un_libro_con_ejemplares(): void
+    {
+        $libro = Libro::factory()->create();
+        Ejemplar::factory()->for($libro)->create();
+
+        $this->expectException(QueryException::class);
+        $libro->delete();
+    }
+
     public function test_no_se_puede_borrar_un_equipo_con_prestamos(): void
     {
         $equipo = Equipo::factory()->create();
-        Prestamo::factory()->create(['equipo_id' => $equipo->id, 'tipo_item' => $equipo->tipo, 'libro_id' => null]);
+        Prestamo::factory()->create(['equipo_id' => $equipo->id, 'tipo_item' => $equipo->tipo]);
 
         $this->expectException(QueryException::class);
         $equipo->delete();

@@ -47,7 +47,16 @@
       "Bash(grep -n 'table\\\\|protected $fillable' backend/app/Models/Reserva.php)",
       "Bash(grep -n 'table\\\\|protected $fillable' backend/app/Models/ReservaLibro.php)",
       "Bash(git rm *)",
-      "Bash(curl -s http://localhost:8000/)"
+      "Bash(curl -s http://localhost:8000/)",
+      "Bash(gh auth *)",
+      "mcp__claude_ai_GitHub__get_me",
+      "Bash(git fetch *)",
+      "Bash(git branch *)",
+      "Bash(git -c advice.detachedHead=false checkout reorganizado)",
+      "Bash(curl -s -H 'Authorization: Bearer 47|tCpONfLGj7zJKYbmBVLWkPK0GMtynwGIGmvIGMwn9654a1e0' -H 'Accept: application/json' http://localhost:8000/api/libros?q=Python)",
+      "Bash(curl -s -X PATCH -H 'Authorization: Bearer 47|tCpONfLGj7zJKYbmBVLWkPK0GMtynwGIGmvIGMwn9654a1e0' -H 'Accept: application/json' -H 'Content-Type: application/json' -d '{\"estado_proceso\":\"coleccion_movil\"}' http://localhost:8000/api/ejemplares/36/estado)",
+      "Bash(docker compose exec backend php artisan tinker '--execute= *)",
+      "Bash(curl -s -X PATCH -H 'Authorization: Bearer 47|tCpONfLGj7zJKYbmBVLWkPK0GMtynwGIGmvIGMwn9654a1e0' -H 'Accept: application/json' http://localhost:8000/api/prestamos/425/devolver)"
     ]
   }
 }

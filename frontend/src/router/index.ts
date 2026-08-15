@@ -108,6 +108,22 @@ const router = createRouter({
       component: () => import('@/views/EstadoLibroView.vue'),
     },
     {
+      path: '/libros/cambio-masivo',
+      name: 'cambio-masivo-estado',
+      component: () => import('@/views/CambioMasivoEstadoView.vue'),
+      meta: { requiresAdmin: true },
+    },
+    {
+      path: '/libros/historial-estado',
+      name: 'historial-estado-libro',
+      component: () => import('@/views/HistorialEstadoLibroView.vue'),
+    },
+    {
+      path: '/libros/historial-prestamos',
+      name: 'historial-prestamos-libro',
+      component: () => import('@/views/HistorialPrestamosLibroView.vue'),
+    },
+    {
       path: '/equipos',
       name: 'equipos',
       component: () => import('@/views/EquiposView.vue'),
@@ -117,6 +133,12 @@ const router = createRouter({
       path: '/reportes/multas-pendientes',
       name: 'multas-pendientes',
       component: () => import('@/views/MultasPendientesView.vue'),
+    },
+    {
+      path: '/administracion',
+      name: 'administracion',
+      component: () => import('@/views/AdministracionView.vue'),
+      meta: { requiresAdmin: true },
     },
   ],
 })

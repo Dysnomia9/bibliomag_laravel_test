@@ -35,6 +35,29 @@ class PortalController extends Controller
         ]);
     }
 
+    /**
+     * Autoservicio de la Constancia de No Multa (mismo dato que
+     * UsuarioController::porRut(), pero acotado al propio usuario autenticado del
+     * portal — no recibe RUT por parámetro para no poder consultar la deuda de otra
+     * persona).
+     */
+    public function misMultas(Request $request)
+    {
+        $usuario = $request->user();
+
+        $multas = $usuario->prestamos()
+            ->where('multa_estado', 'pendiente')
+            ->selectRaw('COUNT(*) as cantidad, COALESCE(SUM(multa_monto), 0) as monto_total')
+            ->first();
+
+        $usuario->setAttribute('multas_pendientes', [
+            'cantidad' => (int) $multas->cantidad,
+            'monto_total' => (int) $multas->monto_total,
+        ]);
+
+        return response()->json($usuario);
+    }
+
     public function registrarEntrada(Request $request)
     {
         $data = $request->validate([
@@ -72,13 +95,20 @@ class PortalController extends Controller
 
     public function catalogo(Request $request)
     {
-        $query = Libro::where('estado_proceso', 'en_estante');
+        // Solo obras con al menos un ejemplar en estante (aunque esté prestado ahora
+        // mismo — el usuario puede reservarlo/unirse a la cola desde el portal).
+        $query = Libro::whereHas('ejemplares', fn ($q) => $q->where('estado_proceso', 'en_estante'))
+            ->with(['autores', 'categorias'])
+            ->withCount([
+                'ejemplares as ejemplares_total' => fn ($q) => $q->where('estado_proceso', 'en_estante'),
+                'ejemplares as ejemplares_disponibles' => fn ($q) => $q->where('estado_proceso', 'en_estante')->where('disponible', true),
+            ]);
 
         if ($busqueda = $request->query('q')) {
             $query->where(function ($q) use ($busqueda) {
                 $q->where('titulo', 'ilike', "%{$busqueda}%")
-                    ->orWhere('autor', 'ilike', "%{$busqueda}%")
-                    ->orWhere('categoria', 'ilike', "%{$busqueda}%");
+                    ->orWhereHas('autores', fn ($a) => $a->where('nombre', 'ilike', "%{$busqueda}%"))
+                    ->orWhereHas('categorias', fn ($c) => $c->where('nombre', 'ilike', "%{$busqueda}%"));
             });
         }
 
@@ -92,7 +122,11 @@ class PortalController extends Controller
         $fecha = $request->query('fecha', now()->toDateString());
 
         $salas = Sala::orderBy('id')->get();
-        $reservas = Reserva::where('fecha', $fecha)->get();
+        $reservas = Reserva::where('fecha', $fecha)->where('estado', '!=', 'no_show')->get();
+
+        // Misma expiración perezosa que SalaController::index() — si el bloque de 15
+        // minutos para confirmar ya venció, el estudiante ve la sala libre de nuevo.
+        $reservas = $reservas->reject(fn ($r) => $this->reservaSalaService->liberarSiVencida($r))->values();
 
         return response()->json([
             'fecha' => $fecha,
@@ -117,6 +151,12 @@ class PortalController extends Controller
             'ruts.*.exists' => 'Uno de los RUT ingresados no corresponde a un usuario registrado en el sistema.',
             'ruts.*.distinct' => 'No puedes ingresar el mismo RUT más de una vez en la misma reserva.',
         ]);
+
+        // Los alumnos solo pueden reservar para el día de hoy — a diferencia del staff
+        // (SalaController::storeReserva), que sí puede reservar con anticipación.
+        if ($data['fecha'] !== now()->toDateString()) {
+            return response()->json(['message' => 'Solo puedes reservar una sala para el día de hoy'], 422);
+        }
 
         if (count($data['ruts']) !== $data['cantidad_personas']) {
             return response()->json(['message' => 'Debe ingresar un RUT por cada persona indicada'], 422);

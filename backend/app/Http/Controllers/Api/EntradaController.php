@@ -113,4 +113,28 @@ class EntradaController extends Controller
 
         return response()->json($entrada, 201);
     }
+
+    public function storeVisita(Request $request)
+    {
+        $data = $request->validate([
+            'rut' => ['required', 'string'],
+            'nombre' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        // Igual que storeExterno(): no está en la base institucional, se registra tal
+        // cual declara el RUT/nombre. Se distingue de "Externo" solo para reportería/UI
+        // (badge "Visita" en vez de "Externo" en el historial).
+        $ahora = now();
+        $entrada = Entrada::create([
+            'rut_externo' => $data['rut'],
+            'nombre_externo' => $data['nombre'] ?? null,
+            'es_visita' => true,
+            'via' => 'manual',
+            'codigo_barras' => config('horizon_barcodes.puesto_generico'),
+            'fecha_hora_entrada' => $ahora,
+            'fecha_hora_salida' => $ahora,
+        ]);
+
+        return response()->json($entrada, 201);
+    }
 }

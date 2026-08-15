@@ -18,13 +18,37 @@ Todos los módulos originalmente planeados (usuarios, entrada, préstamos,
 salas, reportes) ya están implementados de punta a punta — no quedan rutas
 placeholder tipo "Próximamente". Además existen dos capas de autenticación
 separadas (`staff` y `usuario`) y un portal de autoservicio para usuarios
-finales que no existía en el plan inicial. También hay catalogación de
-libros (formato MARC/Dewey-lite, solo admin) con gestión de estado físico
-del ejemplar ("Estado de Libro", todo staff) — es el primer punto del
-sistema con un chequeo de rol real (`staff.rol`), ver convención 7 más
-abajo. **No asumas que un módulo "falta"
-por lo que digan README/tesis/documentación externa — verifica el código
-real en `backend/` y `frontend/src/` primero.**
+finales que no existía en el plan inicial.
+
+**Catalogación de libros, ampliada a fondo el 2026-08-15**: el modelo
+`Libro` (registro bibliográfico — título/ISBN/autores/categorías/carreras,
+estas tres últimas N:M vía `Autor`/`Categoria`/`Carrera`) se separó de
+`Ejemplar` (copia física — código de barras propio, `numero_copia`,
+`estado_proceso`, `ubicacion_id`, disponibilidad) — un libro ya puede tener
+varias copias reales, cerrando el gap #2 del checklist de Horizon de abajo.
+Encima de eso se agregaron: estados de ejemplar personalizados
+(administrables, más allá de los 6 fijos), cambio masivo de estado con
+confirmación seria ("escribe CONFIRMAR"), historial de cambios de estado
+por ejemplar, historial de préstamos por libro/copia, generador de código
+de barras secuencial, catálogo de ubicaciones administrable, reportes
+nuevos (top de libros prestados, uso de logias por sala + heatmap hora×sala),
+botón "Visita" en Entrada, Configuración Institucional editable +
+Constancia de No Multa en PDF (client-side, `jsPDF`), generable tanto desde
+Usuarios (staff, por RUT) como en autoservicio desde el portal virtual
+(`GET /mi/multas`), y un flujo de confirmación de asistencia de 15 minutos
+para reservas de sala con liberación automática por no-show (más la
+restricción de que un alumno solo puede reservar sala para el día de hoy)
+— ver Gotchas para el detalle de cada uno. **Actualización (2026-08-16)**:
+los equipos (audífonos/notebooks/cargadores — este último tipo nuevo) ya
+no se prestan tipeando un código de inventario en texto libre, se prestan
+escaneando `codigo_barras` real, igual que los libros — ver Gotchas. Es el
+primer punto del sistema con un chequeo de rol real (`staff.rol`) más allá
+de la catalogación misma, ver convención 7 más abajo.
+
+**No asumas que un módulo "falta" por lo que digan README/tesis/
+documentación externa — verifica el código real en `backend/` y
+`frontend/src/` primero**, y no asumas que esta lista sigue completa sin
+volver a mirar el código si pasó tiempo desde 2026-08-15.
 
 ## Cobertura funcional vs. Horizon (checklist de evaluación de tesis)
 
@@ -36,30 +60,32 @@ profesor evaluando la tesis probablemente busque estos 13 puntos:
 | # | Función | Estado | Evidencia / notas |
 |---|---|---|---|
 | 1 | Gestión de libros | ✅ Completo | `LibroController::index/store/update/cambiarEstado`, `CatalogacionLibrosView.vue` (solo admin), catalogación MARC/Dewey-lite |
-| 2 | Gestión de ejemplares | ⚠️ Parcial | 1 fila `Libro` = 1 copia física, sin modelo `Ejemplar`; **no soporta múltiples copias del mismo título** (ver Deuda técnica). Sí gestiona el estado físico de esa única copia (`estado_proceso`, `EstadoLibroView.vue`) |
+| 2 | Gestión de ejemplares | ✅ Completo (desde 2026-08-15) | Modelo `Ejemplar` real, separado de `Libro` (obra) — soporta múltiples copias del mismo título (`numero_copia`, código de barras propio por copia), cada una con su `estado_proceso` independiente (`EstadoLibroView.vue`, `EjemplarController::cambiarEstado`), estados personalizados administrables, cambio masivo de estado, e historial de cambios (`EjemplarEstadoHistorial`) |
 | 3 | Préstamos | ✅ Completo | `PrestamoController::store`, incluye cálculo de multa por atraso desde 2026-07-17 (ver Gotchas) |
 | 4 | Devoluciones | ✅ Completo | `PrestamoController::devolver` |
 | 5 | Reservas | ✅ Completo | Salas/logias (`SalaController` + `ReservaSalaService`) y libros para retiro (`ReservaLibroController` + `PortalReservaLibroController`, con cola de espera FIFO — ver Gotchas) |
-| 6 | Historial | ⚠️ Parcial / distribuido | Por usuario: completo (`PrestamoView.vue` lista todos sus préstamos y reservas, no solo los activos). Global de préstamos: `ListadoPrestamosView.vue` sin filtro de fecha. Entradas: `EntradaController::index` solo admite un día exacto (`?fecha=`), sin rango ni búsqueda por RUT/usuario — no hay forma de auditar la asistencia histórica de una persona puntual |
+| 6 | Historial | ⚠️ Parcial / distribuido | Por usuario: completo (`PrestamoView.vue` lista todos sus préstamos y reservas, no solo los activos). Global de préstamos: `ListadoPrestamosView.vue` sin filtro de fecha. Por libro/copia: nuevo (2026-08-15), completo — `LibroController::historial` + `HistorialPrestamosLibroView.vue` busca por título/código y lista cada copia con su historial de préstamos y conteo. Estado de ejemplares: nuevo (2026-08-15), completo — `EjemplarController::historialEstado` + `HistorialEstadoLibroView.vue`. Entradas sigue siendo el eslabón débil: `EntradaController::index` solo admite un día exacto (`?fecha=`), sin rango ni búsqueda por RUT/usuario — no hay forma de auditar la asistencia histórica de una persona puntual |
 | 7 | Dashboard | ✅ Completo | `DashboardController::resumen` + `DashboardView.vue` |
 | 8 | Reportes | ✅ Completo | `ReporteController` (agregaciones `GROUP BY` por período/carrera/sexo/tipo/hora), `ReportesView.vue` con gráficos |
 | 9 | Estadísticas | ✅ Cubierto (dentro de Dashboard + Reportes) | No hay un menú "Estadísticas" separado, pero los desgloses (`porCarrera`, `porSexo`, `porAnioIngreso`, `porTipoUsuario`, `porHora`) existen en `ReporteResumen` |
-| 10 | Búsqueda avanzada | ⚠️ Parcial | Usuarios (`UsuarioController::index`): multi-campo real (`nombre`/`apellido`/`rut`/`carrera`) + filtros `tipo`/`activo`. Préstamos: filtros `usuario_id`/`estado`/`tipo_item`. Libros (`LibroController::index`): busca por `titulo`/`autor`/`codigo_barras`, pero **sin filtro de categoría/disponibilidad/estado_proceso** en el backend. Entradas: solo por fecha exacta, el más débil de los cuatro |
-| 11 | Consulta de disponibilidad | ✅ Completo | `Libro.disponible` + `estado_proceso`, `LibroController::buscarPorCodigo` (chequeo en tiempo real al prestar/reservar), disponibilidad de salas por bloque horario (`GET /salas?fecha=`), catálogo del portal filtrado por disponibilidad |
-| 12 | Integración con la base institucional | ⚠️ Parcial — ojo con este punto en la defensa | **No es una integración de datos/API real con Horizon** (no hay sync ni llamadas a una BD/API externa). Es una capa de **compatibilidad de códigos de barra** para convivir físicamente con los lectores Horizon: `config/horizon_barcodes.php`, `ReservaSalaService::escanearLogia()`, comando `horizon:codigos-logia`. Los códigos reales de Horizon **todavía no están cargados** (placeholder inventado `'62572'`) |
+| 10 | Búsqueda avanzada | ⚠️ Parcial (mejoró en libros el 2026-08-15) | Usuarios (`UsuarioController::index`): multi-campo real (`nombre`/`apellido`/`rut`/`carrera`) + filtros `tipo`/`activo`. Préstamos: filtros `usuario_id`/`estado`/`tipo_item`. Libros (`LibroController::index`): ahora sí tiene filtros reales en backend — `categoria_id`/`autor_id`/`carrera_id`/`tipo_material`/`estado_proceso` (+ `estado_personalizado_id`), además del texto libre por título/ISBN/autor/código de cualquier copia; `CambioMasivoEstadoView.vue` suma un filtro de ubicación, pero para operaciones masivas, no para búsqueda. Entradas sigue siendo el más débil de los cuatro: solo por fecha exacta |
+| 11 | Consulta de disponibilidad | ✅ Completo | `Ejemplar.disponible` + `estado_proceso` (por copia, desde el split de Libro/Ejemplar), `EjemplarController::buscarPorCodigo` (chequeo en tiempo real al prestar/reservar), disponibilidad de salas por bloque horario (`GET /salas?fecha=`), catálogo del portal filtrado por disponibilidad agregada de las copias de cada título |
+| 12 | Integración con la base institucional | ⚠️ Parcial — ojo con este punto en la defensa | **No es una integración de datos/API real con Horizon** (no hay sync ni llamadas a una BD/API externa). Es una capa de **compatibilidad de códigos de barra** para convivir físicamente con los lectores Horizon: `config/horizon_barcodes.php`, `ReservaSalaService::escanearLogia()`, comando `horizon:codigos-logia`. Los códigos reales de Horizon **todavía no están cargados** (placeholder inventado `'62572'`). No confundir con el botón "Base de Datos Digital"/"Recursos Digitales" (`UsuariosView.vue`, `PortalHomeView.vue`, agregado 2026-08-15) — es solo un link de salida a `https://umag.elogim.com/` (catálogo externo de recursos digitales de la universidad), sin ninguna integración de datos, sin relación con Horizon |
 | 13 | QR | ✅ Completo y funcional | `CodigoAcceso` (código de acceso compartido, regenerable), renderizado real con la librería `qrcode` (`CodigoQrView.vue`, canvas + descarga PNG), validado server-side en `PortalController::registrarEntrada` cuando `via === 'qr'`. Nota: el campo `Usuario.qr_code` es vestigial, no forma parte de este flujo |
 
-**Resumen honesto**: 9/13 sin reservas, 4/13 con brechas reales y
-verificables en el código (ejemplares múltiples, historial con rango de
-fechas/búsqueda por persona, filtros avanzados en libros/entradas, e
-integración real con Horizon más allá de compatibilidad de código de
-barras). El propio profesor considera fuera de alcance razonable
-adquisiciones/seriales/proveedores/multas avanzadas — las multas básicas
-(tarifa fija por día, sin bloqueo de nuevos préstamos por deuda) ya están
-cubiertas por el punto 3. Antes de citar un "% de cobertura" en la defensa,
-decidir si las 4 brechas de arriba importan para el alcance declarado de la
-tesis, y volver a correr esta tabla contra el código si pasó tiempo desde
-2026-07-17.
+**Resumen honesto (actualizado 2026-08-15)**: 10/13 sin reservas, 3/13 con
+brechas reales y verificables en el código (historial de entradas sin
+rango de fechas/búsqueda por persona, búsqueda avanzada de entradas —la de
+libros ya se resolvió—, e integración real con Horizon más allá de
+compatibilidad de código de barras). El gap de ejemplares múltiples (punto
+2) se cerró el 2026-08-15 con el modelo `Ejemplar`. El propio profesor
+considera fuera de alcance razonable adquisiciones/seriales/proveedores/
+multas avanzadas — las multas básicas (tarifa fija por día, $15 desde
+2026-08-15, sin bloqueo de nuevos préstamos por deuda) ya están cubiertas
+por el punto 3. Antes de citar un "% de cobertura" en la defensa, decidir
+si las 3 brechas de arriba importan para el alcance declarado de la tesis,
+y volver a correr esta tabla contra el código si pasó tiempo desde
+2026-08-15.
 
 ## Stack
 
@@ -106,8 +132,9 @@ backend/
   docker-entrypoint.sh        # solo runtime: .env si falta, migra, seedea si hace falta, sirve
   config/horizon_barcodes.php  # código de barras genérico de "puesto de trabajo" +
                                  mapeo codigo_barras->nombre de logia (para el comando de import)
-  config/multas.php            # tarifa/gracia/tope de la multa por atraso — ajustar acá,
-                                 nunca hardcodear el monto en el controller/service
+  config/multas.php            # tarifa/gracia/tope de la multa por atraso — $15/día desde
+                                 2026-08-15 (antes $300) — ajustar acá, nunca hardcodear el
+                                 monto en el controller/service
   config/database.php          # DB_SSLMODE ya es env()-driven (default 'prefer'); en
                                   .env.production.example se fuerza a 'require'
   config/reservas_libro.php    # días para retirar un libro una vez apartado
@@ -117,10 +144,18 @@ backend/
                                   usuario autenticado o IP, aplicado a toda la API vía
                                   $middleware->throttleApi() en bootstrap/app.php
   app/Models/
-    Staff (con `activo`, ver Gotchas), Usuario, Entrada, Prestamo (con
+    Staff (con `activo`), Usuario, Entrada (con `es_visita`), Prestamo (con
     prestado_por_staff_id/devuelto_por_staff_id/multa_pagada_por_staff_id,
-    FK reales a staff — ver Gotchas), Sala, Reserva, Libro, ReservaLibro,
-    Equipo, CodigoAcceso
+    ejemplar_id — FK reales), Sala, Reserva (con plazoConfirmacion()/
+    estaVencidaSinConfirmar(), ver Gotchas), Libro (registro bibliográfico:
+    autores()/categorias()/carreras()/ejemplares(), N:M vía pivotes),
+    Ejemplar (copia física: libro()/estadoPersonalizado()/ubicacion()/
+    prestamos()/reservasLibro()/historialEstado()), ReservaLibro,
+    Equipo, CodigoAcceso, Autor, Categoria, Carrera (catálogos "escribe y
+    crea", ver convención 8), EstadoLibroPersonalizado, Ubicacion
+    (catálogos admin-only, ver convención 8), EjemplarEstadoHistorial,
+    ConfiguracionInstitucional (fila única id=1, nombre/cargo de quien
+    firma la Constancia de No Multa)
   app/Http/Middleware/
     EnsureIsStaff, EnsureIsUsuario     # separan los dos guards de Sanctum
     EnsureIsAdmin (alias 'admin')      # chequea staff.rol === 'admin'; se aplica ADEMÁS
@@ -128,27 +163,61 @@ backend/
                                           no lo reemplaza
   app/Http/Controllers/Api/
     AuthController, UsuarioAuthController   # login staff vs. login usuario (portal)
-    DashboardController, UsuarioController, EntradaController, PrestamoController,
-    SalaController, ReporteController (incluye multasPendientes()), CodigoAccesoController,
-    StaffController (GET /staff, solo para autocompletar "registrado/prestado/devuelto por"
-    en el frontend), EquipoController (catálogo de audífonos/notebooks, store/cambiarActivo
-    solo admin)
-    LibroController    # index/buscarPorCodigo (todo staff); store/update (solo admin,
-                          catalogación MARC/Dewey-lite); cambiarEstado (todo staff,
-                          gestiona libros.estado_proceso — ver Gotchas)
+    DashboardController, UsuarioController, EntradaController (incluye
+    storeVisita()), PrestamoController, SalaController (incluye
+    confirmarLlegada()/liberarReserva(), ver Gotchas), ReporteController
+    (incluye multasPendientes(), y en resumen() los tabs 'libros'/'logias'
+    con porLibro/porSala/porHoraPorSala), CodigoAccesoController,
+    StaffController (GET /staff, solo para autocompletar "registrado/
+    prestado/devuelto por" en el frontend), EquipoController (catálogo de
+    audífonos/notebooks/cargadores — buscarPorCodigo todo staff,
+    store/cambiarActivo solo admin, ver Gotchas 2026-08-16)
+    LibroController    # opera SOLO sobre el registro bibliográfico (obra):
+                          index (filtros q/categoria_id/autor_id/carrera_id/
+                          tipo_material/estado_proceso)/show/store/update
+                          (solo admin, catalogación MARC/Dewey-lite + crea
+                          el primer Ejemplar en la misma transacción)/
+                          historial() (préstamos por copia, todo staff)
+    EjemplarController  # opera sobre la copia física: buscarPorCodigo/store
+                          ("agregar copia" a un libro existente, solo admin)/
+                          siguienteCodigoBarras (generador secuencial UMAG######,
+                          solo admin)/cambiarEstado (todo staff)/
+                          cambioMasivoPreview+cambioMasivoEjecutar (solo
+                          admin, exige al menos un filtro, escribe
+                          ejemplar_estado_historial con lote_id compartido)/
+                          historialEstado
+    CatalogoLibroController  # autores()/categorias()/carreras() — GET simple,
+                                cualquier staff, "escribe y crea" vía
+                                firstOrCreate en LibroController::sincronizarPivotes
+    EstadoLibroPersonalizadoController  # index (todo staff)/store+cambiarActivo
+                                           (solo admin) — catálogo administrable,
+                                           ver convención 8
+    UbicacionController  # index (todo staff)/store (solo admin) — catálogo
+                            administrable, ver convención 8
+    ConfiguracionInstitucionalController  # show (todo staff, lo necesita
+                                             cualquiera generando la
+                                             constancia)/actualizar (admin)
     ReservaLibroController  # reservas de libro (retiro) + cola de espera, todo staff
     PortalController                         # endpoints del portal virtual de autoservicio (/mi/*):
                                                 estado/aforo, entrada/salida, catálogo, salas
+                                                (reservarSala() exige fecha = hoy, ver Gotchas),
+                                                misMultas() (autoservicio de Constancia de No
+                                                Multa, acotado al usuario autenticado)
     PortalReservaLibroController              # autoservicio de reservas de libro del portal
                                                  virtual (/mi/reservas-libro) — se separó de
                                                  PortalController a propósito (ver Deuda técnica)
                                                  en vez de seguir agregándole métodos
-  app/Services/ReservaSalaService.php  # solapamiento de reservas (relacional, ver Gotchas) + escanearLogia() (Horizon)
+  app/Services/ReservaSalaService.php  # solapamiento de reservas (relacional, ver Gotchas) +
+                                          escanearLogia() (Horizon) + registrarLlegada()/
+                                          liberarPorNoPresentacion()/liberarSiVencida()
+                                          (confirmación de asistencia de 15 min, ver Gotchas)
   app/Services/MultaService.php        # calcula la multa por atraso al devolver un libro
-  app/Services/ReservaLibroService.php # reservar/encolar un libro, cancelar, y liberarLibro()
-                                          (promueve la cola de espera) — compartido entre
-                                          ReservaLibroController (staff) y
-                                          PortalReservaLibroController (portal virtual)
+  app/Services/ReservaLibroService.php # reservar/encolar un libro por código de barras
+                                          (reservarOEncolar) o por libro_id desde el catálogo
+                                          agregado del portal (reservarOEncolarPorLibro),
+                                          cancelar, y liberarLibro() (promueve la cola de
+                                          espera) — compartido entre ReservaLibroController
+                                          (staff) y PortalReservaLibroController (portal virtual)
   app/Console/Commands/
     SeedMockupData.php (comando `mockup:datos`)
     ImportarCodigosLogia.php (comando `horizon:codigos-logia`, backfill de
@@ -157,24 +226,46 @@ backend/
                               El bloque `2024_01_03_0000XX` es el de
                               "producción real" (CHECK constraints, índices
                               de FK faltantes, cascadas RESTRICT, atribución
-                              de staff, staff.activo) — ver Gotchas
+                              de staff, staff.activo). El bloque
+                              `2026_08_14_0000XX`/`2026_08_15_0000XX` es el
+                              del split Libro/Ejemplar + catálogos nuevos —
+                              ver Gotchas
   routes/api.php             grupo `auth:sanctum + staff` y grupo `auth:sanctum + usuario`
   bootstrap/app.php          # NO tiene statefulApi() — auth es Bearer token puro, sin CSRF
 
 frontend/
   src/
-    views/            LoginView, LoginV2View, DashboardView, EntradaView, PrestamoView,
-                       ListadoPrestamosView, ListadoLibrosView, UsuariosView, SalasView,
-                       ReportesView, CodigoQrView, CatalogacionLibrosView (solo admin,
-                       meta.requiresAdmin), EstadoLibroView, EquiposView (solo admin,
-                       meta.requiresAdmin), MultasPendientesView
-    views/portal/      PortalLoginView, PortalHomeView, PortalEntradaView,
-                       PortalCatalogoView, PortalSalasView
-    components/layout/  StaffLayout, TopBar (navegación + dropdown "Gestiones Admin" con
-                        Usuarios/Listado Préstamos/Listado Libros/Código QR, ver convención 6
-                        más abajo — no hay un componente "SidebarNav" separado), PortalLayout
-    components/reportes/  BarChart, BreakdownList, ReporteTabla
+    views/            LoginView (título "Administración"), LoginV2View, DashboardView,
+                       EntradaView (con botón "Visita"), PrestamoView, ListadoPrestamosView,
+                       ListadoLibrosView, UsuariosView (con "Base de Datos Digital" y
+                       "Constancia de No Multa" por fila), SalasView (con menú de
+                       confirmación de asistencia), ReportesView (tabs incl. "Top de
+                       Libros", heatmap de logias), CodigoQrView, CatalogacionLibrosView
+                       (solo admin, meta.requiresAdmin — tabs "libro nuevo"/"agregar
+                       copia"), EstadoLibroView, CambioMasivoEstadoView (solo admin,
+                       meta.requiresAdmin), HistorialEstadoLibroView,
+                       HistorialPrestamosLibroView, EquiposView (solo admin,
+                       meta.requiresAdmin), MultasPendientesView, AdministracionView
+                       (solo admin, meta.requiresAdmin — configuración institucional +
+                       estados personalizados + ubicaciones)
+    views/portal/      PortalLoginView (título "Inicio de Sesión Usuarios"),
+                       PortalHomeView (con card "Recursos Digitales" y botón
+                       autoservicio "Constancia de No Multa"), PortalEntradaView,
+                       PortalCatalogoView, PortalSalasView (reserva solo para hoy, sin
+                       selector de fecha)
+    components/layout/  StaffLayout, TopBar (navegación + dropdown "Gestiones Admin",
+                        ver convención 6 más abajo — no hay un componente "SidebarNav"
+                        separado), PortalLayout
+    components/libros/  LibrosModuloNav (nav cruzada entre las 7 vistas del módulo de
+                        libros), MultiSelectCombobox (input "escribe y crea" para
+                        autores/categorías/carreras, ver convención 8)
+    components/reportes/  BarChart, BreakdownList, ReporteTabla, Heatmap (grid sala×hora
+                        con rampa de color secuencial, uso de logias)
     components/ApiErrorBanner.vue  Aviso "no se pudo conectar" — NO hay fallback a datos ficticios
+    utils/constancia.ts  generarConstanciaNoMulta() — arma el PDF con jsPDF en el
+                        navegador (sin logo institucional como imagen, encabezado de
+                        texto), llamado desde UsuariosView.vue (ver Deuda técnica: solo
+                        lado staff, no hay autoservicio en el portal)
     stores/           auth.ts (staff), usuarioAuth.ts (portal) — dos stores de Pinia separados
     services/         api.ts (staff, Bearer token de auth.ts), apiUsuario.ts (portal)
     composables/      useRut.ts, useToast.ts, useStaffShortcuts.ts (atajos de teclado del staff),
@@ -184,7 +275,9 @@ frontend/
     router/index.ts   dos guards: rutas `meta.portal` usan usuarioAuth, el resto usa auth;
                        además `meta.requiresAdmin` redirige a dashboard si
                        `auth.staff?.rol !== 'admin'`
-    types/index.ts    Tipos TS que reflejan los modelos de Laravel
+    types/index.ts    Tipos TS que reflejan los modelos de Laravel — incluye Libro/
+                       Ejemplar separados, Autor/Categoria/Carrera/Ubicacion/
+                       EstadoLibroPersonalizado, ConfiguracionInstitucional
 ```
 
 ## Convenciones a seguir en módulos nuevos o cambios
@@ -236,34 +329,75 @@ frontend/
    `TopBar.vue`, agregar `adminOnly: true` a esa entrada de `adminLinks`
    (ya se filtra con `adminLinksVisibles()`). Las tres capas son necesarias:
    el middleware es la única que realmente protege, las otras dos son UX.
+8. **Catálogo administrable nuevo (tipo Autor/Categoría/Ubicación)**: hay dos
+   patrones distintos según quién puede crear valores nuevos — no los
+   mezcles.
+   - **"Escribe y crea" (`Autor`, `Categoria`, `Carrera`)**: cualquier staff
+     puede crear un valor nuevo al vuelo desde el formulario de
+     catalogación, sin pantalla de administración dedicada. Backend:
+     `firstOrCreate(['nombre' => ...])` en `LibroController::idsPorNombre()`
+     al guardar el libro — no hay `store()` propio en
+     `CatalogoLibroController`, solo `index()`. Frontend:
+     `MultiSelectCombobox.vue` (autocompleta contra `GET /autores|
+     /categorias|/carreras` + opción "crear ‹texto›" si no matchea nada).
+   - **Admin-only (`EstadoLibroPersonalizado`, `Ubicacion`)**: se crean
+     únicamente desde `AdministracionView.vue` (`POST /estados-libro-
+     personalizados`, `POST /ubicaciones`, ambos con middleware `admin`);
+     el resto del staff solo los lee vía `GET` y los elige en un `<select>`
+     — no hay "escribe y crea" en el formulario de catalogación para estos
+     dos. `EstadoLibroPersonalizado` además tiene baja lógica (`activo`,
+     mismo patrón que `Equipo`/`Staff`); `Ubicacion` no la necesita (no se
+     ha pedido bloquear ubicaciones viejas).
+   Si agregás un catálogo nuevo, elegí uno de los dos patrones a propósito
+   y no un híbrido — mezclar "cualquiera crea" con "requiere admin" en el
+   mismo catálogo es una fuente de confusión de permisos.
 
 ## Deuda técnica conocida (no asumir que ya se resolvió sin verificar el código)
 
 - **`Prestamo.libro_titulo` ya NO es texto libre para libros del catálogo**
   (resuelto): `PrestamoController::store()` exige `codigo_barras`, busca el
-  `Libro` real, valida `disponible` (409 si ya está prestado/reservado por
-  otra persona) y guarda `libro_id` (FK real, `Prestamo::libro()`) + copia de
-  `libro_titulo`/`codigo_barras`. Al devolver, libera el libro
-  (`disponible = true`) buscándolo por `libro_id`. **Los equipos**
-  (`tipo_item = audifonos|notebook`) **también están resueltos** — ya no son
-  texto libre: `Equipo` es un modelo real (`codigo_inventario` único,
-  `disponible`, `activo`), con el mismo chequeo doble que `Libro`
-  (`disponible` + `activo`, ver Gotchas). Lo único que sigue faltando es un
-  modelo `Ejemplar` para libros: una fila `Libro` sigue siendo una sola
-  copia física con un solo `disponible`, no soporta múltiples copias del
-  mismo título (fuera de alcance actual, ver checklist de Horizon arriba).
-- **Sí hay tests automatizados** (`backend/tests/Feature/`: `AuthTest`,
-  `UsuarioAuthTest`, `MiddlewareTest`, `EntradaTest`, `SalaReservaTest`,
-  `SalaDevolucionTest`, `PortalReservaTest`, `PortalEntradaTest`,
-  `PrestamoMultaTest`, `EquipoPrestamoTest`, `MultasPendientesTest`,
-  `LibroCatalogacionTest`, `LibroEstadoProcesoTest`, `PrestamoLibroTest`,
-  `ReservaLibroTest`, `PrestamoConcurrenciaTest`, `EnumCheckConstraintsTest`,
-  `CascadaRestrictTest`, `StaffAtribucionTest`), corren contra una DB
-  Postgres dedicada (`biblioteca_test`, ver `docker-entrypoint.sh`) con
-  `docker compose exec backend php artisan test` — 87 tests al 2026-08-13.
-  La catalogación de libros y el flujo de préstamo/reserva de libro por
-  código de barras ya tienen cobertura completa (antes solo se probaba el
-  flujo de equipos).
+  `Ejemplar` real (no `Libro` directamente, desde el split del 2026-08-15 —
+  ver Gotchas), valida `disponible` + `estado_proceso === 'en_estante'` (409
+  si ya está prestado/reservado por otra persona) y guarda `ejemplar_id` (FK
+  real) + copia de `libro_titulo`/`codigo_barras` (con "(Copia N)" si
+  corresponde). Al devolver, libera el ejemplar buscándolo por
+  `ejemplar_id`. **Los equipos** (`tipo_item = audifonos|notebook|
+  cargador`) **también están resueltos** — ya no son texto libre: `Equipo`
+  es un modelo real (`codigo_inventario` único — nombre legible tipo
+  "Notebook 01" — y `codigo_barras` único — lo que realmente se escanea al
+  prestar, ver Gotchas 2026-08-16 —, `disponible`, `activo`), con el mismo
+  chequeo doble que `Ejemplar` (`disponible` + `activo`, ver Gotchas). El
+  gap de "sin múltiples copias del mismo título" que existía acá **se
+  cerró el 2026-08-15** con el modelo `Ejemplar` — ver Gotchas para el
+  detalle del split.
+- **Constancia de No Multa: ya tiene autoservicio en el portal (resuelto
+  2026-08-16)** — `UsuariosView.vue` (staff) tiene el botón "Constancia de
+  No Multa" por usuario (bloqueado con un toast si tiene multa pendiente);
+  `PortalHomeView.vue` (portal virtual) tiene el mismo botón para que el
+  propio usuario la descargue sin pasar por mesón, vía `GET /mi/multas` +
+  `GET /mi/configuracion` (`PortalController::misMultas()`, acotado al
+  usuario autenticado — no recibe RUT por parámetro, así no se puede
+  consultar la deuda de otra persona). Ambos flujos reutilizan el mismo
+  `utils/constancia.ts` (`generarConstanciaNoMulta`). Verificado
+  manualmente el 2026-08-16 en los dos lados: bloqueo con multa pendiente,
+  descarga sin errores de consola sin deuda.
+- **Sí hay tests automatizados** (`backend/tests/Feature/`, 28 archivos:
+  `AuthTest`, `CascadaRestrictTest`, `CatalogoLibroTest`,
+  `ConfiguracionInstitucionalTest`, `EjemplarCambioMasivoTest`,
+  `EntradaTest`, `EnumCheckConstraintsTest`, `EquipoPrestamoTest`,
+  `EstadoLibroPersonalizadoTest`, `LibroCatalogacionTest`,
+  `LibroEstadoProcesoTest`, `LibroHistorialTest`, `MiddlewareTest`,
+  `MultasPendientesTest`, `PortalEntradaTest`, `PortalMisMultasTest`,
+  `PortalReservaLibroTest`, `PortalReservaTest`, `PrestamoConcurrenciaTest`,
+  `PrestamoLibroTest`, `PrestamoMultaTest`, `ReporteResumenLibrosSalasTest`,
+  `ReservaLibroColaTest`, `ReservaLibroTest`,
+  `SalaConfirmacionAsistenciaTest`, `SalaDevolucionTest`, `SalaReservaTest`,
+  `StaffAtribucionTest`, `UsuarioAuthTest`), corren contra una DB Postgres
+  dedicada (`biblioteca_test`, ver `docker-entrypoint.sh`) con
+  `docker compose exec backend php artisan test` — 163 tests al 2026-08-16.
+  La catalogación de libros, el split Libro/Ejemplar, el cambio masivo de
+  estado y el flujo completo de confirmación de asistencia de sala ya
+  tienen cobertura completa.
 - **Multas: aviso + vista consolidada, pero sin bloqueo duro** —
   `Prestamo.multa_monto`/`multa_estado` se calculan y guardan por préstamo
   individual al momento de `devolver()` (ver Gotchas). Ya existe:
@@ -277,18 +411,20 @@ frontend/
   **Actualización (2026-08-13)**: `multa_pagada_por` ya no es texto libre,
   ver `multa_pagada_por_staff_id` en la entrada de atribución de staff más
   abajo.
-- **`Libro`: dos ejes de estado independientes** — `disponible` (boolean,
-  circulación: ¿está prestado/reservado ahora mismo?) y `estado_proceso`
-  (string, procesamiento bibliotecario: `inventario` | `procesos_tecnicos` |
-  `por_colocar` | `en_estante` | `estanteria_auxiliar` | `de_baja`). Un libro
-  solo es prestable/reservable si `estado_proceso === 'en_estante'` **y**
-  `disponible === true` — no colapses estos dos campos en uno ni le des a
-  `disponible` significados de estado físico, rompería
-  `PrestamoController`/`ReservaLibroController`. Se dejaron fuera a
-  propósito (ver commit de catalogación): contadores de préstamos
-  históricos/última fecha (derivables por query sobre `prestamos`), y la
-  separación registro bibliográfico vs. ejemplar físico ("Bib No."/"Item
-  No." estilo Horizon) — sigue siendo 1 fila `Libro` = 1 copia física.
+- **`Ejemplar`: dos ejes de estado independientes** (antes vivía en `Libro`,
+  se movió con el split del 2026-08-15, ver Gotchas) — `disponible`
+  (boolean, circulación: ¿está prestado/reservado ahora mismo?) y
+  `estado_proceso` (string: `inventario` | `procesos_tecnicos` |
+  `por_colocar` | `en_estante` | `estanteria_auxiliar` | `de_baja` |
+  `coleccion_movil` | `personalizado` — los dos últimos agregados el
+  2026-08-15). Un ejemplar solo es prestable/reservable si
+  `estado_proceso === 'en_estante'` **y** `disponible === true` — no
+  colapses estos dos campos en uno ni le des a `disponible` significados de
+  estado físico, rompería `PrestamoController`/`ReservaLibroController`.
+  Lo que sigue derivándose por query en vez de guardarse como columna:
+  contadores de préstamos históricos/última fecha por ejemplar (ya hay una
+  vista dedicada para verlos on-demand, `HistorialPrestamosLibroView.vue` +
+  `LibroController::historial()`, pero no se cachean como columna aparte).
 - **Credenciales de Postgres hardcodeadas** en `docker-compose.yml`
   (`biblioteca`/`biblioteca`) — aceptable para desarrollo local, es a
   propósito y no se toca. Para un despliegue real usar
@@ -698,6 +834,285 @@ frontend/
   la cola desde el mismo formulario de reserva (el botón cambia a "Unirse
   a la Lista de Espera" cuando el libro no está disponible). Tests:
   `PortalReservaLibroTest.php`.
+- **Split `Libro`/`Ejemplar` — cierra el gap #2 del checklist de Horizon**
+  (2026-08-15): antes 1 fila `Libro` = 1 copia física (un solo
+  `disponible`/`estado_proceso`/`codigo_barras` por título, sin soportar
+  múltiples copias). Se separó en dos tablas: `libros` (obra —
+  título/ISBN/clasificación/colección/editorial/año/tipo_material/notas,
+  más `autores`/`categorias`/`carreras` N:M vía pivotes `libro_autor`/
+  `libro_categoria`/`libro_carrera`) y `ejemplares` (copia física —
+  `libro_id`, `numero_copia`, `codigo_barras` propio y único,
+  `disponible`, `estado_proceso`, `estado_personalizado_id`,
+  `ubicacion_id`, `volumen`, `precio`, `fecha_inventario`). La migración de
+  backfill (`2026_08_14_000014_backfill_ejemplares_y_pivots_desde_libros`)
+  usa `DB::table()` crudo (no Eloquent) para no depender de los modelos
+  reescritos en el mismo lote, y crea un `Ejemplar` con `numero_copia = 1`
+  por cada `Libro` preexistente antes de dropear las columnas físicas de
+  `libros` — es **irreversible sin pérdida de información** una vez que
+  existan libros con más de 1 copia (documentado en el propio archivo de
+  migración). `Prestamo`/`ReservaLibro` cambiaron de `libro_id` a
+  `ejemplar_id` como FK real; `libro_titulo` (snapshot de texto) se
+  mantiene igual, ahora con "(Copia N)" agregado cuando corresponde
+  (`Ejemplar::tituloConCopia()`). `PrestamoController`/
+  `ReservaLibroController`/`ReservaLibroService` ahora buscan y bloquean
+  (`lockForUpdate()`) sobre `Ejemplar`, no sobre `Libro`. Si necesitás
+  tocar disponibilidad/estado de una copia, es en `Ejemplar` — `Libro` ya
+  no tiene esos campos. `Autor`/`Categoria`/`Carrera` son catálogos
+  "escribe y crea" (ver convención 8); `LibroController::store()` sigue
+  creando el primer `Ejemplar` en la misma transacción que el `Libro`, así
+  que catalogar un libro nuevo se siente igual que antes desde la UI aunque
+  por debajo ya sean dos tablas.
+- **Estados de ejemplar ampliados + catálogo de estados personalizados**
+  (2026-08-15): a los 6 valores fijos de `estado_proceso` se sumaron
+  `coleccion_movil` (fijo, sin tabla propia) y `personalizado` (requiere
+  `estado_personalizado_id`, FK a `estados_libro_personalizados` —
+  catálogo administrable, ver convención 8, con baja lógica `activo` igual
+  que `Equipo`/`Staff`; un estado ya usado por algún `Ejemplar` no se
+  puede borrar, solo desactivar). El CHECK constraint de
+  `ejemplares.estado_proceso` se actualizó para incluir los 2 valores
+  nuevos — si agregás un valor más, actualizá el CHECK o `mockup:datos`
+  puede fallar (mismo patrón que el resto de los enums simulados, ver
+  gotcha de CHECK constraints más arriba). Tests: `EstadoLibroPersonalizadoTest.php`.
+- **Cambio masivo de estado de ejemplares, con confirmación seria**
+  (2026-08-15): `EjemplarController::cambioMasivoPreview`/
+  `cambioMasivoEjecutar` (`CambioMasivoEstadoView.vue`, solo admin) cambian
+  el `estado_proceso` de muchos ejemplares a la vez filtrando por
+  `ubicacion_id`/`estado_proceso_actual`/`tipo_material`/`categoria_id`/`q`
+  — `validarFiltro()` exige al menos un criterio (`abort(422, ...)`), para
+  que no se pueda mandar un cambio masivo vacío que afecte a todos los
+  ejemplares del sistema. `preview` no escribe nada, solo cuenta y muestra
+  una muestra de 10; `ejecutar` vuelve a aplicar el mismo filtro
+  server-side (no confía en una lista de IDs que el cliente pudo cachear
+  stale desde el preview) y, dentro de una única `DB::transaction()`,
+  actualiza cada ejemplar + escribe una fila en `ejemplar_estado_historial`
+  por cada uno, todas con el mismo `lote_id` (UUID) para poder ver después
+  "qué se cambió junto en esta operación" desde `HistorialEstadoLibroView.vue`.
+  Igual que en el cambio individual, un ejemplar `de_baja` con
+  `disponible = false` (prestado/reservado) se excluye del lote en vez de
+  fallar la operación completa por uno solo ocupado. El frontend exige
+  tipear la palabra "CONFIRMAR" en un modal antes de habilitar el botón de
+  ejecutar — no es un simple `confirm()` de un click. Tests:
+  `EjemplarCambioMasivoTest.php`.
+- **Generador de código de barras secuencial** (2026-08-15):
+  `GET /ejemplares/siguiente-codigo-barras` (solo admin) busca el mayor
+  sufijo numérico entre códigos con patrón `UMAG######` y devuelve el
+  siguiente, zero-padded a 6 dígitos (`UMAG000042`). Es solo una sugerencia
+  para rellenar el input — el staff puede editarlo antes de guardar, y la
+  regla `unique:ejemplares,codigo_barras` en `reglasCatalogacion()` sigue
+  validando en el submit. No auto-asigna nada por su cuenta.
+- **Historial de cambios de estado por ejemplar + historial de préstamos
+  por libro** (2026-08-15), dos vistas nuevas y distintas — no las
+  confundas: `EjemplarController::historialEstado()` +
+  `HistorialEstadoLibroView.vue` lista cambios de `estado_proceso`
+  (filtrable por `ejemplar_id`/`lote_id`/`staff_id`/`q`/rango de fecha),
+  poblada por `EjemplarEstadoHistorial` cada vez que cambia el estado de un
+  ejemplar (individual o masivo). `LibroController::historial()` +
+  `HistorialPrestamosLibroView.vue` es sobre préstamos, no sobre estado:
+  busca por título/código, agrupa por libro → cada ejemplar con su lista de
+  préstamos (usuario, fechas) y un conteo total. Ninguno de los dos
+  necesita columnas nuevas de conteo cacheado — ambos derivan de queries
+  sobre las tablas existentes.
+- **Reportes nuevos: Top de Libros y uso de logias por sala + heatmap**
+  (2026-08-15): `ReporteController::resumen()` ahora soporta `tab=libros`
+  (`porLibro`, agrupado por `libro_titulo` del préstamo — snapshot de
+  texto, no la relación viva, así el ranking sigue correcto aunque el
+  ejemplar prestado ya no exista o el libro haya cambiado de título) y,
+  dentro de `tab=logias`, agrega `porSala` (reservas agrupadas por
+  `sala.nombre`) y `porHoraPorSala` (mismo desglose que `porHora`, pero
+  repetido POR CADA sala — para el heatmap "qué hora es la más pedida EN
+  CADA logia", no solo el agregado de todas juntas). `porSala`/`porLibro`/
+  `porHoraPorSala` vienen vacíos (`collect()`) fuera de su tab
+  correspondiente — no tiene sentido calcularlos si no se van a mostrar.
+  Frontend: `Heatmap.vue` (grid sala×hora, rampa de color secuencial de un
+  solo hue, sin librería externa — sigue la skill `dataviz` del repo) +
+  card "Sala más solicitada" en `ReportesView.vue`. Tests:
+  `ReporteResumenLibrosSalasTest.php`.
+- **Entrada "Visita"** (2026-08-15): tercera categoría de entrada externa,
+  junto a "Externo" y "Convenio" — mismo flujo que `storeExterno()` pero
+  con `entradas.es_visita = true` (columna nueva, mismo patrón booleano que
+  `es_convenio`) para diferenciarla en reportería/UI (badge "Visita" en
+  `EntradaView.vue`). Ruta `POST /entrada/visita` →
+  `EntradaController::storeVisita()`.
+- **Configuración institucional editable + Constancia de No Multa en PDF**
+  (2026-08-15): antes no existía forma de emitir una constancia de que un
+  usuario no tiene deuda con la biblioteca, y el nombre de quien firmaría
+  ese tipo de documento no estaba en ningún lado del sistema. Se agregó
+  `configuracion_institucional` (fila única `id=1`,
+  `jefe_unidad_nombre`/`jefe_unidad_cargo`) +
+  `ConfiguracionInstitucionalController::show()` (todo staff)/`actualizar()`
+  (admin, editable desde `AdministracionView.vue`) — **no hardcodees** el
+  nombre de la jefa de unidad en el frontend, siempre viene de
+  `GET /configuracion`. `utils/constancia.ts`
+  (`generarConstanciaNoMulta(usuario, configuracion)`) arma el PDF
+  **enteramente en el navegador** con `jsPDF` (dependencia npm nueva, mismo
+  patrón que `qrcode`/`exceljs` ya usados en el proyecto) — sin backend
+  dedicado, sin logo institucional como imagen (el repo no tenía ninguno
+  más allá de `favicon.png`, así que el encabezado es de texto, no una
+  réplica pixel-perfect del documento con timbre y firma manuscrita). El
+  botón en `UsuariosView.vue` llama primero a `GET /usuarios/rut/{rut}`
+  (ya devuelve `multas_pendientes`) y **bloquea la generación con un toast
+  de error** si `cantidad > 0` — verificado manualmente el 2026-08-15 con
+  un usuario con multa pendiente (bloqueado) y uno sin deuda (PDF
+  descargado correctamente, sin errores de consola). Ver Deuda técnica:
+  esto vive solo del lado staff, no hay autoservicio en el portal. Tests:
+  `ConfiguracionInstitucionalTest.php`.
+- **Sala "GACI" renombrada a "AGACI"** (2026-08-15): migración de datos
+  (`2026_08_14_000001_rename_gaci_sala_to_agaci`,
+  `UPDATE salas SET nombre = REPLACE(nombre, 'GACI', 'AGACI') ...`, con
+  `down()` que revierte) + `SeedMockupData.php` actualizado para que
+  futuros `--fresh` ya generen "AGACI" directamente. Si ves "GACI" a secas
+  en código o docs viejos, es el nombre anterior — el real ahora es
+  "AGACI".
+- **Multa por atraso: $300 → $15 por día** (2026-08-15): cambio de un solo
+  valor en `config/multas.php` (`monto_dia`), sin tocar
+  `MultaService::calcular()` ni el `floor()` de la nota anterior sobre
+  Carbon 3 — si volvés a ajustar la tarifa, es ese archivo, nunca
+  hardcodeado en el service.
+- **Reserva de sala: alumnos solo pueden reservar para el día de hoy, y hay
+  una ventana de 15 minutos para confirmar que llegaron** (2026-08-15):
+  - `PortalController::reservarSala()` rechaza con 422 si
+    `fecha !== now()->toDateString()` — el selector de fecha se sacó de
+    `PortalSalasView.vue` (antes `ref`, ahora una constante `hoy`), ya no
+    hay forma de que un alumno pida una sala para "mañana" o cualquier otro
+    día. El staff (`SalaController::storeReserva`) NO tiene esta
+    restricción — puede reservar para cualquier fecha, como antes.
+  - `Reserva::plazoConfirmacion()` calcula el límite como
+    `max(created_at, inicio_del_bloque) + 15 minutos` — si alguien reserva
+    el bloque 14–16h a las 13:50, el plazo corre desde las 14:00 (inicio
+    del bloque); si reserva a las 15:00 vía "Reservar ahora" dentro de ese
+    mismo bloque, el plazo corre desde las 15:00 (el momento real de la
+    reserva), no desde las 14:00 — así nunca nace con un plazo ya vencido.
+    `estaVencidaSinConfirmar()` es `true` si sigue `estado === 'activa'`,
+    sin `hora_prestamo_real`, y ya pasó ese plazo.
+  - **Expiración perezosa, sin cron/scheduler**: no hay ningún job en
+    background — `ReservaSalaService::liberarSiVencida()` se llama cada vez
+    que se LEE una reserva (`SalaController::index`,
+    `PortalController::salas()`, y dentro de
+    `existeSolapamiento()`/`participanteConReservaSolapada()` antes de
+    aceptar una reserva nueva sobre ese bloque) y, si está vencida, la
+    marca `estado = 'no_show'` ahí mismo. Si agregás un lugar nuevo que lea
+    reservas, llamá a este método antes de confiar en `estado`, o vas a
+    mostrar/permitir cosas sobre una reserva que en teoría ya debería estar
+    liberada.
+  - **Menú de confirmación de asistencia para el staff**
+    (`SalaController::confirmarLlegada`/`liberarReserva`,
+    `PATCH /reservas/{reserva}/llegada` y `/liberar`): panel nuevo en
+    `SalasView.vue` que lista las reservas activas sin confirmar, con
+    cuenta regresiva en vivo (reloj reactivo, `setInterval` de 1s) y
+    botones para confirmar llegada (marca `hora_prestamo_real`) o liberar
+    manualmente antes de que se cumpla el plazo. `index()` ya no devuelve
+    reservas `no_show` y expone `plazo_confirmacion`/
+    `vencida_sin_confirmar` como atributos dinámicos por reserva.
+  Tests: `SalaConfirmacionAsistenciaTest.php` (10 tests, usa
+  `Carbon::setTestNow()` con `tearDown()` de reset — no timing real) +
+  2 tests nuevos en `PortalReservaTest.php` para la restricción de fecha.
+- **Bug reportado: la pantalla de "confirmaste tu asistencia" del QR
+  desaparecía sola después de escanear** (2026-08-15): en
+  `PortalEntradaView.vue`, `registrar()` volvía a `modo.value = 'menu'`
+  automáticamente 2.5s después de mostrar el mensaje de éxito — el usuario
+  alcanzaba a leer "confirmado" pero la pantalla saltaba sola al menú antes
+  de que terminara de asimilarlo, y como el menú de esa vista también
+  cambia de estado solo, se sentía como que "algo raro pasó". Se cambió el
+  timeout para que en vez de resetear a `modo = 'menu'` (mismo componente,
+  cambio de estado interno) haga `router.push({ name: 'portal-home' })` —
+  navega de verdad a otra pantalla, comportamiento más predecible y menos
+  confuso que un cambio de estado silencioso en el mismo componente.
+- **Logins de staff y de usuarios finales se veían casi idénticos**
+  (2026-08-15): ambos decían básicamente "Bienvenido"/"Iniciar sesión" sin
+  distinguirse. Se diferenciaron los títulos: `LoginView.vue` (staff) dice
+  "Administración" / "Panel para personal de biblioteca";
+  `PortalLoginView.vue` dice "Inicio de Sesión Usuarios" / "Portal para
+  estudiantes, docentes y funcionarios". `LoginV2View.vue` (variante
+  secundaria detrás de un link "Versión 2", no es el flujo principal) no se
+  tocó — no está en el mismo punto de comparación que generó la confusión.
+- **RUT inválido en una reserva grupal de sala: no se sabía cuál de los
+  varios RUT estaba mal** (2026-08-15): antes, si uno de los RUT de una
+  reserva grupal (`SalasView.vue`/`PortalSalasView.vue`, 2 a 5 personas) no
+  correspondía a un usuario registrado, el backend devolvía 422 con
+  `errors: {"ruts.1": ["..."]}` pero el frontend solo mostraba un toast
+  genérico ("datos inválidos") sin decir cuál de los inputs tenía el
+  problema — había que adivinar. Ya se agregó `rutErrores` (mapa índice →
+  mensaje) en ambas vistas: el `catch` del submit parsea las claves
+  `ruts.N` de `error.response.data.errors`, marca en rojo (borde + mensaje
+  debajo) exactamente el/los input(s) correspondientes, y el resto queda
+  intacto. Se limpia por índice al reescribir ese campo (`onRutInput`) y
+  por completo al reabrir el modal o reintentar el submit. Verificado
+  manualmente con un RUT inválido, dos inválidos, y una mezcla
+  válido+inválido — en los tres casos se marca exactamente el campo
+  correcto, sin falsos positivos sobre el RUT válido.
+- **Ubicación física de un ejemplar: de texto libre a catálogo
+  administrable** (2026-08-15): antes `ejemplares.ubicacion` (antes en
+  `libros.ubicacion`) era un `string` cualquiera tipeado a mano en
+  catalogación y en el filtro de cambio masivo — sin autocompletar, sin
+  forma de estandarizar valores ("Biblioteca Central" vs "biblioteca
+  central" vs "Bibl. Central" convivían como strings distintos). Se agregó
+  el modelo `Ubicacion` (catálogo admin-only, ver convención 8) +
+  `ejemplares.ubicacion_id` (FK, `nullOnDelete`) reemplazando la columna de
+  texto — la migración de backfill
+  (`2026_08_15_000001_create_ubicaciones_table`) crea una `Ubicacion` por
+  cada valor de texto distinto que ya existiera en `ejemplares.ubicacion`
+  antes de dropear esa columna, y siembra "Biblioteca Central" como
+  ejemplo si la tabla queda vacía. `CatalogacionLibrosView.vue` (ambos
+  formularios: libro nuevo y agregar copia) y
+  `CambioMasivoEstadoView.vue` (filtro) pasaron de `<input>` a `<select>`
+  poblado desde `GET /ubicaciones`. No reintroduzcas un input de texto
+  libre para esto.
+- **Constancia de No Multa: autoservicio en el portal virtual**
+  (2026-08-16): hasta acá el botón "Constancia de No Multa" solo existía en
+  `UsuariosView.vue` (staff, buscando por RUT). Se agregó el mismo botón en
+  `PortalHomeView.vue` para que el propio usuario la descargue sin pasar
+  por mesón. Backend nuevo: `PortalController::misMultas()`
+  (`GET /mi/multas`, dentro del guard `usuario`) — mismo cálculo que
+  `UsuarioController::porRut()` pero **acotado a `$request->user()`**, sin
+  recibir RUT por parámetro, para que un usuario del portal no pueda
+  consultar la deuda de otro. También se expuso `GET /mi/configuracion`
+  (mismo `ConfiguracionInstitucionalController::show()` que ya usaba el
+  staff — el método no tenía nada específico de `staff`, solo hacía falta
+  agregar la ruta bajo el guard `usuario`). El frontend reutiliza
+  `utils/constancia.ts` (`generarConstanciaNoMulta`) sin cambios — el mismo
+  generador de PDF sirve para los dos flujos, cambia solo de dónde vienen
+  `usuario`/`configuracion` (`apiUsuario.ts` en vez de `api.ts`). Si
+  agregás un endpoint nuevo de "mis X" en el portal, seguí este patrón
+  (acotar a `$request->user()`, nunca aceptar un identificador de otro
+  usuario por parámetro) en vez de reusar directamente un endpoint de
+  staff que sí acepta RUT. Tests: `PortalMisMultasTest.php` (incluye un
+  test explícito de que la deuda de otro usuario no se filtra).
+- **Préstamo de equipos: de código de inventario en texto libre a código de
+  barras real, más un tercer tipo "cargador"** (2026-08-16): un bibliotecario
+  reportó que en la práctica el préstamo de audífonos/notebooks se hace
+  escaneando un código de barras físico del equipo, igual que un libro —
+  el sistema en cambio pedía tipear `codigo_inventario` (texto libre estilo
+  "AUD-003") a mano, sin escaneo real. Se agregó `equipos.codigo_barras`
+  (columna nueva, `unique`, obligatoria — migración
+  `2026_08_16_000001_add_codigo_barras_to_equipos_table`, con backfill de
+  placeholders largos para los equipos ya sembrados, mismo criterio que el
+  resto de los códigos de barras inventados del proyecto) que pasó a ser el
+  campo que efectivamente se escanea/tipea al prestar
+  (`PrestamoController::store()` ahora busca `Equipo::where('codigo_barras',
+  ...)`, igual que hace con `Ejemplar` para libros — `codigo_inventario` ya
+  NO se acepta como identificador de préstamo). `codigo_inventario` se
+  mantiene como el nombre legible que ve el staff en pantalla, y cambió de
+  estilo: de códigos como "AUD-003" a nombres tipo "Notebook 01" (ver
+  `SeedMockupData::seedEquipos()`) — es puramente para mostrar en UI/
+  reportes, no se busca por él en ningún endpoint. Se agregó
+  `EquipoController::buscarPorCodigo()` (`GET /equipos/{codigo}`, mismo
+  patrón que `EjemplarController::buscarPorCodigo`) para lookups por
+  código de barras. Se sumó **"cargador"** como tercer tipo de equipo
+  prestable (junto a audífonos/notebooks) — requirió actualizar el CHECK
+  constraint tanto de `equipos.tipo` como de `prestamos.tipo_item`
+  (Postgres no permite alterar un CHECK existente, hay que dropearlo y
+  recrearlo — migración `2026_08_16_000002_add_cargador_to_tipo_check_
+  constraints`). Frontend: `EquiposView.vue` (formulario con
+  nombre+código de barras+tipo, tercer `<option>` "Cargador"),
+  `PrestamoView.vue` (tercera card "Préstamo de Cargadores", los 3 inputs
+  de equipo pasaron de datalist-sobre-codigo_inventario a datalist-sobre-
+  codigo_barras — la opción del datalist sigue mostrando el nombre legible
+  como texto, pero el valor que se envía y compara es el código de
+  barras). No reintroduzcas un flujo de préstamo de equipo que identifique
+  por `codigo_inventario` — ya no es lo que se escanea. Tests:
+  `EquipoPrestamoTest.php` (ampliado con casos de cargador y
+  `buscarPorCodigo`), `PrestamoConcurrenciaTest.php` ajustado al nuevo
+  payload.
 
 ## Checklist antes de dar un módulo por terminado
 

@@ -13,7 +13,8 @@ class EquipoFactory extends Factory
     {
         return [
             'codigo_inventario' => strtoupper(fake()->unique()->bothify('EQ-###')),
-            'tipo' => fake()->randomElement(['audifonos', 'notebook']),
+            'codigo_barras' => fake()->unique()->numerify('752##########'),
+            'tipo' => fake()->randomElement(['audifonos', 'notebook', 'cargador']),
             'disponible' => true,
             'activo' => true,
         ];

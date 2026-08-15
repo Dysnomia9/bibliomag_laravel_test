@@ -14,6 +14,7 @@ class ReservaLibro extends Model
     protected $fillable = [
         'usuario_id',
         'libro_id',
+        'ejemplar_id',
         'fecha_reserva',
         'fecha_retiro',
         'estado',
@@ -35,5 +36,10 @@ class ReservaLibro extends Model
     public function libro()
     {
         return $this->belongsTo(Libro::class);
+    }
+
+    public function ejemplar()
+    {
+        return $this->belongsTo(Ejemplar::class);
     }
 }

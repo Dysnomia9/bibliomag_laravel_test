@@ -15,7 +15,7 @@ class ReservaLibroController extends Controller
 
     public function index(Request $request)
     {
-        $query = ReservaLibro::with('libro');
+        $query = ReservaLibro::with(['libro', 'ejemplar']);
 
         if ($usuarioId = $request->query('usuario_id')) {
             $query->where('usuario_id', $usuarioId);

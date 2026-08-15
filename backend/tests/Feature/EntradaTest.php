@@ -39,6 +39,21 @@ class EntradaTest extends TestCase
         $this->assertDatabaseHas('entradas', ['rut_externo' => $rutExterno]);
     }
 
+    public function test_post_entrada_visita_devuelve_201_y_marca_es_visita(): void
+    {
+        Sanctum::actingAs(Staff::factory()->create());
+
+        $rutVisita = Rut::formatear(9888888);
+
+        $response = $this->postJson('/api/entrada/visita', ['rut' => $rutVisita, 'nombre' => 'Visitante de Prueba']);
+
+        $response->assertStatus(201)
+            ->assertJsonPath('rut_externo', $rutVisita)
+            ->assertJsonPath('es_visita', true);
+
+        $this->assertDatabaseHas('entradas', ['rut_externo' => $rutVisita, 'es_visita' => true]);
+    }
+
     /**
      * Horizon (el sistema legado) no registra un evento de salida por separado: la
      * entrada queda cerrada en el mismo instante en que se registra. Antes esto se

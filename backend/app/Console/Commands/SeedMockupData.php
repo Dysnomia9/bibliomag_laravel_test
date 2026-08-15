@@ -2,6 +2,10 @@
 
 namespace App\Console\Commands;
 
+use App\Models\Autor;
+use App\Models\Carrera;
+use App\Models\Categoria;
+use App\Models\Ejemplar;
 use App\Models\Entrada;
 use App\Models\Equipo;
 use App\Models\Libro;
@@ -52,19 +56,6 @@ class SeedMockupData extends Command
         'Gómez', 'Sánchez', 'Reyes', 'Castro',
     ];
 
-    private array $librosCatalogo = [
-        'Estructuras de Datos y Algoritmos',
-        'Redes de Computadores',
-        'Cálculo I',
-        'Ingeniería de Software',
-        'Bases de Datos',
-        'Introducción al Derecho Civil',
-        'Anatomía y Fisiología',
-        'Fundamentos de Trabajo Social',
-        'Didáctica General',
-        'Producción Animal',
-    ];
-
     /** Catálogo completo de biblioteca (título/autor/área) para el portal de usuario — adaptado de DEPRECATED/catalogo/page.tsx */
     private array $catalogoLibros = [
         ['codigo' => '9789561228351', 'titulo' => 'Introducción a la Programación en Python', 'autor' => 'John V. Guttag', 'categoria' => 'Computación'],
@@ -107,14 +98,24 @@ class SeedMockupData extends Command
     {
         if ($this->option('fresh')) {
             $this->info('Eliminando datos de prueba existentes...');
-            // Orden importa: prestamos/entradas/reservas_libro tienen FK RESTRICT hacia
-            // usuarios/libros/equipos (ver migración restrict_delete_on_historial_foreign_keys),
-            // así que deben borrarse antes que sus padres, no después.
+            // Orden importa: prestamos/entradas/reservas_libro/ejemplares tienen FK
+            // RESTRICT hacia usuarios/libros/equipos/staff (ver migración
+            // restrict_delete_on_historial_foreign_keys y el split Libro/Ejemplar), así
+            // que deben borrarse antes que sus padres, no después. autores/categorias/
+            // carreras/estados_libro_personalizados NO se borran a propósito: son
+            // catálogos que se reutilizan entre corridas (firstOrCreate por nombre), no
+            // datos de prueba transaccionales — carreras además solo se siembra una vez
+            // desde su migración, borrarla aquí la dejaría vacía para siempre.
+            DB::table('ejemplar_estado_historial')->delete();
             DB::table('reservas_libro')->delete();
             DB::table('prestamos')->delete();
             DB::table('reserva_participantes')->delete();
             DB::table('reservas')->delete();
             DB::table('entradas')->delete();
+            DB::table('libro_autor')->delete();
+            DB::table('libro_categoria')->delete();
+            DB::table('libro_carrera')->delete();
+            DB::table('ejemplares')->delete();
             DB::table('libros')->delete();
             DB::table('equipos')->delete();
             DB::table('usuarios')->delete();
@@ -130,11 +131,11 @@ class SeedMockupData extends Command
         $usuarios = $this->seedUsuarios(30);
         $this->seedEntradas($usuarios);
         $equipos = $this->seedEquipos();
-        $this->seedPrestamos($usuarios, $equipos);
+        $ejemplares = $this->seedLibros();
+        $this->seedPrestamos($usuarios, $equipos, $ejemplares);
         $salas = $this->seedSalas();
         $this->seedReservas($salas, $usuarios);
-        $libros = $this->seedLibros();
-        $this->seedReservasLibro($libros, $usuarios);
+        $this->seedReservasLibro($ejemplares, $usuarios);
 
         $this->info('Datos de prueba cargados correctamente.');
 
@@ -248,11 +249,16 @@ class SeedMockupData extends Command
         $this->line("  · {$total} entradas creadas (últimos 14 días, con refuerzo para hoy)");
     }
 
-    private function seedPrestamos($usuarios, $equipos): void
+    /** @param  \Illuminate\Support\Collection<int, Ejemplar>  $ejemplares */
+    private function seedPrestamos($usuarios, $equipos, $ejemplares): void
     {
         $total = 0;
         $horaActual = now()->hour;
 
+        // Préstamos de libro: se identifican por un ejemplar real (código de barras),
+        // igual que exige PrestamoController::store() — se limita el sorteo a
+        // ejemplares realmente disponibles para no simular dos préstamos activos
+        // simultáneos de la misma copia física (mismo criterio que equipos, más abajo).
         foreach ($usuarios as $i => $usuario) {
             if (random_int(0, 100) > 60) {
                 continue; // no todos los usuarios tienen préstamos
@@ -261,6 +267,14 @@ class SeedMockupData extends Command
             $numPrestamos = random_int(1, 2);
 
             for ($j = 0; $j < $numPrestamos; $j++) {
+                $disponibles = $ejemplares->where('disponible', true);
+
+                if ($disponibles->isEmpty()) {
+                    break;
+                }
+
+                $ejemplar = $disponibles->random();
+
                 $diasAtras = random_int(0, 20);
                 $hora = $diasAtras === 0 ? random_int(8, max(8, $horaActual)) : $this->horaConSesgo();
                 $fechaPrestamo = now()->subDays($diasAtras)->setTime($hora, random_int(0, 59));
@@ -271,23 +285,30 @@ class SeedMockupData extends Command
 
                 Prestamo::create([
                     'usuario_id' => $usuario->id,
-                    'libro_titulo' => $this->librosCatalogo[array_rand($this->librosCatalogo)],
+                    'ejemplar_id' => $ejemplar->id,
+                    'libro_titulo' => $ejemplar->tituloConCopia(),
+                    'codigo_barras' => $ejemplar->codigo_barras,
                     'fecha_prestamo' => $fechaPrestamo,
                     'fecha_devolucion' => $fechaDevolucion,
                     'fecha_devolucion_real' => $devuelto ? $fechaDevolucion->copy()->subDays(random_int(0, 3)) : null,
                     'estado' => $devuelto ? 'devuelto' : ($atrasado ? 'atrasado' : 'activo'),
                 ]);
+
+                if (! $devuelto) {
+                    $ejemplar->update(['disponible' => false]);
+                }
+
                 $total++;
             }
         }
 
-        // Préstamos de equipos (audífonos y notebooks): se identifican por código de
-        // inventario real (tabla `equipos`), no tienen fecha de vencimiento — se
+        // Préstamos de equipos (audífonos, notebooks y cargadores): se identifican por
+        // código de barras real (tabla `equipos`), no tienen fecha de vencimiento — se
         // devuelven al término de la estadía en la biblioteca. Se limita el sorteo a
         // equipos realmente disponibles del tipo elegido para no simular dos préstamos
         // activos simultáneos del mismo código físico.
         foreach ($usuarios->random(min(10, $usuarios->count())) as $usuario) {
-            $tipo = random_int(0, 1) === 0 ? 'audifonos' : 'notebook';
+            $tipo = ['audifonos', 'notebook', 'cargador'][random_int(0, 2)];
             $disponibles = $equipos->where('tipo', $tipo)->where('disponible', true);
 
             if ($disponibles->isEmpty()) {
@@ -305,6 +326,7 @@ class SeedMockupData extends Command
                 'equipo_id' => $equipo->id,
                 'libro_titulo' => $equipo->codigo_inventario,
                 'tipo_item' => $tipo,
+                'codigo_barras' => $equipo->codigo_barras,
                 'fecha_prestamo' => $fechaPrestamo,
                 'fecha_devolucion' => null,
                 'fecha_devolucion_real' => $devuelto ? $fechaPrestamo->copy()->addHours(random_int(1, 6)) : null,
@@ -321,20 +343,32 @@ class SeedMockupData extends Command
         $this->line("  · {$total} préstamos creados (libros y equipos)");
     }
 
-    /** @return \Illuminate\Support\Collection<int, Equipo> */
+    /**
+     * El préstamo real de un equipo se hace escaneando su código de barras físico
+     * (codigo_barras) — codigo_inventario queda como el nombre legible que el staff
+     * ve en pantalla ("Notebook 01"), no es lo que se escanea. Los códigos de barras
+     * reales de los equipos todavía no están disponibles, así que se genera un
+     * placeholder largo (mismo criterio que el resto de los códigos de barras
+     * inventados de este seeder).
+     *
+     * @return \Illuminate\Support\Collection<int, Equipo>
+     */
     private function seedEquipos()
     {
-        $codigos = [
-            'audifonos' => ['AUD-001', 'AUD-002', 'AUD-003', 'AUD-004'],
-            'notebook' => ['NB-001', 'NB-002', 'NB-003'],
+        $nombres = [
+            'audifonos' => ['Audífonos 01', 'Audífonos 02', 'Audífonos 03', 'Audífonos 04'],
+            'notebook' => ['Notebook 01', 'Notebook 02', 'Notebook 03'],
+            'cargador' => ['Cargador 01', 'Cargador 02', 'Cargador 03'],
         ];
 
         $equipos = collect();
+        $secuencia = 1;
 
-        foreach ($codigos as $tipo => $codigosTipo) {
-            foreach ($codigosTipo as $codigo) {
+        foreach ($nombres as $tipo => $nombresTipo) {
+            foreach ($nombresTipo as $nombre) {
                 $equipos->push(Equipo::create([
-                    'codigo_inventario' => $codigo,
+                    'codigo_inventario' => $nombre,
+                    'codigo_barras' => '751'.str_pad((string) $secuencia++, 10, '0', STR_PAD_LEFT),
                     'tipo' => $tipo,
                     'disponible' => true,
                     'activo' => true,
@@ -342,7 +376,7 @@ class SeedMockupData extends Command
             }
         }
 
-        $this->line("  · {$equipos->count()} equipos creados (audífonos y notebooks)");
+        $this->line("  · {$equipos->count()} equipos creados (audífonos, notebooks y cargadores)");
 
         return $equipos;
     }
@@ -374,7 +408,7 @@ class SeedMockupData extends Command
         $salasEspeciales = [
             ['nombre' => 'Sala de Seminarios', 'capacidad' => 30],
             ['nombre' => 'Sala de Postgrado', 'capacidad' => 20],
-            ['nombre' => 'Sala GACI (Apoyo a la Inclusión)', 'capacidad' => 10],
+            ['nombre' => 'Sala AGACI (Apoyo a la Inclusión)', 'capacidad' => 10],
         ];
 
         foreach ($salasEspeciales as $especial) {
@@ -386,7 +420,7 @@ class SeedMockupData extends Command
             ]));
         }
 
-        $this->line('  · '.$salas->count().' salas creadas (15 logias + Seminarios + Postgrado + GACI)');
+        $this->line('  · '.$salas->count().' salas creadas (15 logias + Seminarios + Postgrado + AGACI)');
 
         return $salas;
     }
@@ -433,48 +467,84 @@ class SeedMockupData extends Command
         $this->line("  · {$total} reservas de logia creadas (hoy y últimos 3 días)");
     }
 
-    /** @return \Illuminate\Support\Collection<int, Libro> */
+    /**
+     * Crea el registro bibliográfico (Libro) + sus copias físicas (Ejemplar) — los
+     * primeros 6 títulos reciben 2-3 copias a propósito, para poder probar el flujo
+     * real de "múltiples copias del mismo título" apenas se corre el seed.
+     *
+     * @return \Illuminate\Support\Collection<int, Ejemplar>
+     */
     private function seedLibros()
     {
-        $libros = collect();
+        $ejemplares = collect();
+        $contadorCodigo = 1;
 
         foreach ($this->catalogoLibros as $i => $item) {
-            $codigo = $item['codigo'] ?? ('978'.str_pad((string) (900000000 + $i), 10, '0', STR_PAD_LEFT));
-
-            $libros->push(Libro::create([
-                'codigo_barras' => $codigo,
+            $libro = Libro::create([
                 'titulo' => $item['titulo'],
-                'autor' => $item['autor'],
-                'categoria' => $item['categoria'],
-                'disponible' => random_int(0, 100) < 78,
-                // Los libros de prueba ya están catalogados y en estante: si no, ninguno
-                // sería prestable/reservable (PrestamoController/ReservaLibroController
-                // exigen estado_proceso = 'en_estante') y las demos/otros seeds quedarían rotos.
-                'estado_proceso' => 'en_estante',
-            ]));
+                'isbn' => $item['codigo'] ?? null,
+            ]);
+
+            $autor = Autor::firstOrCreate(['nombre' => $item['autor']]);
+            $libro->autores()->attach($autor->id);
+
+            $categoria = Categoria::firstOrCreate(['nombre' => $item['categoria']]);
+            $libro->categorias()->attach($categoria->id);
+
+            // 1-2 carreras al azar del catálogo, para poblar el multi-select de
+            // "carrera(s) asignadas" con datos reales desde el primer arranque.
+            $carreras = Carrera::inRandomOrder()->limit(random_int(1, 2))->get();
+            $libro->carreras()->attach($carreras->pluck('id'));
+
+            $numeroCopias = $i < 5 ? 2 : ($i === 5 ? 3 : 1);
+
+            for ($copia = 1; $copia <= $numeroCopias; $copia++) {
+                $ejemplares->push(Ejemplar::create([
+                    'libro_id' => $libro->id,
+                    'numero_copia' => $copia,
+                    'codigo_barras' => 'UMAG'.str_pad((string) $contadorCodigo++, 6, '0', STR_PAD_LEFT),
+                    'disponible' => random_int(0, 100) < 78,
+                    // Los ejemplares de prueba ya están catalogados y en estante: si no,
+                    // ninguno sería prestable/reservable (PrestamoController/
+                    // ReservaLibroController exigen estado_proceso = 'en_estante') y las
+                    // demos/otros seeds quedarían rotos.
+                    'estado_proceso' => 'en_estante',
+                ])->setRelation('libro', $libro));
+            }
         }
 
-        $this->line('  · '.$libros->count().' libros creados en el catálogo (con autor, área y disponibilidad)');
+        $totalLibros = count($this->catalogoLibros);
+        $this->line("  · {$totalLibros} libros creados en el catálogo ({$ejemplares->count()} ejemplares, con autor/categoría/carrera y disponibilidad)");
 
-        return $libros;
+        return $ejemplares;
     }
 
-    private function seedReservasLibro($libros, $usuarios): void
+    /** @param  \Illuminate\Support\Collection<int, Ejemplar>  $ejemplares */
+    private function seedReservasLibro($ejemplares, $usuarios): void
     {
         $total = 0;
 
-        foreach ($libros->random(min(4, $libros->count())) as $libro) {
+        foreach ($ejemplares->where('disponible', true)->random(min(4, $ejemplares->where('disponible', true)->count())) as $ejemplar) {
             $usuario = $usuarios->random();
             $fechaReserva = now()->subDays(random_int(0, 5));
             $fechaRetiro = $fechaReserva->copy()->addDays(4);
+            $retirado = $fechaRetiro->isPast();
 
             ReservaLibro::create([
                 'usuario_id' => $usuario->id,
-                'libro_id' => $libro->id,
+                'libro_id' => $ejemplar->libro_id,
+                'ejemplar_id' => $ejemplar->id,
                 'fecha_reserva' => $fechaReserva->toDateString(),
                 'fecha_retiro' => $fechaRetiro->toDateString(),
-                'estado' => $fechaRetiro->isPast() ? 'retirado' : 'pendiente',
+                'estado' => $retirado ? 'retirado' : 'pendiente',
             ]);
+
+            // Una reserva 'pendiente' tiene la copia apartada — mantiene la disponibilidad
+            // del ejemplar consistente con lo que vería PrestamoController/ReservaLibroController.
+            if (! $retirado) {
+                $ejemplar->update(['disponible' => false]);
+            }
+
             $total++;
         }
 
