@@ -19,16 +19,16 @@ class ReservaLibroService
     /**
      * @return array{0: ReservaLibro|null, 1: string|null, 2: int}
      */
-    public function reservarOEncolar(string $codigoBarras, int $usuarioId, ?string $fechaReserva = null, ?string $fechaRetiro = null): array
+    public function reservarOEncolar(string $codigoBarras, int $usuarioId, ?string $fechaReserva = null, ?string $fechaRetiro = null, ?int $registradoPorStaffId = null): array
     {
-        return DB::transaction(function () use ($codigoBarras, $usuarioId, $fechaReserva, $fechaRetiro) {
+        return DB::transaction(function () use ($codigoBarras, $usuarioId, $fechaReserva, $fechaRetiro, $registradoPorStaffId) {
             $ejemplar = Ejemplar::where('codigo_barras', $codigoBarras)->lockForUpdate()->first();
 
             if (! $ejemplar) {
                 return [null, 'Código de barras no encontrado en el sistema', 404];
             }
 
-            return $this->procesarReserva($ejemplar, $usuarioId, $fechaReserva, $fechaRetiro);
+            return $this->procesarReserva($ejemplar, $usuarioId, $fechaReserva, $fechaRetiro, $registradoPorStaffId);
         });
     }
 
@@ -61,7 +61,7 @@ class ReservaLibroService
     }
 
     /** @return array{0: ReservaLibro|null, 1: string|null, 2: int} */
-    private function procesarReserva(Ejemplar $ejemplar, int $usuarioId, ?string $fechaReserva, ?string $fechaRetiro): array
+    private function procesarReserva(Ejemplar $ejemplar, int $usuarioId, ?string $fechaReserva, ?string $fechaRetiro, ?int $registradoPorStaffId = null): array
     {
         if ($ejemplar->estado_proceso !== 'en_estante') {
             return [null, "Este libro no está disponible para préstamo (estado: {$ejemplar->estado_proceso})", 409];
@@ -84,6 +84,7 @@ class ReservaLibroService
                 'fecha_reserva' => $fechaReserva ?? now()->toDateString(),
                 'fecha_retiro' => $fechaRetiro ?? now()->addDays(config('reservas_libro.dias_para_retirar'))->toDateString(),
                 'estado' => 'pendiente',
+                'registrado_por_staff_id' => $registradoPorStaffId,
             ]);
 
             $ejemplar->update(['disponible' => false]);
@@ -101,6 +102,7 @@ class ReservaLibroService
             'fecha_reserva' => $fechaReserva ?? now()->toDateString(),
             'fecha_retiro' => null,
             'estado' => 'en_cola',
+            'registrado_por_staff_id' => $registradoPorStaffId,
         ]);
 
         return [$reserva->load('libro'), null, 201];

@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\LibroController;
 use App\Http\Controllers\Api\PortalController;
 use App\Http\Controllers\Api\PortalReservaLibroController;
 use App\Http\Controllers\Api\PrestamoController;
+use App\Http\Controllers\Api\RegistroAbsolutoController;
 use App\Http\Controllers\Api\ReporteController;
 use App\Http\Controllers\Api\ReservaLibroController;
 use App\Http\Controllers\Api\SalaController;
@@ -90,6 +91,7 @@ Route::middleware(['auth:sanctum', 'staff'])->group(function () {
         Route::patch('/estados-libro-personalizados/{estadoLibroPersonalizado}/activo', [EstadoLibroPersonalizadoController::class, 'cambiarActivo']);
         Route::put('/configuracion', [ConfiguracionInstitucionalController::class, 'actualizar']);
         Route::post('/ubicaciones', [UbicacionController::class, 'store']);
+        Route::get('/registro-absoluto', [RegistroAbsolutoController::class, 'index']);
     });
 
     Route::get('/reservas-libro', [ReservaLibroController::class, 'index']);

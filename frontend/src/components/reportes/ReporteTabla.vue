@@ -31,7 +31,7 @@ const max = computed(() => Math.max(1, ...props.data.map((d) => d.value)))
             v-for="(d, idx) in data"
             :key="d.label"
             class="hover:bg-indigo-50/40 transition-colors"
-            :class="idx % 2 === 0 ? 'bg-white' : 'bg-slate-100'"
+            :class="idx % 2 === 0 ? 'bg-white' : 'bg-biblioteca-50'"
           >
             <td class="py-2.5 px-3 text-gray-800">
               <span class="flex items-center gap-2">

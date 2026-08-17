@@ -174,7 +174,7 @@ function badgeDe(ejemplar: { estado_proceso: string; estado_personalizado?: { no
               <template v-for="(l, idx) in libros" :key="l.id">
                 <tr
                   class="hover:bg-indigo-50/40 transition-colors cursor-pointer"
-                  :class="idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'"
+                  :class="idx % 2 === 0 ? 'bg-white' : 'bg-biblioteca-50'"
                   @click="toggleExpandido(l.id)"
                 >
                   <td class="px-4 py-3 text-gray-400">
@@ -191,7 +191,7 @@ function badgeDe(ejemplar: { estado_proceso: string; estado_personalizado?: { no
                   <td class="px-4 py-3 text-sm text-gray-600 capitalize">{{ l.tipo_material }}</td>
                   <td class="px-4 py-3 text-sm text-gray-600">{{ l.ejemplares?.length ?? 0 }}</td>
                 </tr>
-                <tr v-if="expandidos.has(l.id)" :class="idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'">
+                <tr v-if="expandidos.has(l.id)" :class="idx % 2 === 0 ? 'bg-white' : 'bg-biblioteca-50'">
                   <td></td>
                   <td colspan="5" class="px-4 pb-4">
                     <div class="rounded-lg border border-gray-200 divide-y divide-gray-100">

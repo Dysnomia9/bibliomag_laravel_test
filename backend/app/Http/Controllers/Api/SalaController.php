@@ -136,12 +136,8 @@ class SalaController extends Controller
      */
     public function devolverReserva(Request $request, Reserva $reserva)
     {
-        $data = $request->validate([
-            'registrado_por' => ['required', 'string', 'max:255'],
-        ]);
-
         try {
-            $reserva = $this->reservaSalaService->registrarDevolucion($reserva, $data['registrado_por']);
+            $reserva = $this->reservaSalaService->registrarDevolucion($reserva, $request->user());
         } catch (\RuntimeException $e) {
             return response()->json(['message' => $e->getMessage()], 409);
         }
@@ -157,12 +153,8 @@ class SalaController extends Controller
      */
     public function confirmarLlegada(Request $request, Reserva $reserva)
     {
-        $data = $request->validate([
-            'registrado_por' => ['required', 'string', 'max:255'],
-        ]);
-
         try {
-            $reserva = $this->reservaSalaService->registrarLlegada($reserva, $data['registrado_por']);
+            $reserva = $this->reservaSalaService->registrarLlegada($reserva, $request->user());
         } catch (\RuntimeException $e) {
             return response()->json(['message' => $e->getMessage()], 409);
         }
@@ -186,11 +178,10 @@ class SalaController extends Controller
     {
         $data = $request->validate([
             'codigo_barras' => ['required', 'string'],
-            'registrado_por' => ['required', 'string', 'max:255'],
         ]);
 
         try {
-            $reserva = $this->reservaSalaService->escanearLogia($data['codigo_barras'], $data['registrado_por']);
+            $reserva = $this->reservaSalaService->escanearLogia($data['codigo_barras'], $request->user());
         } catch (\RuntimeException $e) {
             return response()->json(['message' => $e->getMessage()], 409);
         }

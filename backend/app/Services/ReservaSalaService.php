@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Reserva;
 use App\Models\Sala;
+use App\Models\Staff;
 use App\Models\Usuario;
 
 class ReservaSalaService
@@ -13,7 +14,7 @@ class ReservaSalaService
      * la entrega de la reserva vigente para ese bloque horario, la segunda marca la
      * devolución. No crea reservas  solo cierra el ciclo de una reserva ya existente.
      */
-    public function escanearLogia(string $codigoBarras, string $registradoPor): Reserva
+    public function escanearLogia(string $codigoBarras, Staff $staff): Reserva
     {
         $sala = Sala::where('codigo_barras', $codigoBarras)->where('tipo', 'logia')->first();
 
@@ -35,13 +36,15 @@ class ReservaSalaService
 
         if (! $reserva->hora_prestamo_real) {
             $reserva->update([
-                'prestado_por' => $registradoPor,
+                'prestado_por' => $staff->nombre,
+                'prestado_por_staff_id' => $staff->id,
                 'hora_prestamo_real' => $ahora,
                 'via' => 'BC',
             ]);
         } elseif (! $reserva->hora_devolucion_real) {
             $reserva->update([
-                'devuelto_por' => $registradoPor,
+                'devuelto_por' => $staff->nombre,
+                'devuelto_por_staff_id' => $staff->id,
                 'hora_devolucion_real' => $ahora,
                 'estado' => 'finalizada',
             ]);
@@ -59,14 +62,15 @@ class ReservaSalaService
      * código de barras + bloque horario vigente. A diferencia de cancelar (que elimina la
      * reserva), esto conserva el registro con quién y cuándo se devolvió la llave.
      */
-    public function registrarDevolucion(Reserva $reserva, string $registradoPor): Reserva
+    public function registrarDevolucion(Reserva $reserva, Staff $staff): Reserva
     {
         if ($reserva->hora_devolucion_real) {
             throw new \RuntimeException('Esta reserva ya tiene registrada su devolución');
         }
 
         $reserva->update([
-            'devuelto_por' => $registradoPor,
+            'devuelto_por' => $staff->nombre,
+            'devuelto_por_staff_id' => $staff->id,
             'hora_devolucion_real' => now(),
             'estado' => 'finalizada',
         ]);
@@ -81,7 +85,7 @@ class ReservaSalaService
      * (ver Reserva::plazoConfirmacion()) y en ese caso libera la reserva de una vez
      * (mismo efecto que liberarPorNoPresentacion()) para que quede disponible de inmediato.
      */
-    public function registrarLlegada(Reserva $reserva, string $registradoPor): Reserva
+    public function registrarLlegada(Reserva $reserva, Staff $staff): Reserva
     {
         if ($reserva->hora_prestamo_real) {
             throw new \RuntimeException('Esta reserva ya tiene registrada su llegada');
@@ -93,7 +97,8 @@ class ReservaSalaService
         }
 
         $reserva->update([
-            'prestado_por' => $registradoPor,
+            'prestado_por' => $staff->nombre,
+            'prestado_por_staff_id' => $staff->id,
             'hora_prestamo_real' => now(),
             'via' => 'manual',
         ]);

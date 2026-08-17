@@ -50,7 +50,7 @@ const TABS: { id: ReporteTab; label: string; color: string }[] = [
   { id: 'prestamos', label: 'Número de Préstamos', color: 'emerald' },
   { id: 'ingresos', label: 'Ingresos a Biblioteca', color: 'emerald' },
   { id: 'logias', label: 'Uso de Logias', color: 'amber' },
-  { id: 'libros', label: 'Top de Libros', color: 'indigo' },
+  { id: 'libros', label: 'Libros Más Prestados', color: 'indigo' },
 ]
 
 const PERIODOS: { id: Periodo; label: string }[] = [
@@ -237,7 +237,7 @@ async function confirmarExportar() {
 
   if (tab.value === 'libros') {
     secciones.push({
-      titulo: 'Top de libros',
+      titulo: 'Libros más prestados',
       columnas: ['Libro', 'Cantidad', '%'],
       filas: resumen.value.porLibro.map((d) => [d.label, d.value, porcentaje(d.value, total)]),
     })
@@ -443,7 +443,7 @@ async function confirmarExportar() {
         </div>
 
         <div v-if="tab === 'libros'" class="bg-white rounded-xl shadow-md p-6 md:col-span-2">
-          <h3 class="font-medium text-gray-900 mb-1">Top de libros más solicitados</h3>
+          <h3 class="font-medium text-gray-900 mb-1">Libros más prestados</h3>
           <p class="text-xs text-gray-400 mb-4">Ranking por cantidad de préstamos (incluye cada copia por separado)</p>
           <BreakdownList v-if="vista === 'grafico'" :data="resumen.porLibro" :total="resumen.total" color="indigo" />
           <ReporteTabla v-else :data="resumen.porLibro" :total="resumen.total" columna="Libro" :item-color="() => '#4338CA'" />

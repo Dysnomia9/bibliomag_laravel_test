@@ -185,7 +185,7 @@ const filtrados = computed(() => prestamos.value)
                 v-for="(p, idx) in filtrados"
                 :key="p.id"
                 class="hover:bg-indigo-50/40 transition-colors"
-                :class="idx % 2 === 0 ? 'bg-white' : 'bg-slate-100'"
+                :class="idx % 2 === 0 ? 'bg-white' : 'bg-biblioteca-50'"
               >
                 <td class="px-6 py-3 text-sm text-gray-900">
                   <div class="font-medium">{{ p.usuario?.nombre }} {{ p.usuario?.apellido }}</div>

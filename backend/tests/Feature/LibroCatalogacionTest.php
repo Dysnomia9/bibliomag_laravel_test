@@ -152,24 +152,34 @@ class LibroCatalogacionTest extends TestCase
         $this->assertSame(2, Ejemplar::where('libro_id', $libro->id)->count());
     }
 
-    public function test_siguiente_codigo_de_barras_empieza_en_umag000001_sin_datos(): void
+    public function test_siguiente_codigo_de_barras_empieza_en_1_sin_datos(): void
     {
         Sanctum::actingAs(Staff::factory()->create(['rol' => 'admin']));
 
         $response = $this->getJson('/api/ejemplares/siguiente-codigo-barras');
 
-        $response->assertStatus(200)->assertJsonPath('codigo_barras', 'UMAG000001');
+        $response->assertStatus(200)->assertJsonPath('codigo_barras', '00000000000001');
     }
 
     public function test_siguiente_codigo_de_barras_continua_la_secuencia(): void
     {
         Sanctum::actingAs(Staff::factory()->create(['rol' => 'admin']));
-        Ejemplar::factory()->for(Libro::factory())->create(['codigo_barras' => 'UMAG000007']);
-        Ejemplar::factory()->for(Libro::factory())->create(['codigo_barras' => 'UMAG000003']);
+        Ejemplar::factory()->for(Libro::factory())->create(['codigo_barras' => '30000003227565']);
+        Ejemplar::factory()->for(Libro::factory())->create(['codigo_barras' => '30000003227560']);
 
         $response = $this->getJson('/api/ejemplares/siguiente-codigo-barras');
 
-        $response->assertStatus(200)->assertJsonPath('codigo_barras', 'UMAG000008');
+        $response->assertStatus(200)->assertJsonPath('codigo_barras', '30000003227566');
+    }
+
+    public function test_siguiente_codigo_de_barras_ignora_codigos_que_no_son_14_digitos(): void
+    {
+        Sanctum::actingAs(Staff::factory()->create(['rol' => 'admin']));
+        Ejemplar::factory()->for(Libro::factory())->create(['codigo_barras' => 'UMAG000099']);
+
+        $response = $this->getJson('/api/ejemplares/siguiente-codigo-barras');
+
+        $response->assertStatus(200)->assertJsonPath('codigo_barras', '00000000000001');
     }
 
     public function test_staff_no_admin_no_puede_generar_codigo_de_barras(): void

@@ -13,6 +13,7 @@ class Entrada extends Model
 
     protected $fillable = [
         'usuario_id',
+        'registrado_por_staff_id',
         'rut_externo',
         'nombre_externo',
         'fecha_hora_entrada',
@@ -36,5 +37,10 @@ class Entrada extends Model
     public function usuario()
     {
         return $this->belongsTo(Usuario::class);
+    }
+
+    public function registradoPorStaff()
+    {
+        return $this->belongsTo(Staff::class, 'registrado_por_staff_id');
     }
 }

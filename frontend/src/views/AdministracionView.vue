@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
+import JsBarcode from 'jsbarcode'
 import StaffLayout from '@/components/layout/StaffLayout.vue'
 import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import api from '@/services/api'
@@ -18,12 +19,20 @@ const confirmandoConfig = ref(false)
 const estados = ref<EstadoLibroPersonalizado[]>([])
 const nuevoEstado = reactive({ nombre: '', descripcion: '' })
 const creandoEstado = ref(false)
+const confirmandoCrearEstado = ref(false)
 const estadoADesactivar = ref<EstadoLibroPersonalizado | null>(null)
 const desactivandoEstado = ref(false)
 
 const ubicaciones = ref<Ubicacion[]>([])
 const nuevaUbicacion = reactive({ nombre: '' })
 const creandoUbicacion = ref(false)
+const confirmandoCrearUbicacion = ref(false)
+
+const codigosTexto = ref('')
+// Los códigos reales de la biblioteca son numéricos de 14 dígitos (ej. 30000003227565,
+// formato heredado de Horizon) — sin prefijo de letras.
+const rango = reactive({ prefijo: '', desde: 1, cantidad: 10, digitos: 14 })
+const sugiriendoRango = ref(false)
 
 async function cargar() {
   cargando.value = true
@@ -69,11 +78,15 @@ async function guardarConfiguracion() {
   }
 }
 
-async function crearEstado() {
+function pedirConfirmacionCrearEstado() {
   if (!nuevoEstado.nombre.trim()) {
     toast.error('Ingresa un nombre para el estado personalizado')
     return
   }
+  confirmandoCrearEstado.value = true
+}
+
+async function crearEstado() {
   creandoEstado.value = true
   try {
     const { data } = await api.post<EstadoLibroPersonalizado>('/estados-libro-personalizados', {
@@ -83,6 +96,7 @@ async function crearEstado() {
     estados.value.push(data)
     nuevoEstado.nombre = ''
     nuevoEstado.descripcion = ''
+    confirmandoCrearEstado.value = false
     toast.success('Estado personalizado creado')
   } catch (e: any) {
     toast.error(e?.response?.data?.message ?? 'No se pudo crear el estado')
@@ -91,23 +105,149 @@ async function crearEstado() {
   }
 }
 
-async function crearUbicacion() {
+function pedirConfirmacionCrearUbicacion() {
   if (!nuevaUbicacion.nombre.trim()) {
     toast.error('Ingresa un nombre para la ubicación')
     return
   }
+  confirmandoCrearUbicacion.value = true
+}
+
+async function crearUbicacion() {
   creandoUbicacion.value = true
   try {
     const { data } = await api.post<Ubicacion>('/ubicaciones', { nombre: nuevaUbicacion.nombre.trim() })
     ubicaciones.value.push(data)
     ubicaciones.value.sort((a, b) => a.nombre.localeCompare(b.nombre))
     nuevaUbicacion.nombre = ''
+    confirmandoCrearUbicacion.value = false
     toast.success('Ubicación creada')
   } catch (e: any) {
     toast.error(e?.response?.data?.message ?? 'No se pudo crear la ubicación')
   } finally {
     creandoUbicacion.value = false
   }
+}
+
+async function sugerirSiguienteCodigo() {
+  sugiriendoRango.value = true
+  try {
+    const { data } = await api.get<{ codigo_barras: string }>('/ejemplares/siguiente-codigo-barras')
+    const match = data.codigo_barras.match(/^([A-Za-z]*)(\d+)$/)
+    if (match) {
+      rango.prefijo = match[1]
+      rango.desde = parseInt(match[2], 10)
+      rango.digitos = match[2].length
+    }
+    toast.success(`Sugerido: ${data.codigo_barras}`)
+  } catch {
+    toast.error('No se pudo obtener el siguiente código sugerido')
+  } finally {
+    sugiriendoRango.value = false
+  }
+}
+
+function generarRango() {
+  if (!rango.cantidad || rango.cantidad < 1 || rango.cantidad > 500) {
+    toast.error('La cantidad debe ser entre 1 y 500')
+    return
+  }
+  const codigos: string[] = []
+  for (let i = 0; i < rango.cantidad; i++) {
+    const numero = (rango.desde + i).toString().padStart(rango.digitos, '0')
+    codigos.push(`${rango.prefijo}${numero}`)
+  }
+  codigosTexto.value = codigos.join('\n')
+}
+
+function escapeHtml(texto: string): string {
+  return texto
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function generarBarcodeDataUrl(codigo: string): string {
+  const canvas = document.createElement('canvas')
+  JsBarcode(canvas, codigo, {
+    format: 'CODE128',
+    width: 2,
+    height: 60,
+    displayValue: true,
+    fontSize: 14,
+    margin: 8,
+  })
+  return canvas.toDataURL('image/png')
+}
+
+// Abre una pestaña nueva con las etiquetas ya listas para Ctrl+P — no depende del
+// backend ni escribe nada, es puramente un utilitario de impresión sobre códigos
+// que el staff ya tiene (recién catalogados o para reimprimir una etiqueta perdida).
+function abrirImpresion() {
+  const codigos = codigosTexto.value
+    .split('\n')
+    .map((c) => c.trim())
+    .filter((c) => c.length > 0)
+
+  if (!codigos.length) {
+    toast.error('Ingresa al menos un código para generar')
+    return
+  }
+
+  const etiquetas = codigos
+    .map((codigo) => {
+      try {
+        const img = generarBarcodeDataUrl(codigo)
+        return `<div class="etiqueta"><img src="${img}" alt="${escapeHtml(codigo)}" /></div>`
+      } catch {
+        return `<div class="etiqueta etiqueta-error">Código inválido:<br>${escapeHtml(codigo)}</div>`
+      }
+    })
+    .join('')
+
+  const ventana = window.open('', '_blank')
+  if (!ventana) {
+    toast.error('El navegador bloqueó la ventana nueva — habilita las ventanas emergentes para este sitio')
+    return
+  }
+
+  ventana.document.write(`<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<title>Códigos de barra — Biblioteca UMAG</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 24px; background: #f4f6f4; }
+  .toolbar { margin-bottom: 20px; }
+  .toolbar button {
+    padding: 10px 20px; border-radius: 8px; border: none;
+    background: #3c5a3b; color: white; font-weight: 600; cursor: pointer; font-size: 14px;
+  }
+  .toolbar button:hover { background: #31482f; }
+  .hoja { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+  .etiqueta {
+    background: white; border: 1px solid #c9d4c8; border-radius: 8px;
+    padding: 10px; display: flex; align-items: center; justify-content: center; min-height: 90px;
+  }
+  .etiqueta img { max-width: 100%; }
+  .etiqueta-error { color: #b91c1c; font-size: 12px; text-align: center; }
+  @media print {
+    .toolbar { display: none; }
+    body { background: white; padding: 0; }
+    .hoja { gap: 6px; }
+    .etiqueta { border: 1px dashed #999; break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+  <div class="toolbar"><button onclick="window.print()">Imprimir</button></div>
+  <div class="hoja">${etiquetas}</div>
+</body>
+</html>`)
+  ventana.document.close()
 }
 
 async function aplicarCambioActivo(estado: EstadoLibroPersonalizado, activo: boolean) {
@@ -193,7 +333,7 @@ async function confirmarDesactivar() {
             <input v-model="nuevoEstado.nombre" placeholder="Nombre (ej: Restauración)" class="flex-1 px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm" />
             <input v-model="nuevoEstado.descripcion" placeholder="Descripción (opcional)" class="flex-1 px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm" />
             <button
-              @click="crearEstado"
+              @click="pedirConfirmacionCrearEstado"
               :disabled="creandoEstado"
               class="px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm disabled:opacity-60 shrink-0"
             >
@@ -227,9 +367,9 @@ async function confirmarDesactivar() {
           </p>
 
           <div class="flex flex-col sm:flex-row gap-2 mb-5">
-            <input v-model="nuevaUbicacion.nombre" placeholder="Nombre (ej: Biblioteca Central, Sede Puerto Natales)" class="flex-1 px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm" @keydown.enter="crearUbicacion" />
+            <input v-model="nuevaUbicacion.nombre" placeholder="Nombre (ej: Biblioteca Central, Sede Puerto Natales)" class="flex-1 px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm" @keydown.enter="pedirConfirmacionCrearUbicacion" />
             <button
-              @click="crearUbicacion"
+              @click="pedirConfirmacionCrearUbicacion"
               :disabled="creandoUbicacion"
               class="px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm disabled:opacity-60 shrink-0"
             >
@@ -243,6 +383,65 @@ async function confirmarDesactivar() {
             </div>
             <p v-if="!ubicaciones.length" class="px-4 py-6 text-center text-sm text-gray-400">Sin ubicaciones todavía.</p>
           </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-md p-6">
+          <h3 class="font-semibold text-gray-900 mb-1">Códigos de barra para imprimir</h3>
+          <p class="text-xs text-gray-500 mb-4">
+            Genera etiquetas con código de barra real (Code128) a partir de una lista de códigos — sirve para
+            libros, equipos o cualquier código ya asignado en el sistema. Se abren en una pestaña nueva lista
+            para imprimir.
+          </p>
+
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Prefijo</label>
+              <input v-model="rango.prefijo" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Desde</label>
+              <input v-model.number="rango.desde" type="number" min="0" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Cantidad</label>
+              <input v-model.number="rango.cantidad" type="number" min="1" max="500" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Dígitos</label>
+              <input v-model.number="rango.digitos" type="number" min="1" max="12" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm" />
+            </div>
+          </div>
+
+          <div class="flex flex-wrap gap-2 mb-4">
+            <button
+              @click="sugerirSiguienteCodigo"
+              :disabled="sugiriendoRango"
+              class="px-3 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors font-medium text-xs disabled:opacity-60"
+            >
+              {{ sugiriendoRango ? 'Consultando…' : 'Sugerir siguiente (libros)' }}
+            </button>
+            <button
+              @click="generarRango"
+              class="px-3 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors font-medium text-xs"
+            >
+              Generar lista con este rango
+            </button>
+          </div>
+
+          <label class="block text-xs font-medium text-gray-600 mb-1">Códigos a imprimir (uno por línea)</label>
+          <textarea
+            v-model="codigosTexto"
+            rows="6"
+            placeholder="30000003227565&#10;30000003227566&#10;30000003227567"
+            class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-mono mb-4"
+          />
+
+          <button
+            @click="abrirImpresion"
+            class="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm"
+          >
+            Generar e imprimir
+          </button>
         </div>
       </div>
 
@@ -282,6 +481,69 @@ async function confirmarDesactivar() {
               class="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm disabled:opacity-60"
             >
               {{ guardandoConfig ? 'Guardando…' : 'Sí, guardar' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div
+        v-if="confirmandoCrearEstado"
+        class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        @click.self="confirmandoCrearEstado = false"
+      >
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+          <h3 class="text-lg font-bold text-gray-900 mb-1">¿Crear este estado personalizado?</h3>
+          <p class="text-sm text-gray-500 mb-3">
+            Quedará disponible como opción "Personalizado" en Estado de Libro y Cambio Masivo para todo el staff.
+          </p>
+          <div class="text-sm bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 mb-6 space-y-1">
+            <p><strong>{{ nuevoEstado.nombre }}</strong></p>
+            <p v-if="nuevoEstado.descripcion" class="text-gray-500">{{ nuevoEstado.descripcion }}</p>
+          </div>
+          <div class="flex gap-3">
+            <button
+              @click="confirmandoCrearEstado = false"
+              class="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors font-medium text-sm"
+            >
+              Cancelar
+            </button>
+            <button
+              @click="crearEstado"
+              :disabled="creandoEstado"
+              class="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm disabled:opacity-60"
+            >
+              {{ creandoEstado ? 'Creando…' : 'Sí, crear' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div
+        v-if="confirmandoCrearUbicacion"
+        class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        @click.self="confirmandoCrearUbicacion = false"
+      >
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+          <h3 class="text-lg font-bold text-gray-900 mb-1">¿Crear esta ubicación?</h3>
+          <p class="text-sm text-gray-500 mb-3">
+            Quedará disponible para elegir al catalogar un libro y como filtro en Cambio Masivo de Estado.
+          </p>
+          <div class="text-sm bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 mb-6">
+            <p><strong>{{ nuevaUbicacion.nombre }}</strong></p>
+          </div>
+          <div class="flex gap-3">
+            <button
+              @click="confirmandoCrearUbicacion = false"
+              class="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors font-medium text-sm"
+            >
+              Cancelar
+            </button>
+            <button
+              @click="crearUbicacion"
+              :disabled="creandoUbicacion"
+              class="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm disabled:opacity-60"
+            >
+              {{ creandoUbicacion ? 'Creando…' : 'Sí, crear' }}
             </button>
           </div>
         </div>

@@ -87,7 +87,7 @@ const filtrados = computed(() => {
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-200">
-              <tr v-for="(u, idx) in filtrados" :key="u.usuario_id" :class="idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'">
+              <tr v-for="(u, idx) in filtrados" :key="u.usuario_id" :class="idx % 2 === 0 ? 'bg-white' : 'bg-biblioteca-50'">
                 <td class="px-6 py-3 text-sm font-medium text-gray-900">{{ u.nombre }} {{ u.apellido }}</td>
                 <td class="px-6 py-3 text-sm font-mono text-gray-600">{{ u.rut }}</td>
                 <td class="px-6 py-3 text-sm text-gray-600">{{ u.cantidad_prestamos }}</td>

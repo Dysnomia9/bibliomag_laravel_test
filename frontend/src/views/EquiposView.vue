@@ -148,7 +148,7 @@ const TIPO_LABELS: Record<string, string> = {
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-200">
-              <tr v-for="(e, idx) in equipos" :key="e.id" :class="idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'">
+              <tr v-for="(e, idx) in equipos" :key="e.id" :class="idx % 2 === 0 ? 'bg-white' : 'bg-biblioteca-50'">
                 <td class="px-6 py-3 text-sm font-mono text-gray-900">{{ e.codigo_inventario }}</td>
                 <td class="px-6 py-3 text-sm font-mono text-gray-500">{{ e.codigo_barras }}</td>
                 <td class="px-6 py-3 text-sm text-gray-600">{{ TIPO_LABELS[e.tipo] }}</td>

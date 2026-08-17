@@ -304,3 +304,25 @@ export type CodigoAcceso = {
   created_at: string
   updated_at: string
 }
+
+export type TipoOperacionRegistro = 'prestamo_libro' | 'prestamo_equipo' | 'reserva_sala' | 'reserva_libro' | 'entrada'
+
+export type CategoriaOperacionRegistro = 'prestamo' | 'reserva_sala' | 'reserva_libro' | 'entrada'
+
+export type OperacionRegistro = {
+  tipo: TipoOperacionRegistro
+  fecha_hora: string | null
+  usuario_nombre: string | null
+  usuario_rut: string | null
+  detalle: string | null
+  estado: string | null
+  atendido_por: string | null
+  origen_id: number
+}
+
+export type RegistroAbsolutoResumen = {
+  desde: string
+  hasta: string
+  total: number
+  operaciones: OperacionRegistro[]
+}

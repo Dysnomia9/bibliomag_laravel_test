@@ -57,6 +57,7 @@ class EntradaController extends Controller
         $ahora = now();
         $entrada = Entrada::create([
             'usuario_id' => $usuario->id,
+            'registrado_por_staff_id' => $request->user()->id,
             'via' => $data['via'] ?? 'manual',
             'codigo_barras' => config('horizon_barcodes.puesto_generico'),
             'fecha_hora_entrada' => $ahora,
@@ -82,6 +83,7 @@ class EntradaController extends Controller
         $entrada = Entrada::create([
             'rut_externo' => $data['rut'],
             'nombre_externo' => $data['nombre'] ?? null,
+            'registrado_por_staff_id' => $request->user()->id,
             'via' => 'manual',
             'codigo_barras' => config('horizon_barcodes.puesto_generico'),
             'fecha_hora_entrada' => $ahora,
@@ -105,6 +107,7 @@ class EntradaController extends Controller
             'rut_externo' => $data['rut'],
             'nombre_externo' => $data['nombre'] ?? null,
             'es_convenio' => true,
+            'registrado_por_staff_id' => $request->user()->id,
             'via' => 'manual',
             'codigo_barras' => config('horizon_barcodes.puesto_generico'),
             'fecha_hora_entrada' => $ahora,
@@ -129,6 +132,7 @@ class EntradaController extends Controller
             'rut_externo' => $data['rut'],
             'nombre_externo' => $data['nombre'] ?? null,
             'es_visita' => true,
+            'registrado_por_staff_id' => $request->user()->id,
             'via' => 'manual',
             'codigo_barras' => config('horizon_barcodes.puesto_generico'),
             'fecha_hora_entrada' => $ahora,

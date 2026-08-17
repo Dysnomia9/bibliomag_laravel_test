@@ -39,14 +39,16 @@ class SalaConfirmacionAsistenciaTest extends TestCase
 
     public function test_confirmar_llegada_dentro_del_plazo_marca_prestado_por_y_hora(): void
     {
-        Sanctum::actingAs(Staff::factory()->create());
+        $staff = Staff::factory()->create(['nombre' => 'Ana Pérez']);
+        Sanctum::actingAs($staff);
         Carbon::setTestNow('2026-08-15 14:05:00');
         $reserva = Reserva::factory()->create(['fecha' => '2026-08-15', 'hora_inicio' => 14, 'hora_fin' => 16]);
 
-        $response = $this->patchJson("/api/reservas/{$reserva->id}/llegada", ['registrado_por' => 'Ana Pérez']);
+        $response = $this->patchJson("/api/reservas/{$reserva->id}/llegada");
 
         $response->assertStatus(200)->assertJsonPath('prestado_por', 'Ana Pérez');
         $this->assertNotNull($response->json('hora_prestamo_real'));
+        $this->assertDatabaseHas('reservas', ['id' => $reserva->id, 'prestado_por_staff_id' => $staff->id]);
     }
 
     public function test_confirmar_llegada_dos_veces_devuelve_409(): void
@@ -55,8 +57,8 @@ class SalaConfirmacionAsistenciaTest extends TestCase
         Carbon::setTestNow('2026-08-15 14:05:00');
         $reserva = Reserva::factory()->create(['fecha' => '2026-08-15', 'hora_inicio' => 14, 'hora_fin' => 16]);
 
-        $this->patchJson("/api/reservas/{$reserva->id}/llegada", ['registrado_por' => 'Ana Pérez'])->assertStatus(200);
-        $response = $this->patchJson("/api/reservas/{$reserva->id}/llegada", ['registrado_por' => 'Ana Pérez']);
+        $this->patchJson("/api/reservas/{$reserva->id}/llegada")->assertStatus(200);
+        $response = $this->patchJson("/api/reservas/{$reserva->id}/llegada");
 
         $response->assertStatus(409);
     }
@@ -68,7 +70,7 @@ class SalaConfirmacionAsistenciaTest extends TestCase
         $reserva = Reserva::factory()->create(['fecha' => '2026-08-15', 'hora_inicio' => 14, 'hora_fin' => 16]);
 
         Carbon::setTestNow('2026-08-15 14:16:00');
-        $response = $this->patchJson("/api/reservas/{$reserva->id}/llegada", ['registrado_por' => 'Ana Pérez']);
+        $response = $this->patchJson("/api/reservas/{$reserva->id}/llegada");
 
         $response->assertStatus(409);
         $this->assertSame('no_show', $reserva->fresh()->estado);

@@ -55,15 +55,23 @@ class EjemplarController extends Controller
         return response()->json($ejemplar->load(['libro', 'ubicacion']), 201);
     }
 
-    /** Sugiere el próximo código de barras interno secuencial (UMAG######). El staff puede editarlo antes de guardar. */
+    /**
+     * Sugiere el próximo código de barras interno secuencial. Los códigos reales de la
+     * biblioteca son numéricos de 14 dígitos (ej. 30000003227565, formato heredado de
+     * Horizon) — se busca el mayor código de 14 dígitos existente y se suma 1. El staff
+     * puede editarlo antes de guardar. Si todavía no hay ningún código de 14 dígitos en
+     * la base (instalación nueva, sin códigos reales importados aún), arranca en
+     * '00000000000001' — es solo un punto de partida neutro, no un prefijo institucional
+     * real, que nadie confirmó todavía.
+     */
     public function siguienteCodigoBarras()
     {
-        $ultimoNumero = Ejemplar::where('codigo_barras', 'like', 'UMAG%')
+        $ultimoNumero = Ejemplar::whereRaw("codigo_barras ~ '^[0-9]{14}$'")
             ->get(['codigo_barras'])
-            ->map(fn ($e) => (int) substr($e->codigo_barras, 4))
+            ->map(fn ($e) => (int) $e->codigo_barras)
             ->max();
 
-        $codigo = 'UMAG'.str_pad((string) (($ultimoNumero ?? 0) + 1), 6, '0', STR_PAD_LEFT);
+        $codigo = str_pad((string) (($ultimoNumero ?? 0) + 1), 14, '0', STR_PAD_LEFT);
 
         return response()->json(['codigo_barras' => $codigo]);
     }

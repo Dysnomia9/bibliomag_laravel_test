@@ -5,11 +5,9 @@ import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import api from '@/services/api'
 import { useToast } from '@/composables/useToast'
 import { formatRut } from '@/composables/useRut'
-import { useStaffNombres } from '@/composables/useStaffNombres'
 import type { Reserva, Sala } from '@/types'
 
 const toast = useToast()
-const { nombresStaff, cargarStaffNombres } = useStaffNombres()
 
 const hoy = new Date().toISOString().slice(0, 10)
 
@@ -49,11 +47,9 @@ const detalleBloque = ref<(typeof horariosBloques)[number] | null>(null)
 const cancelacionPendiente = ref<{ salaId: number; horaInicio: number; salaNombre: string; bloqueLabel: string } | null>(null)
 
 const devolucionPendiente = ref<{ reservaId: number; salaNombre: string; bloqueLabel: string } | null>(null)
-const registradoPorDevolucion = ref('')
 const devolviendo = ref(false)
 
 const llegadaPendiente = ref<{ reservaId: number; salaNombre: string; bloqueLabel: string } | null>(null)
-const registradoPorLlegada = ref('')
 const confirmandoLlegada = ref(false)
 const liberando = ref<number | null>(null)
 
@@ -64,7 +60,6 @@ let relojTimer: ReturnType<typeof setInterval> | undefined
 let refrescoTimer: ReturnType<typeof setInterval> | undefined
 
 const codigoLogiaScan = ref('')
-const registradoPorScan = ref('')
 const escaneando = ref(false)
 
 watch(cantidadPersonas, (nueva) => {
@@ -91,7 +86,6 @@ async function cargar() {
 
 onMounted(() => {
   cargar()
-  cargarStaffNombres()
   relojTimer = setInterval(() => (ahora.value = new Date()), 1000)
   // Refresca la lista cada minuto — además de mantener el panel de confirmación al
   // día, esto es lo que dispara la expiración perezosa del backend (SalaController::
@@ -105,15 +99,14 @@ onUnmounted(() => {
 watch(selectedDate, cargar)
 
 async function escanearLogia() {
-  if (!codigoLogiaScan.value.trim() || !registradoPorScan.value.trim()) {
-    toast.error('Ingrese el código de barras y quién registra')
+  if (!codigoLogiaScan.value.trim()) {
+    toast.error('Ingrese el código de barras')
     return
   }
   escaneando.value = true
   try {
     const { data } = await api.post('/salas/scan-logia', {
       codigo_barras: codigoLogiaScan.value.trim(),
-      registrado_por: registradoPorScan.value.trim(),
     })
     toast.success(data.hora_devolucion_real ? 'Devolución de logia registrada' : 'Entrega de logia registrada')
     codigoLogiaScan.value = ''
@@ -255,21 +248,14 @@ async function confirmarCancelacion() {
 }
 
 function pedirDevolucion(salaNombre: string, bloqueLabel: string, reservaId: number) {
-  registradoPorDevolucion.value = ''
   devolucionPendiente.value = { reservaId, salaNombre, bloqueLabel }
 }
 
 async function confirmarDevolucion() {
   if (!devolucionPendiente.value) return
-  if (!registradoPorDevolucion.value.trim()) {
-    toast.error('Ingrese quién registra la devolución')
-    return
-  }
   devolviendo.value = true
   try {
-    await api.patch(`/reservas/${devolucionPendiente.value.reservaId}/devolver`, {
-      registrado_por: registradoPorDevolucion.value.trim(),
-    })
+    await api.patch(`/reservas/${devolucionPendiente.value.reservaId}/devolver`)
     toast.success('Devolución de llave confirmada')
     devolucionPendiente.value = null
     detalleOpen.value = false
@@ -286,21 +272,14 @@ function formatFechaLarga(fecha: string) {
 }
 
 function pedirLlegada(salaNombre: string, bloqueLabel: string, reservaId: number) {
-  registradoPorLlegada.value = ''
   llegadaPendiente.value = { reservaId, salaNombre, bloqueLabel }
 }
 
 async function confirmarLlegadaAction() {
   if (!llegadaPendiente.value) return
-  if (!registradoPorLlegada.value.trim()) {
-    toast.error('Ingrese quién confirma la llegada')
-    return
-  }
   confirmandoLlegada.value = true
   try {
-    await api.patch(`/reservas/${llegadaPendiente.value.reservaId}/llegada`, {
-      registrado_por: registradoPorLlegada.value.trim(),
-    })
+    await api.patch(`/reservas/${llegadaPendiente.value.reservaId}/llegada`)
     toast.success('Llegada confirmada')
     llegadaPendiente.value = null
     detalleOpen.value = false
@@ -465,17 +444,6 @@ function formatCuentaRegresiva(segundos: number) {
               @keydown.enter="escanearLogia"
             />
           </div>
-          <div class="flex-1 min-w-[200px]">
-            <label class="block text-xs font-medium text-gray-600 mb-1">Registrado por</label>
-            <input
-              v-model="registradoPorScan"
-              type="text"
-              list="staff-nombres"
-              placeholder="Nombre de quien registra"
-              class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-              @keydown.enter="escanearLogia"
-            />
-          </div>
           <button
             @click="escanearLogia"
             :disabled="escaneando"
@@ -484,9 +452,6 @@ function formatCuentaRegresiva(segundos: number) {
             {{ escaneando ? 'Procesando…' : 'Registrar' }}
           </button>
         </div>
-        <datalist id="staff-nombres">
-          <option v-for="n in nombresStaff" :key="n" :value="n" />
-        </datalist>
       </div>
 
       <div class="mb-4 flex flex-wrap items-center gap-3">
@@ -795,22 +760,11 @@ function formatCuentaRegresiva(segundos: number) {
       >
         <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
           <h3 class="text-lg font-bold text-gray-900 mb-1">Confirmar devolución de llave</h3>
-          <p class="text-sm text-gray-500 mb-4">
+          <p class="text-sm text-gray-500 mb-6">
             Se registrará la devolución de <strong>{{ devolucionPendiente.salaNombre }}</strong> para el bloque
             <strong>{{ devolucionPendiente.bloqueLabel }}</strong>. La reserva queda marcada como finalizada
             (no se borra, a diferencia de cancelar).
           </p>
-          <div class="mb-6">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Registrado por</label>
-            <input
-              v-model="registradoPorDevolucion"
-              type="text"
-              list="staff-nombres"
-              placeholder="Nombre de quien registra"
-              class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
-              @keydown.enter="confirmarDevolucion"
-            />
-          </div>
           <div class="flex gap-3">
             <button
               @click="devolucionPendiente = null"
@@ -836,21 +790,10 @@ function formatCuentaRegresiva(segundos: number) {
       >
         <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
           <h3 class="text-lg font-bold text-gray-900 mb-1">Confirmar llegada</h3>
-          <p class="text-sm text-gray-500 mb-4">
+          <p class="text-sm text-gray-500 mb-6">
             Se registrará que el grupo se presentó en <strong>{{ llegadaPendiente.salaNombre }}</strong> para el bloque
             <strong>{{ llegadaPendiente.bloqueLabel }}</strong>.
           </p>
-          <div class="mb-6">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Registrado por</label>
-            <input
-              v-model="registradoPorLlegada"
-              type="text"
-              list="staff-nombres"
-              placeholder="Nombre de quien registra"
-              class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-              @keydown.enter="confirmarLlegadaAction"
-            />
-          </div>
           <div class="flex gap-3">
             <button
               @click="llegadaPendiente = null"

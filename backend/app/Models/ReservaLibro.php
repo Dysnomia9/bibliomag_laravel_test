@@ -18,6 +18,7 @@ class ReservaLibro extends Model
         'fecha_reserva',
         'fecha_retiro',
         'estado',
+        'registrado_por_staff_id',
     ];
 
     protected function casts(): array
@@ -41,5 +42,10 @@ class ReservaLibro extends Model
     public function ejemplar()
     {
         return $this->belongsTo(Ejemplar::class);
+    }
+
+    public function registradoPorStaff()
+    {
+        return $this->belongsTo(Staff::class, 'registrado_por_staff_id');
     }
 }

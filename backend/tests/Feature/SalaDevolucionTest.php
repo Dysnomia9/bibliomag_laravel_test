@@ -15,7 +15,8 @@ class SalaDevolucionTest extends TestCase
 
     public function test_confirmar_devolucion_de_llave_marca_la_reserva_como_finalizada(): void
     {
-        Sanctum::actingAs(Staff::factory()->create());
+        $staff = Staff::factory()->create(['nombre' => 'Juan Pérez']);
+        Sanctum::actingAs($staff);
 
         $reserva = Reserva::factory()->create([
             'sala_id' => Sala::factory()->create()->id,
@@ -24,9 +25,7 @@ class SalaDevolucionTest extends TestCase
             'estado' => 'activa',
         ]);
 
-        $response = $this->patchJson("/api/reservas/{$reserva->id}/devolver", [
-            'registrado_por' => 'Juan Pérez',
-        ]);
+        $response = $this->patchJson("/api/reservas/{$reserva->id}/devolver");
 
         $response->assertStatus(200)
             ->assertJsonPath('devuelto_por', 'Juan Pérez')
@@ -35,6 +34,7 @@ class SalaDevolucionTest extends TestCase
         $this->assertDatabaseHas('reservas', [
             'id' => $reserva->id,
             'devuelto_por' => 'Juan Pérez',
+            'devuelto_por_staff_id' => $staff->id,
             'estado' => 'finalizada',
         ]);
 
@@ -53,9 +53,7 @@ class SalaDevolucionTest extends TestCase
             'estado' => 'finalizada',
         ]);
 
-        $response = $this->patchJson("/api/reservas/{$reserva->id}/devolver", [
-            'registrado_por' => 'Otra Persona',
-        ]);
+        $response = $this->patchJson("/api/reservas/{$reserva->id}/devolver");
 
         $response->assertStatus(409);
 

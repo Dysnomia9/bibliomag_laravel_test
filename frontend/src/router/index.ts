@@ -140,6 +140,12 @@ const router = createRouter({
       component: () => import('@/views/AdministracionView.vue'),
       meta: { requiresAdmin: true },
     },
+    {
+      path: '/registro-absoluto',
+      name: 'registro-absoluto',
+      component: () => import('@/views/RegistroAbsolutoView.vue'),
+      meta: { requiresAdmin: true },
+    },
   ],
 })
 

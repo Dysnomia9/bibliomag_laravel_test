@@ -44,6 +44,7 @@ class ReservaLibroController extends Controller
             $data['usuario_id'],
             $data['fecha_reserva'] ?? null,
             $data['fecha_retiro'] ?? null,
+            $request->user()->id,
         );
 
         if ($error) {

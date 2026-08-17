@@ -22,7 +22,9 @@ class Reserva extends Model
         'hora_fin',
         'estado',
         'prestado_por',
+        'prestado_por_staff_id',
         'devuelto_por',
+        'devuelto_por_staff_id',
         'hora_prestamo_real',
         'hora_devolucion_real',
         'via',
@@ -50,6 +52,16 @@ class Reserva extends Model
     public function participantes()
     {
         return $this->belongsToMany(Usuario::class, 'reserva_participantes')->withTimestamps();
+    }
+
+    public function prestadoPorStaff()
+    {
+        return $this->belongsTo(Staff::class, 'prestado_por_staff_id');
+    }
+
+    public function devueltoPorStaff()
+    {
+        return $this->belongsTo(Staff::class, 'devuelto_por_staff_id');
     }
 
     /**
