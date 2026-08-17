@@ -222,11 +222,12 @@ async function confirmarDesactivar() {
         <div class="bg-white rounded-xl shadow-md p-6">
           <h3 class="font-semibold text-gray-900 mb-1">Ubicaciones</h3>
           <p class="text-xs text-gray-500 mb-4">
-            Ubicación física de los ejemplares, seleccionable en Catalogación y Cambio Masivo de Estado.
+            Sedes y otras ubicaciones físicas donde puede estar un ejemplar — se elige al catalogar un libro
+            y sirve para filtrar en Cambio Masivo de Estado. Agrega acá cualquier sede nueva, no hay límite.
           </p>
 
           <div class="flex flex-col sm:flex-row gap-2 mb-5">
-            <input v-model="nuevaUbicacion.nombre" placeholder="Nombre (ej: Biblioteca Central)" class="flex-1 px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm" @keydown.enter="crearUbicacion" />
+            <input v-model="nuevaUbicacion.nombre" placeholder="Nombre (ej: Biblioteca Central, Sede Puerto Natales)" class="flex-1 px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm" @keydown.enter="crearUbicacion" />
             <button
               @click="crearUbicacion"
               :disabled="creandoUbicacion"
