@@ -6,7 +6,7 @@ import LibrosModuloNav from '@/components/libros/LibrosModuloNav.vue'
 import MultiSelectCombobox from '@/components/libros/MultiSelectCombobox.vue'
 import api from '@/services/api'
 import { useToast } from '@/composables/useToast'
-import type { Autor, Carrera, Categoria, Libro, TipoMaterialLibro, Ubicacion } from '@/types'
+import type { Autor, Carrera, Categoria, Libro, TipoMaterial, Ubicacion } from '@/types'
 
 const toast = useToast()
 
@@ -19,6 +19,7 @@ const autoresOpciones = ref<Autor[]>([])
 const categoriasOpciones = ref<Categoria[]>([])
 const carrerasOpciones = ref<Carrera[]>([])
 const ubicacionesOpciones = ref<Ubicacion[]>([])
+const tiposMaterialOpciones = ref<TipoMaterial[]>([])
 
 const modo = ref<'nuevo' | 'copia'>('nuevo')
 
@@ -37,7 +38,7 @@ const formVacio = {
   editorial: '',
   anio_publicacion: '' as number | '',
   ubicacion_id: '' as number | '',
-  tipo_material: 'libro' as TipoMaterialLibro,
+  tipo_material_id: '' as number | '',
   volumen: '',
   precio: '' as number | '',
   nota_publica: '',
@@ -70,16 +71,18 @@ async function cargar() {
 
 async function cargarCatalogos() {
   try {
-    const [autoresRes, categoriasRes, carrerasRes, ubicacionesRes] = await Promise.all([
+    const [autoresRes, categoriasRes, carrerasRes, ubicacionesRes, tiposMaterialRes] = await Promise.all([
       api.get<Autor[]>('/autores'),
       api.get<Categoria[]>('/categorias'),
       api.get<Carrera[]>('/carreras'),
       api.get<Ubicacion[]>('/ubicaciones'),
+      api.get<TipoMaterial[]>('/tipos-material'),
     ])
     autoresOpciones.value = autoresRes.data
     categoriasOpciones.value = categoriasRes.data
     carrerasOpciones.value = carrerasRes.data
     ubicacionesOpciones.value = ubicacionesRes.data
+    tiposMaterialOpciones.value = tiposMaterialRes.data
   } catch {
     // Los combobox simplemente no ofrecen sugerencias — no bloquea catalogar.
   }
@@ -126,7 +129,7 @@ function editar(libro: Libro) {
     editorial: libro.editorial ?? '',
     anio_publicacion: libro.anio_publicacion ?? '',
     ubicacion_id: '',
-    tipo_material: libro.tipo_material ?? 'libro',
+    tipo_material_id: libro.tipo_material_id ?? '',
     volumen: '',
     precio: '',
     nota_publica: libro.nota_publica ?? '',
@@ -157,6 +160,7 @@ async function confirmarGuardar() {
       anio_publicacion: form.anio_publicacion === '' ? null : Number(form.anio_publicacion),
       precio: form.precio === '' ? null : Number(form.precio),
       ubicacion_id: form.ubicacion_id === '' ? null : Number(form.ubicacion_id),
+      tipo_material_id: form.tipo_material_id === '' ? null : Number(form.tipo_material_id),
     }
     if (editandoId.value) {
       await api.patch(`/libros/${editandoId.value}`, payload)
@@ -323,12 +327,9 @@ const estadoBadges: Record<string, { label: string; cls: string }> = {
 
           <div>
             <label class="block text-xs font-medium text-gray-600 mb-1">Tipo de material</label>
-            <select v-model="form.tipo_material" class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm">
-              <option value="libro">Libro</option>
-              <option value="revista">Revista</option>
-              <option value="tesis">Tesis</option>
-              <option value="dvd">DVD</option>
-              <option value="otro">Otro</option>
+            <select v-model="form.tipo_material_id" class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm">
+              <option value="">Sin especificar</option>
+              <option v-for="t in tiposMaterialOpciones" :key="t.id" :value="t.id">{{ t.nombre }}</option>
             </select>
           </div>
           <div class="sm:col-span-2">

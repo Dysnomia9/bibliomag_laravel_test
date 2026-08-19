@@ -86,12 +86,11 @@ export type EstadoProcesoEjemplar =
   | 'coleccion_movil'
   | 'personalizado'
 
-export type TipoMaterialLibro = 'libro' | 'revista' | 'tesis' | 'dvd' | 'otro'
-
 export type Autor = { id: number; nombre: string }
 export type Categoria = { id: number; nombre: string }
 export type Carrera = { id: number; nombre: string }
 export type Ubicacion = { id: number; nombre: string }
+export type TipoMaterial = { id: number; nombre: string }
 
 export type EstadoLibroPersonalizado = {
   id: number
@@ -127,7 +126,8 @@ export type Libro = {
   coleccion: string | null
   editorial: string | null
   anio_publicacion: number | null
-  tipo_material: TipoMaterialLibro
+  tipo_material_id: number | null
+  tipo_material?: TipoMaterial | null
   nota_interna: string | null
   nota_publica: string | null
   autores?: Autor[]
@@ -159,7 +159,7 @@ export type EjemplarEstadoHistorial = {
 export type CambioMasivoFiltro = {
   ubicacion_id?: number
   estado_proceso_actual?: string
-  tipo_material?: string
+  tipo_material_id?: number
   categoria_id?: number
   q?: string
 }

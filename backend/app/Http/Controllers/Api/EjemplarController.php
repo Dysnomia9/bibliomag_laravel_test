@@ -215,8 +215,8 @@ class EjemplarController extends Controller
             $query->where('estado_proceso', $estadoActual);
         }
 
-        if ($tipoMaterial = $request->input('tipo_material')) {
-            $query->whereHas('libro', fn ($q) => $q->where('tipo_material', $tipoMaterial));
+        if ($tipoMaterialId = $request->input('tipo_material_id')) {
+            $query->whereHas('libro', fn ($q) => $q->where('tipo_material_id', $tipoMaterialId));
         }
 
         if ($categoriaId = $request->input('categoria_id')) {
@@ -236,7 +236,7 @@ class EjemplarController extends Controller
     /** Exige al menos un criterio — sin esto, un cambio masivo sin filtros aplicaría a TODOS los ejemplares del sistema. */
     private function validarFiltro(Request $request): void
     {
-        $tieneFiltro = collect(['ubicacion_id', 'estado_proceso_actual', 'tipo_material', 'categoria_id', 'q'])
+        $tieneFiltro = collect(['ubicacion_id', 'estado_proceso_actual', 'tipo_material_id', 'categoria_id', 'q'])
             ->contains(fn ($campo) => filled($request->input($campo)));
 
         if (! $tieneFiltro) {

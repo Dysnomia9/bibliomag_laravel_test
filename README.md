@@ -11,7 +11,10 @@ PostgreSQL** (backend API), 100% dockerizada.
 - Dashboard con indicadores en tiempo real: usuarios activos, entradas de
   hoy, personas en sala, préstamos activos y atrasados.
 - Registro de entradas por RUT, QR o manual — incluye visitantes externos,
-  de convenio y visitas.
+  de convenio y visitas. El historial se puede consultar por día exacto
+  (uso diario de mesón) o en modo búsqueda, por rango de fechas y/o RUT/
+  nombre — útil para auditar cuándo vino una persona puntual, no solo el
+  tráfico de hoy.
 - Préstamos y devoluciones de libros (por código de barras de la copia
   física, con fecha de préstamo/devolución acordada) y de equipos —
   audífonos, notebooks y cargadores — también por código de barras real,
@@ -47,8 +50,9 @@ PostgreSQL** (backend API), 100% dockerizada.
 - Código QR de acceso compartido y regenerable, para que los usuarios
   marquen su entrada por su cuenta.
 - Panel de Administración (solo admin): nombre/cargo de quien firma la
-  Constancia de No Multa, catálogo de estados personalizados de ejemplar, y
-  catálogo de ubicaciones físicas.
+  Constancia de No Multa, catálogo de estados personalizados de ejemplar,
+  catálogo de ubicaciones físicas, y catálogo de tipos de material (antes
+  un enum fijo de 5 valores, ahora administrable como los otros dos).
 
 **Portal virtual de autoservicio (usuarios finales, sin ser staff)**
 
@@ -74,6 +78,12 @@ PostgreSQL** (backend API), 100% dockerizada.
 - Compatibilidad con los lectores de código de barras de Horizon para
   logias y puestos de trabajo (sin sincronizar datos con Horizon — ver
   Deuda técnica).
+- Notificaciones por correo (reserva de libro lista para retirar, multa
+  generada al devolver atrasado) ya implementadas y disparándose solas
+  desde el flujo real — pero sin servidor SMTP configurado todavía, así
+  que hoy quedan escritas en `storage/logs/laravel.log` en vez de salir
+  por correo real. Activarlas es solo configurar `MAIL_MAILER`/`MAIL_HOST`
+  en `.env`, sin tocar código.
 
 ## Estructura
 
@@ -107,7 +117,7 @@ biblioteca-vue-laravel/
 | Cambio masivo de estado | `/libros/cambio-masivo` (dropdown, **solo admin**) | `EjemplarController::cambioMasivo*` |
 | Historial de estado | `/libros/historial-estado` (dropdown) | `EjemplarController::historialEstado` |
 | Historial de libros | `/libros/historial-prestamos` (dropdown) | `LibroController::historial` |
-| Administración | `/administracion` (dropdown, **solo admin**) | `ConfiguracionInstitucionalController`, `EstadoLibroPersonalizadoController`, `UbicacionController` |
+| Administración | `/administracion` (dropdown, **solo admin**) | `ConfiguracionInstitucionalController`, `EstadoLibroPersonalizadoController`, `UbicacionController`, `TipoMaterialController` |
 
 ### Cómo se arma la imagen del backend
 
@@ -208,8 +218,9 @@ npm run dev
 
 ## Tests y benchmark de rendimiento
 
-Hay una suite de Feature tests (`backend/tests/Feature/`, 170 tests al
-2026-08-16) que cubre login de staff/usuario, registro de entradas, reservas
+Hay una suite de Feature tests (`backend/tests/Feature/`, 197 tests al
+2026-08-19) que cubre login de staff/usuario, registro de entradas (incluido
+el modo búsqueda por rango de fechas y RUT/nombre) y su historial, reservas
 de sala (solapamiento y validación grupal, incluido el cruce entre salas
 distintas, restricción a "solo hoy" para alumnos, el límite de bloques por
 participante —máximo 2, solo adyacentes en la misma sala—, y el flujo
@@ -218,13 +229,16 @@ no-show), préstamos
 y reservas de libros y equipos por código de barras (incluida la protección
 contra condición de carrera con `DB::transaction()`+`lockForUpdate()`),
 catalogación y cambio de estado de ejemplares (incluido el cambio masivo y
-su historial), CHECK constraints de las columnas tipo enum, cascadas de
-borrado `RESTRICT` en el historial, atribución real de staff en préstamos,
-cálculo/cobro de multas por atraso y su reporte consolidado, configuración
-institucional, la Constancia de No Multa en autoservicio desde el portal, y
-la separación de middlewares `staff`/`usuario`. Corre contra una base
-Postgres de pruebas dedicada (`biblioteca_test`, separada de `biblioteca`),
-que `docker-entrypoint.sh` crea automáticamente al levantar el backend.
+su historial), el catálogo administrable de tipos de material, CHECK
+constraints de las columnas tipo enum, cascadas de borrado `RESTRICT` en el
+historial, atribución real de staff en préstamos, cálculo/cobro de multas
+por atraso y su reporte consolidado, las notificaciones por correo (reserva
+lista para retirar, multa generada — vía `Notification::fake()`, sin
+depender de un servidor de correo real), configuración institucional, la
+Constancia de No Multa en autoservicio desde el portal, y la separación de
+middlewares `staff`/`usuario`. Corre contra una base Postgres de pruebas
+dedicada (`biblioteca_test`, separada de `biblioteca`), que
+`docker-entrypoint.sh` crea automáticamente al levantar el backend.
 
 ```bash
 docker compose exec backend php artisan test
@@ -258,9 +272,17 @@ tests.
 - **`PortalController` concentra varias responsabilidades** (estado/aforo,
   entrada/salida, catálogo, salas y reservas del usuario). Si crece más,
   conviene separar por dominio en vez de agregar más métodos ahí.
-- **Historial de entradas sin rango de fechas ni búsqueda por persona**:
-  `EntradaController::index` solo admite un día exacto — sigue siendo el
-  módulo con la búsqueda más débil del sistema.
+- **Sin aviso de préstamo por vencer**: ya existen notificaciones por
+  correo para "reserva lista para retirar" y "multa generada" (ver
+  Backend/integraciones), disparadas por eventos que ya ocurren en el
+  código. Falta el aviso "tu préstamo vence mañana", que necesitaría un
+  job programado (`Schedule::` diario) — no hay ningún proceso de cron
+  corriendo en `docker-compose.yml` hoy, así que quedó fuera de alcance
+  por ahora, no es un olvido.
+- **Notificaciones sin servidor SMTP real**: funcionan y están probadas,
+  pero sin credenciales de un servidor de correo configuradas quedan
+  escritas en el log del backend en vez de enviarse de verdad — ver
+  Backend/integraciones para cómo activarlas.
 - **Sin backups automatizados ni soft deletes** — decisión de alcance
   deliberada por ahora, no un olvido. La integridad de datos (transacciones,
   locks, CHECK constraints, cascadas `RESTRICT`) ya está resuelta; ver

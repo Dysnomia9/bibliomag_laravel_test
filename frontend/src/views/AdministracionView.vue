@@ -5,7 +5,7 @@ import StaffLayout from '@/components/layout/StaffLayout.vue'
 import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import api from '@/services/api'
 import { useToast } from '@/composables/useToast'
-import type { ConfiguracionInstitucional, EstadoLibroPersonalizado, Ubicacion } from '@/types'
+import type { ConfiguracionInstitucional, EstadoLibroPersonalizado, TipoMaterial, Ubicacion } from '@/types'
 
 const toast = useToast()
 const apiError = ref(false)
@@ -28,6 +28,11 @@ const nuevaUbicacion = reactive({ nombre: '' })
 const creandoUbicacion = ref(false)
 const confirmandoCrearUbicacion = ref(false)
 
+const tiposMaterial = ref<TipoMaterial[]>([])
+const nuevoTipoMaterial = reactive({ nombre: '' })
+const creandoTipoMaterial = ref(false)
+const confirmandoCrearTipoMaterial = ref(false)
+
 const codigosTexto = ref('')
 // Los códigos reales de la biblioteca son numéricos de 14 dígitos (ej. 30000003227565,
 // formato heredado de Horizon) — sin prefijo de letras.
@@ -37,15 +42,17 @@ const sugiriendoRango = ref(false)
 async function cargar() {
   cargando.value = true
   try {
-    const [configRes, estadosRes, ubicacionesRes] = await Promise.all([
+    const [configRes, estadosRes, ubicacionesRes, tiposMaterialRes] = await Promise.all([
       api.get<ConfiguracionInstitucional>('/configuracion'),
       api.get<EstadoLibroPersonalizado[]>('/estados-libro-personalizados'),
       api.get<Ubicacion[]>('/ubicaciones'),
+      api.get<TipoMaterial[]>('/tipos-material'),
     ])
     Object.assign(configuracion, configRes.data)
     Object.assign(configuracionOriginal, configRes.data)
     estados.value = estadosRes.data
     ubicaciones.value = ubicacionesRes.data
+    tiposMaterial.value = tiposMaterialRes.data
     apiError.value = false
   } catch {
     apiError.value = true
@@ -126,6 +133,30 @@ async function crearUbicacion() {
     toast.error(e?.response?.data?.message ?? 'No se pudo crear la ubicación')
   } finally {
     creandoUbicacion.value = false
+  }
+}
+
+function pedirConfirmacionCrearTipoMaterial() {
+  if (!nuevoTipoMaterial.nombre.trim()) {
+    toast.error('Ingresa un nombre para el tipo de material')
+    return
+  }
+  confirmandoCrearTipoMaterial.value = true
+}
+
+async function crearTipoMaterial() {
+  creandoTipoMaterial.value = true
+  try {
+    const { data } = await api.post<TipoMaterial>('/tipos-material', { nombre: nuevoTipoMaterial.nombre.trim() })
+    tiposMaterial.value.push(data)
+    tiposMaterial.value.sort((a, b) => a.nombre.localeCompare(b.nombre))
+    nuevoTipoMaterial.nombre = ''
+    confirmandoCrearTipoMaterial.value = false
+    toast.success('Tipo de material creado')
+  } catch (e: any) {
+    toast.error(e?.response?.data?.message ?? 'No se pudo crear el tipo de material')
+  } finally {
+    creandoTipoMaterial.value = false
   }
 }
 
@@ -386,6 +417,32 @@ async function confirmarDesactivar() {
         </div>
 
         <div class="bg-white rounded-xl shadow-md p-6">
+          <h3 class="font-semibold text-gray-900 mb-1">Tipos de material</h3>
+          <p class="text-xs text-gray-500 mb-4">
+            Se eligen al catalogar un libro y sirven para filtrar en Listado de Libros y Cambio Masivo de Estado.
+            Agrega acá cualquier tipo nuevo (ej: Mapa, Partitura), no hay límite.
+          </p>
+
+          <div class="flex flex-col sm:flex-row gap-2 mb-5">
+            <input v-model="nuevoTipoMaterial.nombre" placeholder="Nombre (ej: Mapa)" class="flex-1 px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm" @keydown.enter="pedirConfirmacionCrearTipoMaterial" />
+            <button
+              @click="pedirConfirmacionCrearTipoMaterial"
+              :disabled="creandoTipoMaterial"
+              class="px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm disabled:opacity-60 shrink-0"
+            >
+              + Crear
+            </button>
+          </div>
+
+          <div class="rounded-lg border border-gray-200 divide-y divide-gray-100">
+            <div v-for="t in tiposMaterial" :key="t.id" class="px-4 py-3">
+              <p class="text-sm font-medium text-gray-900">{{ t.nombre }}</p>
+            </div>
+            <p v-if="!tiposMaterial.length" class="px-4 py-6 text-center text-sm text-gray-400">Sin tipos de material todavía.</p>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-md p-6">
           <h3 class="font-semibold text-gray-900 mb-1">Códigos de barra para imprimir</h3>
           <p class="text-xs text-gray-500 mb-4">
             Genera etiquetas con código de barra real (Code128) a partir de una lista de códigos — sirve para
@@ -544,6 +601,37 @@ async function confirmarDesactivar() {
               class="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm disabled:opacity-60"
             >
               {{ creandoUbicacion ? 'Creando…' : 'Sí, crear' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div
+        v-if="confirmandoCrearTipoMaterial"
+        class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        @click.self="confirmandoCrearTipoMaterial = false"
+      >
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+          <h3 class="text-lg font-bold text-gray-900 mb-1">¿Crear este tipo de material?</h3>
+          <p class="text-sm text-gray-500 mb-3">
+            Quedará disponible para elegir al catalogar un libro y como filtro en Listado de Libros y Cambio Masivo de Estado.
+          </p>
+          <div class="text-sm bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 mb-6">
+            <p><strong>{{ nuevoTipoMaterial.nombre }}</strong></p>
+          </div>
+          <div class="flex gap-3">
+            <button
+              @click="confirmandoCrearTipoMaterial = false"
+              class="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors font-medium text-sm"
+            >
+              Cancelar
+            </button>
+            <button
+              @click="crearTipoMaterial"
+              :disabled="creandoTipoMaterial"
+              class="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm disabled:opacity-60"
+            >
+              {{ creandoTipoMaterial ? 'Creando…' : 'Sí, crear' }}
             </button>
           </div>
         </div>

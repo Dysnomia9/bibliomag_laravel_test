@@ -64,28 +64,31 @@ profesor evaluando la tesis probablemente busque estos 13 puntos:
 | 3 | Préstamos | ✅ Completo | `PrestamoController::store`, incluye cálculo de multa por atraso desde 2026-07-17 (ver Gotchas) |
 | 4 | Devoluciones | ✅ Completo | `PrestamoController::devolver` |
 | 5 | Reservas | ✅ Completo | Salas/logias (`SalaController` + `ReservaSalaService`) y libros para retiro (`ReservaLibroController` + `PortalReservaLibroController`, con cola de espera FIFO — ver Gotchas) |
-| 6 | Historial | ⚠️ Parcial / distribuido | Por usuario: completo (`PrestamoView.vue` lista todos sus préstamos y reservas, no solo los activos). Global de préstamos: `ListadoPrestamosView.vue` sin filtro de fecha. Por libro/copia: nuevo (2026-08-15), completo — `LibroController::historial` + `HistorialPrestamosLibroView.vue` busca por título/código y lista cada copia con su historial de préstamos y conteo. Estado de ejemplares: nuevo (2026-08-15), completo — `EjemplarController::historialEstado` + `HistorialEstadoLibroView.vue`. Entradas sigue siendo el eslabón débil: `EntradaController::index` solo admite un día exacto (`?fecha=`), sin rango ni búsqueda por RUT/usuario — no hay forma de auditar la asistencia histórica de una persona puntual |
+| 6 | Historial | ✅ Completo (desde 2026-08-19) | Por usuario: completo (`PrestamoView.vue` lista todos sus préstamos y reservas, no solo los activos). Global de préstamos: `ListadoPrestamosView.vue` sin filtro de fecha (brecha menor, no crítica). Por libro/copia: `LibroController::historial` + `HistorialPrestamosLibroView.vue`. Estado de ejemplares: `EjemplarController::historialEstado` + `HistorialEstadoLibroView.vue`. Entradas: ya no es el eslabón débil — `EntradaController::index` ahora soporta modo búsqueda (`desde`/`hasta`/`q` por RUT o nombre, ver Gotchas) además del modo día exacto de siempre |
 | 7 | Dashboard | ✅ Completo | `DashboardController::resumen` + `DashboardView.vue` |
 | 8 | Reportes | ✅ Completo | `ReporteController` (agregaciones `GROUP BY` por período/carrera/sexo/tipo/hora), `ReportesView.vue` con gráficos |
 | 9 | Estadísticas | ✅ Cubierto (dentro de Dashboard + Reportes) | No hay un menú "Estadísticas" separado, pero los desgloses (`porCarrera`, `porSexo`, `porAnioIngreso`, `porTipoUsuario`, `porHora`) existen en `ReporteResumen` |
-| 10 | Búsqueda avanzada | ⚠️ Parcial (mejoró en libros el 2026-08-15) | Usuarios (`UsuarioController::index`): multi-campo real (`nombre`/`apellido`/`rut`/`carrera`) + filtros `tipo`/`activo`. Préstamos: filtros `usuario_id`/`estado`/`tipo_item`. Libros (`LibroController::index`): ahora sí tiene filtros reales en backend — `categoria_id`/`autor_id`/`carrera_id`/`tipo_material`/`estado_proceso` (+ `estado_personalizado_id`), además del texto libre por título/ISBN/autor/código de cualquier copia; `CambioMasivoEstadoView.vue` suma un filtro de ubicación, pero para operaciones masivas, no para búsqueda. Entradas sigue siendo el más débil de los cuatro: solo por fecha exacta |
+| 10 | Búsqueda avanzada | ✅ Completo (desde 2026-08-19) | Usuarios (`UsuarioController::index`): multi-campo real (`nombre`/`apellido`/`rut`/`carrera`) + filtros `tipo`/`activo`. Préstamos: filtros `usuario_id`/`estado`/`tipo_item`. Libros (`LibroController::index`): filtros reales en backend — `categoria_id`/`autor_id`/`carrera_id`/`tipo_material_id`/`estado_proceso` (+ `estado_personalizado_id`), además del texto libre por título/ISBN/autor/código de cualquier copia; `CambioMasivoEstadoView.vue` suma un filtro de ubicación, pero para operaciones masivas, no para búsqueda. Entradas ya no es el más débil: `q` busca por RUT/nombre (usuario registrado o externo) combinado con rango `desde`/`hasta`, ver Gotchas |
 | 11 | Consulta de disponibilidad | ✅ Completo | `Ejemplar.disponible` + `estado_proceso` (por copia, desde el split de Libro/Ejemplar), `EjemplarController::buscarPorCodigo` (chequeo en tiempo real al prestar/reservar), disponibilidad de salas por bloque horario (`GET /salas?fecha=`), catálogo del portal filtrado por disponibilidad agregada de las copias de cada título |
 | 12 | Integración con la base institucional | ⚠️ Parcial — ojo con este punto en la defensa | **No es una integración de datos/API real con Horizon** (no hay sync ni llamadas a una BD/API externa). Es una capa de **compatibilidad de códigos de barra** para convivir físicamente con los lectores Horizon: `config/horizon_barcodes.php`, `ReservaSalaService::escanearLogia()`, comando `horizon:codigos-logia`. Los códigos reales de Horizon **todavía no están cargados** (placeholder inventado `'62572'`). No confundir con el botón "Base de Datos Digital"/"Recursos Digitales" (`UsuariosView.vue`, `PortalHomeView.vue`, agregado 2026-08-15) — es solo un link de salida a `https://umag.elogim.com/` (catálogo externo de recursos digitales de la universidad), sin ninguna integración de datos, sin relación con Horizon |
 | 13 | QR | ✅ Completo y funcional | `CodigoAcceso` (código de acceso compartido, regenerable), renderizado real con la librería `qrcode` (`CodigoQrView.vue`, canvas + descarga PNG), validado server-side en `PortalController::registrarEntrada` cuando `via === 'qr'`. Nota: el campo `Usuario.qr_code` es vestigial, no forma parte de este flujo |
 
-**Resumen honesto (actualizado 2026-08-15)**: 10/13 sin reservas, 3/13 con
-brechas reales y verificables en el código (historial de entradas sin
-rango de fechas/búsqueda por persona, búsqueda avanzada de entradas —la de
-libros ya se resolvió—, e integración real con Horizon más allá de
-compatibilidad de código de barras). El gap de ejemplares múltiples (punto
-2) se cerró el 2026-08-15 con el modelo `Ejemplar`. El propio profesor
+**Resumen honesto (actualizado 2026-08-19)**: 12/13 sin reservas, 1/13 con
+brecha real y verificable en el código (integración real con Horizon más
+allá de compatibilidad de código de barras — punto 12, sin sync/API real,
+código de logia todavía placeholder). El gap de ejemplares múltiples
+(punto 2) se cerró el 2026-08-15 con el modelo `Ejemplar`; los dos gaps de
+Entradas (historial sin rango/búsqueda, punto 6, y búsqueda avanzada,
+punto 10) se cerraron el 2026-08-19 (ver Gotchas). El propio profesor
 considera fuera de alcance razonable adquisiciones/seriales/proveedores/
 multas avanzadas — las multas básicas (tarifa fija por día, $15 desde
 2026-08-15, sin bloqueo de nuevos préstamos por deuda) ya están cubiertas
-por el punto 3. Antes de citar un "% de cobertura" en la defensa, decidir
-si las 3 brechas de arriba importan para el alcance declarado de la tesis,
-y volver a correr esta tabla contra el código si pasó tiempo desde
-2026-08-15.
+por el punto 3. El punto 12 (Horizon) es una limitación real de datos (no
+hay credenciales/API de Horizon disponibles), no una brecha de código
+pendiente de implementar — no asumir que se puede "simplemente
+completar" sin acceso al sistema real. Antes de citar un "% de
+cobertura" en la defensa, volver a correr esta tabla contra el código si
+pasó tiempo desde 2026-08-19.
 
 ## Stack
 
@@ -381,23 +384,32 @@ frontend/
   `utils/constancia.ts` (`generarConstanciaNoMulta`). Verificado
   manualmente el 2026-08-16 en los dos lados: bloqueo con multa pendiente,
   descarga sin errores de consola sin deuda.
-- **Sí hay tests automatizados** (`backend/tests/Feature/`, 28 archivos:
+- **Sí hay tests automatizados** (`backend/tests/Feature/`, 30 archivos:
   `AuthTest`, `CascadaRestrictTest`, `CatalogoLibroTest`,
   `ConfiguracionInstitucionalTest`, `EjemplarCambioMasivoTest`,
   `EntradaTest`, `EnumCheckConstraintsTest`, `EquipoPrestamoTest`,
   `EstadoLibroPersonalizadoTest`, `LibroCatalogacionTest`,
   `LibroEstadoProcesoTest`, `LibroHistorialTest`, `MiddlewareTest`,
-  `MultasPendientesTest`, `PortalEntradaTest`, `PortalMisMultasTest`,
-  `PortalReservaLibroTest`, `PortalReservaTest`, `PrestamoConcurrenciaTest`,
-  `PrestamoLibroTest`, `PrestamoMultaTest`, `ReporteResumenLibrosSalasTest`,
-  `ReservaLibroColaTest`, `ReservaLibroTest`,
-  `SalaConfirmacionAsistenciaTest`, `SalaDevolucionTest`, `SalaReservaTest`,
-  `StaffAtribucionTest`, `UsuarioAuthTest`), corren contra una DB Postgres
+  `MultasPendientesTest`, `NotificacionesTest`, `PortalEntradaTest`,
+  `PortalMisMultasTest`, `PortalReservaLibroTest`, `PortalReservaTest`,
+  `PrestamoConcurrenciaTest`, `PrestamoLibroTest`, `PrestamoMultaTest`,
+  `ReporteResumenLibrosSalasTest`, `ReservaLibroColaTest`,
+  `ReservaLibroTest`, `SalaConfirmacionAsistenciaTest`,
+  `SalaDevolucionTest`, `SalaReservaTest`, `StaffAtribucionTest`,
+  `TipoMaterialTest`, `UsuarioAuthTest`), corren contra una DB Postgres
   dedicada (`biblioteca_test`, ver `docker-entrypoint.sh`) con
-  `docker compose exec backend php artisan test` — 170 tests al 2026-08-16.
-  La catalogación de libros, el split Libro/Ejemplar, el cambio masivo de
-  estado y el flujo completo de confirmación de asistencia de sala ya
-  tienen cobertura completa.
+  `docker compose exec backend php artisan test` — 197 tests al
+  2026-08-19. La catalogación de libros, el split Libro/Ejemplar, el
+  cambio masivo de estado y el flujo completo de confirmación de
+  asistencia de sala ya tienen cobertura completa. **Ojo**: hasta
+  2026-08-19 `phpunit.xml` declaraba un testsuite "Unit" apuntando a
+  `tests/Unit`, carpeta que ya no existe desde la limpieza del scaffold
+  del 2026-08-13 (se fue junto con `ExampleTest.php`, pero nadie sacó la
+  referencia) — `php artisan test` sin argumentos fallaba de entrada con
+  "Test directory not found", y solo `--testsuite=Feature` funcionaba. Se
+  sacó el bloque `<testsuite name="Unit">` de `phpunit.xml`. Si en algún
+  momento se agregan tests unitarios reales, crear `tests/Unit/` primero
+  y recién ahí volver a declarar ese testsuite.
 - **Multas: aviso + vista consolidada, pero sin bloqueo duro** —
   `Prestamo.multa_monto`/`multa_estado` se calculan y guardan por préstamo
   individual al momento de `devolver()` (ver Gotchas). Ya existe:
@@ -1213,6 +1225,102 @@ frontend/
   ya usaba `$request->user()->id` (no `ruts[0]`) para `usuario_id` desde
   antes — este cambio es puramente UX, ahorra que el estudiante se
   tipee su propio RUT cada vez.
+- **`libros.tipo_material` de enum fijo a catálogo administrable**
+  (2026-08-19): igual que pasó con `Ubicacion` el 2026-08-15, el tipo de
+  material (antes `libro|revista|tesis|dvd|otro`, `in:` + CHECK constraint)
+  se convirtió en la tabla `tipos_material` — mismo patrón "admin-only" de
+  la convención 8 (solo se crea desde `AdministracionView.vue`, todo staff
+  solo lee). Migración `2026_08_19_000001_create_tipos_material_table`
+  crea la tabla, la siembra con los 5 valores originales, agrega
+  `libros.tipo_material_id` (FK, `nullOnDelete`) con backfill desde el
+  valor de texto viejo, y dropea la columna + su CHECK constraint —
+  irreversible sin pérdida si se agregan tipos nuevos después (mismo
+  criterio que el resto de estas conversiones texto→catálogo). `Libro`
+  gana `tipoMaterial(): BelongsTo` (nuevo modelo `TipoMaterial`, análogo a
+  `Ubicacion`). `LibroController::index()` ordena "por tipo de recurso"
+  con un `leftJoin` a `tipos_material` + `orderBy('tipos_material.nombre')`
+  en vez de ordenar por el id de la FK (que no sería alfabético). El
+  filtro de query pasó de `?tipo_material=` (string) a
+  `?tipo_material_id=` (id) en `LibroController`/`EjemplarController`
+  (cambio masivo). Frontend: `CatalogacionLibrosView.vue`,
+  `CambioMasivoEstadoView.vue` y `ListadoLibrosView.vue` pasaron sus 3
+  `<select>` hardcodeados a `v-for` sobre `GET /tipos-material`. No
+  reintroduzcas el `in:libro,revista,tesis,dvd,otro` fijo — un tipo de
+  material nuevo (ej. "Mapa") ahora se crea desde Administración, no
+  editando código. Tests: `TipoMaterialTest.php`.
+- **Historial de entradas: modo búsqueda por rango de fechas + RUT/nombre**
+  (2026-08-19) — cerraba dos de los tres gaps reales del checklist de
+  Horizon (puntos 6 y 10, ver tabla más arriba). Antes
+  `EntradaController::index()` solo aceptaba `?fecha=` (un día exacto) —
+  no había forma de auditar "¿cuándo vino esta persona?" ni "¿quién entró
+  entre estas dos fechas?" sin revisar día por día a mano. Ya se agregó un
+  segundo modo, activado si viene `desde`, `hasta` y/o `q` (cualquiera de
+  los tres, no hace falta mandarlos todos): rango de fechas abierto por
+  cualquiera de los dos extremos + texto libre por RUT/nombre, buscando
+  tanto en `usuarios` (`whereHas('usuario', ...)`) como en
+  `rut_externo`/`nombre_externo` (visitas/externos/convenio). El JSON de
+  respuesta trae `modo: 'dia' | 'busqueda'` — en `'busqueda'` no viene
+  `personasEnSala` (esa métrica solo tiene sentido para "hoy", no para un
+  rango de varios días) y hay un tope de 500 filas (defensivo, un rango
+  abierto sin más filtro podría devolver años de historial de una sola
+  vez). Sin `desde`/`hasta`/`q`, el comportamiento es exactamente el de
+  siempre (día exacto, default hoy) — no rompe nada existente. Igual que
+  la búsqueda de Usuarios, **no normaliza puntos/guión del RUT** — el
+  staff busca con el mismo formato con el que se muestra en pantalla
+  (`12.345.678-5`), mismo criterio que `UsuarioController::index()`. No
+  reintroduzcas la comparación de un solo día si volvés a tocar este
+  controller. Frontend: `EntradaView.vue` suma un toggle "Por día" /
+  "Buscar por rango / RUT / nombre" arriba del historial — en modo
+  búsqueda aparecen inputs Desde/Hasta + texto, con debounce de 300ms, y
+  la tabla suma una columna "Fecha" (oculta en modo día, donde sería
+  redundante repetir la misma fecha en cada fila). Tests: 4 casos nuevos
+  en `EntradaTest.php`.
+- **Notificaciones por correo: implementadas pero sin SMTP real todavía**
+  (2026-08-19) — antes no existía ningún `Mail::`/`Notification::` en todo
+  el proyecto (`MAIL_MAILER` nunca se seteaba, caía al default de Laravel).
+  Se agregaron dos notificaciones reales, no un stub: `App\Notifications\
+  ReservaListaParaRetirarNotification` (se dispara desde
+  `ReservaLibroService::liberarLibro()` cuando promueve a alguien de la
+  cola de espera a `'pendiente'` — mismo método que usan tanto
+  `PrestamoController::devolver()` como `ReservaLibroService::cancelar()`,
+  así que cubre ambos disparadores sin duplicar lógica) y
+  `App\Notifications\MultaGeneradaNotification` (se dispara desde
+  `PrestamoController::devolver()` cuando `multa_estado` queda
+  `'pendiente'`). `Usuario` ganó el trait `Notifiable` — el modelo ya
+  tenía `email` fillable, así que el ruteo de mail por defecto de Laravel
+  (usa el atributo `email`) funciona sin código adicional; si el usuario
+  no tiene email, el guard explícito antes de `->notify()` evita el envío
+  (aunque `MailChannel` igual lo saltaría solo). **A propósito no llevan
+  `ShouldQueue`** — no hay ningún proceso `queue:work` corriendo en
+  `docker-compose.yml` (`QUEUE_CONNECTION=sync` desde siempre), así que un
+  `ShouldQueue` las dejaría en la tabla de jobs sin enviar nunca; se
+  mandan sincrónicas, en línea, dentro del mismo request. **Por qué no
+  rompe nada sin configurar un servidor de correo real**: `config/mail.php`
+  cae a `env('MAIL_MAILER', 'log')` por default, y `.env.example` ahora lo
+  deja explícito (`MAIL_MAILER=log`) con un comentario — con ese driver
+  Laravel escribe el correo completo (HTML armado) en
+  `storage/logs/laravel.log` en vez de intentar salir a la red, así que
+  nunca falla ni bloquea el flujo de devolver/liberar un libro. Verificado
+  manualmente el 2026-08-19: se forzó un préstamo atrasado, se devolvió
+  por la API real (no un test con mock), y el correo completo apareció en
+  el log sin errores. Cuando haya un SMTP real, activar cambiando
+  `MAIL_MAILER=smtp` + `MAIL_HOST`/`MAIL_PORT`/`MAIL_USERNAME`/
+  `MAIL_PASSWORD`/`MAIL_FROM_ADDRESS` en `.env` — **sin tocar código**. Se
+  agregó `->salutation('Saludos,<br>Biblioteca UMAG')` en ambas
+  notificaciones porque el saludo default de Laravel ("Regards,") sale en
+  inglés (`APP_LOCALE` es `en`, nunca se publicaron los lang files en
+  español) — si agregás una notificación nueva, no te olvides de este
+  override o el correo queda mezclando español e inglés. **No implementado
+  a propósito**: el aviso "tu préstamo vence mañana" (el tercer caso que se
+  había mencionado como útil) necesitaría un job programado
+  (`Schedule::` diario) revisando `prestamos` con `fecha_devolucion`
+  próxima — a diferencia de las dos notificaciones de arriba, que se
+  disparan solas desde un evento que ya ocurre en el código, esta
+  necesitaría infraestructura de cron que hoy no existe en
+  `docker-compose.yml` (ni `supervisor`, ni un contenedor separado
+  corriendo `schedule:work`) — quedó fuera de este cambio, no es un
+  olvido. Tests: `NotificacionesTest.php` (usa `Notification::fake()`,
+  no depende de mail real).
 
 ## Checklist antes de dar un módulo por terminado
 

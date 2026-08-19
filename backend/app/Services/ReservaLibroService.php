@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Ejemplar;
 use App\Models\ReservaLibro;
+use App\Notifications\ReservaListaParaRetirarNotification;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -157,5 +158,12 @@ class ReservaLibroService
             'ejemplar_id' => $ejemplar->id,
             'fecha_retiro' => now()->addDays(config('reservas_libro.dias_para_retirar'))->toDateString(),
         ]);
+
+        // Sin SMTP configurado (ver .env.example), esto solo queda escrito en
+        // storage/logs/laravel.log — no falla ni intenta salir a la red.
+        $siguiente->load(['usuario', 'libro']);
+        if ($siguiente->usuario?->email) {
+            $siguiente->usuario->notify(new ReservaListaParaRetirarNotification($siguiente));
+        }
     }
 }

@@ -5,7 +5,7 @@ import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import LibrosModuloNav from '@/components/libros/LibrosModuloNav.vue'
 import api from '@/services/api'
 import { useToast } from '@/composables/useToast'
-import type { CambioMasivoPreview, Categoria, EstadoLibroPersonalizado, EstadoProcesoEjemplar, Ubicacion } from '@/types'
+import type { CambioMasivoPreview, Categoria, EstadoLibroPersonalizado, EstadoProcesoEjemplar, TipoMaterial, Ubicacion } from '@/types'
 
 const toast = useToast()
 const apiError = ref(false)
@@ -13,7 +13,7 @@ const apiError = ref(false)
 const filtro = reactive({
   ubicacion_id: '' as number | '',
   estado_proceso_actual: '',
-  tipo_material: '',
+  tipo_material_id: '' as number | '',
   categoria_id: '' as number | '',
   q: '',
 })
@@ -25,6 +25,7 @@ const motivo = ref('')
 const categorias = ref<Categoria[]>([])
 const estadosPersonalizados = ref<EstadoLibroPersonalizado[]>([])
 const ubicaciones = ref<Ubicacion[]>([])
+const tiposMaterial = ref<TipoMaterial[]>([])
 
 const ESTADOS: { value: EstadoProcesoEjemplar; label: string }[] = [
   { value: 'inventario', label: 'Inventario' },
@@ -39,14 +40,16 @@ const ESTADOS: { value: EstadoProcesoEjemplar; label: string }[] = [
 
 async function cargarCatalogos() {
   try {
-    const [categoriasRes, estadosRes, ubicacionesRes] = await Promise.all([
+    const [categoriasRes, estadosRes, ubicacionesRes, tiposMaterialRes] = await Promise.all([
       api.get<Categoria[]>('/categorias'),
       api.get<EstadoLibroPersonalizado[]>('/estados-libro-personalizados', { params: { activo: 1 } }),
       api.get<Ubicacion[]>('/ubicaciones'),
+      api.get<TipoMaterial[]>('/tipos-material'),
     ])
     categorias.value = categoriasRes.data
     estadosPersonalizados.value = estadosRes.data
     ubicaciones.value = ubicacionesRes.data
+    tiposMaterial.value = tiposMaterialRes.data
   } catch {
     apiError.value = true
   }
@@ -55,14 +58,14 @@ async function cargarCatalogos() {
 onMounted(cargarCatalogos)
 
 const tieneFiltro = computed(() =>
-  Boolean(filtro.ubicacion_id || filtro.estado_proceso_actual || filtro.tipo_material || filtro.categoria_id || filtro.q.trim())
+  Boolean(filtro.ubicacion_id || filtro.estado_proceso_actual || filtro.tipo_material_id || filtro.categoria_id || filtro.q.trim())
 )
 
 function paramsFiltro() {
   return {
     ubicacion_id: filtro.ubicacion_id || undefined,
     estado_proceso_actual: filtro.estado_proceso_actual || undefined,
-    tipo_material: filtro.tipo_material || undefined,
+    tipo_material_id: filtro.tipo_material_id || undefined,
     categoria_id: filtro.categoria_id || undefined,
     q: filtro.q.trim() || undefined,
   }
@@ -108,7 +111,7 @@ const descripcionCriterios = computed(() => {
   const partes: string[] = []
   if (filtro.ubicacion_id) partes.push(`ubicación "${ubicaciones.value.find((u) => u.id === filtro.ubicacion_id)?.nombre}"`)
   if (filtro.estado_proceso_actual) partes.push(`estado actual "${filtro.estado_proceso_actual}"`)
-  if (filtro.tipo_material) partes.push(`tipo "${filtro.tipo_material}"`)
+  if (filtro.tipo_material_id) partes.push(`tipo "${tiposMaterial.value.find((t) => t.id === filtro.tipo_material_id)?.nombre}"`)
   if (filtro.categoria_id) partes.push(`categoría "${categorias.value.find((c) => c.id === filtro.categoria_id)?.nombre}"`)
   if (filtro.q.trim()) partes.push(`texto "${filtro.q.trim()}"`)
   return partes.join(', ')
@@ -176,13 +179,9 @@ async function confirmarEjecucion() {
           </div>
           <div>
             <label class="block text-xs font-medium text-gray-600 mb-1">Tipo de material</label>
-            <select v-model="filtro.tipo_material" class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none text-sm">
+            <select v-model="filtro.tipo_material_id" class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none text-sm">
               <option value="">Cualquiera</option>
-              <option value="libro">Libro</option>
-              <option value="revista">Revista</option>
-              <option value="tesis">Tesis</option>
-              <option value="dvd">DVD</option>
-              <option value="otro">Otro</option>
+              <option v-for="t in tiposMaterial" :key="t.id" :value="t.id">{{ t.nombre }}</option>
             </select>
           </div>
           <div>

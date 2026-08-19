@@ -21,6 +21,15 @@ const apiError = ref(false)
 const registrando = ref(false)
 const selectedDate = ref(hoy)
 
+// Modo "búsqueda": rango de fechas + texto libre por RUT/nombre, para auditoría
+// puntual ("¿cuándo vino esta persona?") — separado del modo "día" que usa mesón
+// a diario. Ver EntradaController::index().
+const modo = ref<'dia' | 'busqueda'>('dia')
+const busquedaDesde = ref('')
+const busquedaHasta = ref('')
+const busquedaTexto = ref('')
+const buscando = ref(false)
+
 const externoModalOpen = ref(false)
 const rutExterno = ref('')
 const nombreExterno = ref('')
@@ -63,23 +72,59 @@ function formatHora(iso: string) {
 }
 
 async function cargar() {
+  const params =
+    modo.value === 'busqueda'
+      ? {
+          desde: busquedaDesde.value || undefined,
+          hasta: busquedaHasta.value || undefined,
+          q: busquedaTexto.value.trim() || undefined,
+        }
+      : { fecha: selectedDate.value }
+
+  buscando.value = true
   try {
-    const { data } = await api.get('/entrada', { params: { fecha: selectedDate.value } })
+    const { data } = await api.get('/entrada', { params })
     entradas.value = data.entradas
-    personasEnSala.value = data.personasEnSala
+    // personasEnSala solo viene en modo "día" — en búsqueda se deja el último
+    // valor conocido en vez de resetear a 0, para no hacer parpadear el contador.
+    if (data.modo === 'dia') personasEnSala.value = data.personasEnSala
     apiError.value = false
   } catch {
     apiError.value = true
     entradas.value = []
-    personasEnSala.value = 0
+  } finally {
+    buscando.value = false
   }
 }
 
 onMounted(cargar)
 watch(selectedDate, cargar)
 
+let busquedaTimer: ReturnType<typeof setTimeout> | undefined
+watch([busquedaDesde, busquedaHasta, busquedaTexto], () => {
+  if (modo.value !== 'busqueda') return
+  clearTimeout(busquedaTimer)
+  busquedaTimer = setTimeout(cargar, 300)
+})
+
+function cambiarModo(nuevo: 'dia' | 'busqueda') {
+  if (modo.value === nuevo) return
+  modo.value = nuevo
+  if (nuevo === 'dia') {
+    cargar()
+  } else if (busquedaDesde.value || busquedaHasta.value || busquedaTexto.value.trim()) {
+    cargar()
+  } else {
+    entradas.value = []
+  }
+}
+
 function formatFechaLarga(fecha: string) {
   return fecha === hoy ? 'hoy' : new Date(`${fecha}T12:00:00`).toLocaleDateString('es-CL')
+}
+
+function formatFechaCorta(iso: string) {
+  return new Date(iso).toLocaleDateString('es-CL')
 }
 
 async function registrarEntrada(via: 'manual' | 'qr' = 'manual') {
@@ -286,19 +331,62 @@ async function registrarVisita() {
       </div>
 
       <div class="bg-[#FCFBF8] rounded-xl shadow-md border border-stone-200 overflow-hidden">
-        <div class="px-6 py-4 border-b border-stone-200 bg-white flex items-center justify-between flex-wrap gap-3">
-          <h3 class="font-serif font-semibold text-gray-900">Historial de {{ formatFechaLarga(selectedDate) }}</h3>
+        <div class="px-6 py-4 border-b border-stone-200 bg-white">
+          <div class="flex items-center justify-between flex-wrap gap-3 mb-3">
+            <h3 class="font-serif font-semibold text-gray-900">
+              {{ modo === 'dia' ? `Historial de ${formatFechaLarga(selectedDate)}` : 'Buscar en el historial' }}
+            </h3>
+            <div class="flex gap-1 bg-stone-100 rounded-lg p-1">
+              <button
+                @click="cambiarModo('dia')"
+                class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
+                :class="modo === 'dia' ? 'bg-white shadow-sm text-gray-900' : 'text-stone-500 hover:text-stone-700'"
+              >
+                Por día
+              </button>
+              <button
+                @click="cambiarModo('busqueda')"
+                class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
+                :class="modo === 'busqueda' ? 'bg-white shadow-sm text-gray-900' : 'text-stone-500 hover:text-stone-700'"
+              >
+                Buscar por rango / RUT / nombre
+              </button>
+            </div>
+          </div>
+
           <input
+            v-if="modo === 'dia'"
             v-model="selectedDate"
             type="date"
             :max="hoy"
             class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
           />
+
+          <div v-else class="flex gap-3 flex-wrap">
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Desde</label>
+              <input v-model="busquedaDesde" type="date" :max="hoy" class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Hasta</label>
+              <input v-model="busquedaHasta" type="date" :max="hoy" class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" />
+            </div>
+            <div class="flex-1 min-w-[200px]">
+              <label class="block text-xs font-medium text-gray-600 mb-1">RUT o nombre</label>
+              <input
+                v-model="busquedaTexto"
+                type="text"
+                placeholder="Buscar por RUT o nombre..."
+                class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+              />
+            </div>
+          </div>
         </div>
         <div class="overflow-x-auto">
           <table class="w-full border-collapse">
             <thead>
               <tr class="bg-[#F4F1EA] border-b border-stone-300">
+                <th v-if="modo === 'busqueda'" class="px-6 py-3 text-left text-xs font-semibold text-stone-600 uppercase tracking-wide border-r border-stone-200">Fecha</th>
                 <th class="px-6 py-3 text-left text-xs font-semibold text-stone-600 uppercase tracking-wide border-r border-stone-200">Hora</th>
                 <th class="px-6 py-3 text-left text-xs font-semibold text-stone-600 uppercase tracking-wide border-r border-stone-200">RUT</th>
                 <th class="px-6 py-3 text-left text-xs font-semibold text-stone-600 uppercase tracking-wide border-r border-stone-200">Nombre</th>
@@ -312,6 +400,9 @@ async function registrarVisita() {
                 class="border-b border-stone-200 last:border-b-0 transition-colors hover:bg-[#F4F1EA]/70"
                 :class="idx % 2 === 0 ? 'bg-white' : 'bg-[#FAF8F3]'"
               >
+                <td v-if="modo === 'busqueda'" class="px-6 py-3 text-sm font-mono text-stone-500 border-r border-stone-100">
+                  {{ formatFechaCorta(e.fecha_hora_entrada) }}
+                </td>
                 <td class="px-6 py-3 text-sm font-mono text-stone-500 border-r border-stone-100">
                   {{ formatHora(e.fecha_hora_entrada) }}
                 </td>
@@ -353,7 +444,9 @@ async function registrarVisita() {
                 </td>
               </tr>
               <tr v-if="!entradas.length">
-                <td colspan="4" class="px-6 py-8 text-center text-sm text-gray-400">Sin registros de entrada para {{ formatFechaLarga(selectedDate) }}.</td>
+                <td :colspan="modo === 'busqueda' ? 5 : 4" class="px-6 py-8 text-center text-sm text-gray-400">
+                  {{ modo === 'busqueda' ? (buscando ? 'Buscando…' : 'Sin resultados para esta búsqueda.') : `Sin registros de entrada para ${formatFechaLarga(selectedDate)}.` }}
+                </td>
               </tr>
             </tbody>
           </table>

@@ -15,7 +15,7 @@ class LibroController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Libro::query()->with(['autores', 'categorias', 'carreras', 'ejemplares.ubicacion'])
+        $query = Libro::query()->with(['autores', 'categorias', 'carreras', 'tipoMaterial', 'ejemplares.ubicacion'])
             ->withCount('ejemplares');
 
         if ($busqueda = $request->query('q')) {
@@ -39,8 +39,8 @@ class LibroController extends Controller
             $query->whereHas('carreras', fn ($q) => $q->where('carreras.id', $carreraId));
         }
 
-        if ($tipoMaterial = $request->query('tipo_material')) {
-            $query->where('tipo_material', $tipoMaterial);
+        if ($tipoMaterialId = $request->query('tipo_material_id')) {
+            $query->where('tipo_material_id', $tipoMaterialId);
         }
 
         // Estado vive en el ejemplar (copia física), no en la obra — "buscar libros por
@@ -55,8 +55,16 @@ class LibroController extends Controller
             });
         }
 
-        $orden = $request->query('orden') === 'tipo_material' ? 'tipo_material' : 'titulo';
-        $query->orderBy($orden)->orderBy('titulo');
+        // Ordenar "por tipo de recurso" es alfabético por el nombre del catálogo, no por
+        // el id de la FK — de ahí el join en vez de un simple orderBy('tipo_material_id').
+        if ($request->query('orden') === 'tipo_material') {
+            $query->leftJoin('tipos_material', 'libros.tipo_material_id', '=', 'tipos_material.id')
+                ->select('libros.*')
+                ->orderBy('tipos_material.nombre')
+                ->orderBy('libros.titulo');
+        } else {
+            $query->orderBy('titulo');
+        }
 
         return response()->json($query->get());
     }
@@ -64,7 +72,7 @@ class LibroController extends Controller
     public function show(Libro $libro)
     {
         return response()->json(
-            $libro->load(['autores', 'categorias', 'carreras', 'ejemplares.estadoPersonalizado', 'ejemplares.ubicacion'])
+            $libro->load(['autores', 'categorias', 'carreras', 'tipoMaterial', 'ejemplares.estadoPersonalizado', 'ejemplares.ubicacion'])
         );
     }
 
@@ -90,7 +98,7 @@ class LibroController extends Controller
             return $libro;
         });
 
-        return response()->json($libro->load(['autores', 'categorias', 'carreras', 'ejemplares.ubicacion']), 201);
+        return response()->json($libro->load(['autores', 'categorias', 'carreras', 'tipoMaterial', 'ejemplares.ubicacion']), 201);
     }
 
     public function update(Request $request, Libro $libro)
@@ -102,7 +110,7 @@ class LibroController extends Controller
             $this->sincronizarPivotes($libro, $data);
         });
 
-        return response()->json($libro->load(['autores', 'categorias', 'carreras']));
+        return response()->json($libro->load(['autores', 'categorias', 'carreras', 'tipoMaterial']));
     }
 
     /** Búsqueda por título o código de barras de cualquiera de sus copias, con historial de préstamos por ejemplar. */
@@ -151,7 +159,7 @@ class LibroController extends Controller
     {
         return array_intersect_key($data, array_flip([
             'titulo', 'isbn', 'clasificacion', 'coleccion', 'editorial',
-            'anio_publicacion', 'tipo_material', 'nota_interna', 'nota_publica',
+            'anio_publicacion', 'tipo_material_id', 'nota_interna', 'nota_publica',
         ]));
     }
 
@@ -202,7 +210,7 @@ class LibroController extends Controller
             'editorial' => ['nullable', 'string', 'max:255'],
             'anio_publicacion' => ['nullable', 'integer', 'min:1000', 'max:9999'],
             'ubicacion_id' => ['nullable', 'exists:ubicaciones,id'],
-            'tipo_material' => ['nullable', 'in:libro,revista,tesis,dvd,otro'],
+            'tipo_material_id' => ['nullable', 'exists:tipos_material,id'],
             'volumen' => ['nullable', 'string', 'max:100'],
             'nota_interna' => ['nullable', 'string'],
             'nota_publica' => ['nullable', 'string'],

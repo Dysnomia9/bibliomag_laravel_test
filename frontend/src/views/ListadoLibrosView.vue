@@ -4,7 +4,7 @@ import StaffLayout from '@/components/layout/StaffLayout.vue'
 import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import LibrosModuloNav from '@/components/libros/LibrosModuloNav.vue'
 import api from '@/services/api'
-import type { Categoria, EstadoLibroPersonalizado, Libro } from '@/types'
+import type { Categoria, EstadoLibroPersonalizado, Libro, TipoMaterial } from '@/types'
 
 const libros = ref<Libro[]>([])
 const cargando = ref(true)
@@ -13,13 +13,14 @@ const apiError = ref(false)
 const filtros = reactive({
   q: '',
   estado_proceso: '',
-  tipo_material: '',
+  tipo_material_id: '' as number | '',
   categoria_id: '' as number | '',
   orden: 'titulo' as 'titulo' | 'tipo_material',
 })
 
 const categorias = ref<Categoria[]>([])
 const estadosPersonalizados = ref<EstadoLibroPersonalizado[]>([])
+const tiposMaterial = ref<TipoMaterial[]>([])
 const expandidos = ref<Set<number>>(new Set())
 
 const ESTADOS_PROCESO: { value: string; label: string }[] = [
@@ -52,7 +53,7 @@ async function cargar() {
       params: {
         q: filtros.q.trim() || undefined,
         estado_proceso: filtros.estado_proceso || undefined,
-        tipo_material: filtros.tipo_material || undefined,
+        tipo_material_id: filtros.tipo_material_id || undefined,
         categoria_id: filtros.categoria_id || undefined,
         orden: filtros.orden,
       },
@@ -69,12 +70,14 @@ async function cargar() {
 
 async function cargarCatalogos() {
   try {
-    const [categoriasRes, estadosRes] = await Promise.all([
+    const [categoriasRes, estadosRes, tiposMaterialRes] = await Promise.all([
       api.get<Categoria[]>('/categorias'),
       api.get<EstadoLibroPersonalizado[]>('/estados-libro-personalizados', { params: { activo: 1 } }),
+      api.get<TipoMaterial[]>('/tipos-material'),
     ])
     categorias.value = categoriasRes.data
     estadosPersonalizados.value = estadosRes.data
+    tiposMaterial.value = tiposMaterialRes.data
   } catch {
     // Los filtros de categoría/personalizado simplemente quedan vacíos.
   }
@@ -138,13 +141,9 @@ function badgeDe(ejemplar: { estado_proceso: string; estado_personalizado?: { no
           <select v-model="filtros.estado_proceso" @change="cargar" class="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
             <option v-for="e in ESTADOS_PROCESO" :key="e.value" :value="e.value">{{ e.label }}</option>
           </select>
-          <select v-model="filtros.tipo_material" @change="cargar" class="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+          <select v-model="filtros.tipo_material_id" @change="cargar" class="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
             <option value="">Todos los tipos</option>
-            <option value="libro">Libro</option>
-            <option value="revista">Revista</option>
-            <option value="tesis">Tesis</option>
-            <option value="dvd">DVD</option>
-            <option value="otro">Otro</option>
+            <option v-for="t in tiposMaterial" :key="t.id" :value="t.id">{{ t.nombre }}</option>
           </select>
           <select v-model="filtros.categoria_id" @change="cargar" class="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
             <option value="">Todas las categorías</option>
@@ -188,7 +187,7 @@ function badgeDe(ejemplar: { estado_proceso: string; estado_personalizado?: { no
                   </td>
                   <td class="px-4 py-3 text-sm text-gray-600">{{ l.autores?.map((a) => a.nombre).join(', ') || '—' }}</td>
                   <td class="px-4 py-3 text-sm text-gray-600">{{ l.categorias?.map((c) => c.nombre).join(', ') || '—' }}</td>
-                  <td class="px-4 py-3 text-sm text-gray-600 capitalize">{{ l.tipo_material }}</td>
+                  <td class="px-4 py-3 text-sm text-gray-600">{{ l.tipo_material?.nombre ?? '—' }}</td>
                   <td class="px-4 py-3 text-sm text-gray-600">{{ l.ejemplares?.length ?? 0 }}</td>
                 </tr>
                 <tr v-if="expandidos.has(l.id)" :class="idx % 2 === 0 ? 'bg-white' : 'bg-biblioteca-50'">

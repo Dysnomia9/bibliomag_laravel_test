@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -15,7 +16,7 @@ class Libro extends Model
 
     protected $fillable = [
         'titulo', 'isbn', 'clasificacion', 'coleccion', 'editorial',
-        'anio_publicacion', 'tipo_material', 'nota_interna', 'nota_publica',
+        'anio_publicacion', 'tipo_material_id', 'nota_interna', 'nota_publica',
     ];
 
     protected function casts(): array
@@ -48,5 +49,10 @@ class Libro extends Model
     public function reservas(): HasMany
     {
         return $this->hasMany(ReservaLibro::class);
+    }
+
+    public function tipoMaterial(): BelongsTo
+    {
+        return $this->belongsTo(TipoMaterial::class);
     }
 }

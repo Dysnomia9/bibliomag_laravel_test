@@ -9,8 +9,55 @@ use Illuminate\Http\Request;
 
 class EntradaController extends Controller
 {
+    /**
+     * Dos modos, mutuamente excluyentes:
+     * - Por defecto (sin desde/hasta/q): un día exacto, igual que siempre — incluye
+     *   personasEnSala (solo tiene sentido para "hoy", no para un rango).
+     * - Si viene desde/hasta y/o q: modo búsqueda — rango de fechas abierto (cualquiera
+     *   de los dos extremos es opcional) y/o texto libre por RUT/nombre, sobre usuarios
+     *   registrados y externos/convenio/visita. Pensado para auditoría puntual ("¿cuándo
+     *   vino esta persona?"), no para el uso diario de mesón.
+     */
     public function index(Request $request)
     {
+        $desde = $request->query('desde');
+        $hasta = $request->query('hasta');
+        $busqueda = trim((string) $request->query('q', ''));
+
+        if ($desde || $hasta || $busqueda !== '') {
+            $query = Entrada::with('usuario:id,nombre,apellido,rut,tipo');
+
+            if ($desde) {
+                $query->whereDate('fecha_hora_entrada', '>=', $desde);
+            }
+
+            if ($hasta) {
+                $query->whereDate('fecha_hora_entrada', '<=', $hasta);
+            }
+
+            if ($busqueda !== '') {
+                $query->where(function ($q) use ($busqueda) {
+                    $q->where('rut_externo', 'ilike', "%{$busqueda}%")
+                        ->orWhere('nombre_externo', 'ilike', "%{$busqueda}%")
+                        ->orWhereHas('usuario', function ($u) use ($busqueda) {
+                            $u->where('rut', 'ilike', "%{$busqueda}%")
+                                ->orWhere('nombre', 'ilike', "%{$busqueda}%")
+                                ->orWhere('apellido', 'ilike', "%{$busqueda}%");
+                        });
+                });
+            }
+
+            // Tope defensivo: un rango abierto sin más filtro podría devolver años de
+            // historial de una sola vez — 500 alcanza de sobra para revisar resultados
+            // reales sin tener que paginar.
+            $entradas = $query->latest('fecha_hora_entrada')->limit(500)->get();
+
+            return response()->json([
+                'modo' => 'busqueda',
+                'entradas' => $entradas,
+            ]);
+        }
+
         $fecha = $request->query('fecha', now()->toDateString());
 
         $entradas = Entrada::with('usuario:id,nombre,apellido,rut,tipo')
@@ -19,6 +66,7 @@ class EntradaController extends Controller
             ->get();
 
         return response()->json([
+            'modo' => 'dia',
             'fecha' => $fecha,
             'entradas' => $entradas,
             // Horizon (el sistema legado) no distingue "quién sigue adentro": cada

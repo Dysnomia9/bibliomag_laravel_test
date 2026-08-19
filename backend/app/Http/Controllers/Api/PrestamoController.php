@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Ejemplar;
 use App\Models\Equipo;
 use App\Models\Prestamo;
+use App\Notifications\MultaGeneradaNotification;
 use App\Services\MultaService;
 use App\Services\ReservaLibroService;
 use Illuminate\Http\Request;
@@ -154,6 +155,15 @@ class PrestamoController extends Controller
                 Equipo::whereKey($prestamo->equipo_id)->lockForUpdate()->first()?->update(['disponible' => true]);
             }
         });
+
+        // Sin SMTP configurado (ver .env.example), esto solo queda escrito en
+        // storage/logs/laravel.log — no falla ni intenta salir a la red.
+        if ($prestamo->multa_estado === 'pendiente') {
+            $prestamo->loadMissing('usuario');
+            if ($prestamo->usuario?->email) {
+                $prestamo->usuario->notify(new MultaGeneradaNotification($prestamo));
+            }
+        }
 
         return response()->json($prestamo);
     }

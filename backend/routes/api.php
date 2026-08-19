@@ -18,6 +18,7 @@ use App\Http\Controllers\Api\ReporteController;
 use App\Http\Controllers\Api\ReservaLibroController;
 use App\Http\Controllers\Api\SalaController;
 use App\Http\Controllers\Api\StaffController;
+use App\Http\Controllers\Api\TipoMaterialController;
 use App\Http\Controllers\Api\UbicacionController;
 use App\Http\Controllers\Api\UsuarioAuthController;
 use App\Http\Controllers\Api\UsuarioController;
@@ -76,6 +77,7 @@ Route::middleware(['auth:sanctum', 'staff'])->group(function () {
     Route::get('/categorias', [CatalogoLibroController::class, 'categorias']);
     Route::get('/carreras', [CatalogoLibroController::class, 'carreras']);
     Route::get('/ubicaciones', [UbicacionController::class, 'index']);
+    Route::get('/tipos-material', [TipoMaterialController::class, 'index']);
 
     Route::get('/configuracion', [ConfiguracionInstitucionalController::class, 'show']);
 
@@ -91,6 +93,7 @@ Route::middleware(['auth:sanctum', 'staff'])->group(function () {
         Route::patch('/estados-libro-personalizados/{estadoLibroPersonalizado}/activo', [EstadoLibroPersonalizadoController::class, 'cambiarActivo']);
         Route::put('/configuracion', [ConfiguracionInstitucionalController::class, 'actualizar']);
         Route::post('/ubicaciones', [UbicacionController::class, 'store']);
+        Route::post('/tipos-material', [TipoMaterialController::class, 'store']);
         Route::get('/registro-absoluto', [RegistroAbsolutoController::class, 'index']);
     });
 

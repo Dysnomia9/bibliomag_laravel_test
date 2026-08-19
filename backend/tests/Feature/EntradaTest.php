@@ -109,4 +109,58 @@ class EntradaTest extends TestCase
             ->assertJsonPath('personasEnSala', 1)
             ->assertJsonCount(1, 'entradas');
     }
+
+    public function test_busqueda_por_rango_de_fechas_incluye_varios_dias(): void
+    {
+        Sanctum::actingAs(Staff::factory()->create());
+
+        Entrada::factory()->create(['fecha_hora_entrada' => now()->subDays(5), 'fecha_hora_salida' => now()->subDays(5)]);
+        Entrada::factory()->create(['fecha_hora_entrada' => now()->subDays(2), 'fecha_hora_salida' => now()->subDays(2)]);
+        Entrada::factory()->create(['fecha_hora_entrada' => now()->subDays(10), 'fecha_hora_salida' => now()->subDays(10)]);
+
+        $response = $this->getJson('/api/entrada?desde='.now()->subDays(3)->toDateString().'&hasta='.now()->toDateString());
+
+        $response->assertStatus(200)
+            ->assertJsonPath('modo', 'busqueda')
+            ->assertJsonCount(1, 'entradas');
+    }
+
+    public function test_busqueda_por_rut_encuentra_entradas_de_un_usuario_registrado(): void
+    {
+        Sanctum::actingAs(Staff::factory()->create());
+
+        $usuario = Usuario::factory()->create();
+        Entrada::factory()->create(['usuario_id' => $usuario->id, 'fecha_hora_entrada' => now()->subDays(20)]);
+        Entrada::factory()->create();
+
+        $response = $this->getJson('/api/entrada?q='.urlencode($usuario->rut));
+
+        $response->assertStatus(200)
+            ->assertJsonPath('modo', 'busqueda')
+            ->assertJsonCount(1, 'entradas')
+            ->assertJsonPath('entradas.0.usuario.rut', $usuario->rut);
+    }
+
+    public function test_busqueda_por_nombre_de_externo_no_distingue_mayusculas(): void
+    {
+        Sanctum::actingAs(Staff::factory()->create());
+
+        Entrada::factory()->create(['usuario_id' => null, 'rut_externo' => Rut::formatear(7777777), 'nombre_externo' => 'Pedro Pascal']);
+        Entrada::factory()->create(['usuario_id' => null, 'rut_externo' => Rut::formatear(6666666), 'nombre_externo' => 'Otra Persona']);
+
+        $response = $this->getJson('/api/entrada?q=pascal');
+
+        $response->assertStatus(200)->assertJsonCount(1, 'entradas');
+    }
+
+    public function test_busqueda_vacia_sin_desde_hasta_ni_q_usa_el_modo_dia_por_defecto(): void
+    {
+        Sanctum::actingAs(Staff::factory()->create());
+
+        Entrada::factory()->create(['fecha_hora_entrada' => now(), 'fecha_hora_salida' => now()]);
+
+        $response = $this->getJson('/api/entrada');
+
+        $response->assertStatus(200)->assertJsonPath('modo', 'dia');
+    }
 }

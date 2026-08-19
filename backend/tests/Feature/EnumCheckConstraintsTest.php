@@ -46,12 +46,6 @@ class EnumCheckConstraintsTest extends TestCase
         $this->assertNull($prestamo->multa_estado);
     }
 
-    public function test_libros_tipo_material_invalido_falla_a_nivel_de_base_de_datos(): void
-    {
-        $this->expectException(QueryException::class);
-        Libro::factory()->create(['tipo_material' => 'invalido']);
-    }
-
     public function test_ejemplares_estado_proceso_invalido_falla_a_nivel_de_base_de_datos(): void
     {
         $this->expectException(QueryException::class);
