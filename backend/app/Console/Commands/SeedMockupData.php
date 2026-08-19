@@ -14,6 +14,8 @@ use App\Models\Reserva;
 use App\Models\ReservaLibro;
 use App\Models\Sala;
 use App\Models\Staff;
+use App\Models\TipoMaterial;
+use App\Models\Ubicacion;
 use App\Models\Usuario;
 use App\Support\Rut;
 use Illuminate\Console\Command;
@@ -92,6 +94,30 @@ class SeedMockupData extends Command
         ['titulo' => 'Historia de Chile Contemporáneo', 'autor' => 'Alfredo Jocelyn-Holt', 'categoria' => 'Historia'],
         ['titulo' => 'Geografía de Magallanes', 'autor' => 'Mateo Martinic', 'categoria' => 'Historia'],
         ['titulo' => 'Biología Molecular de la Célula', 'autor' => 'Bruce Alberts', 'categoria' => 'Biología'],
+    ];
+
+    /** Rango Dewey base por categoría, para inventar una clasificación plausible de los libros del mockup. */
+    private array $deweyPorCategoria = [
+        'Computación' => '005',
+        'Matemáticas' => '510',
+        'Física' => '530',
+        'Química' => '540',
+        'Biología' => '570',
+        'Historia' => '980',
+        'Derecho' => '340',
+        'Enfermería' => '610',
+        'Economía' => '330',
+        'Trabajo Social' => '360',
+        'Psicología' => '150',
+        'Educación' => '370',
+        'Medicina Veterinaria' => '636',
+        'Construcción Civil' => '690',
+    ];
+
+    private array $editoriales = [
+        'Pearson', 'McGraw-Hill', 'Cengage Learning', 'Alfaomega', 'Prentice Hall',
+        'Addison-Wesley', 'Editorial Universitaria', 'LOM Ediciones', 'Ediciones UC',
+        'Editorial Jurídica de Chile',
     ];
 
     public function handle(): int
@@ -479,10 +505,34 @@ class SeedMockupData extends Command
         $ejemplares = collect();
         $contadorCodigo = 1;
 
+        // Todos los libros del mockup son eso, libros (no hay revistas/tesis/DVD en
+        // $catalogoLibros) — se les asigna el tipo "Libro" del catálogo administrable.
+        $tipoLibro = TipoMaterial::firstOrCreate(['nombre' => 'Libro']);
+
+        // ubicaciones migra con "Biblioteca Central" ya sembrada, pero firstOrCreate
+        // igual por si alguna vez se corre este seeder contra una BD sin esa migración
+        // (o si el catálogo de ubicaciones quedó vacío por algún motivo).
+        $ubicacionCentral = Ubicacion::firstOrCreate(['nombre' => 'Biblioteca Central']);
+
+        $colecciones = ['General', 'General', 'General', 'Referencia', 'Hemeroteca'];
+
         foreach ($this->catalogoLibros as $i => $item) {
+            $anio = random_int(2005, 2023);
+            $dewey = $this->deweyPorCategoria[$item['categoria']] ?? '000';
+            $cutter = strtoupper(substr($item['autor'], 0, 1)).random_int(100, 999);
+            $inicialTitulo = mb_strtolower(mb_substr($item['titulo'], 0, 1));
+
             $libro = Libro::create([
                 'titulo' => $item['titulo'],
-                'isbn' => $item['codigo'] ?? null,
+                // Los primeros 10 ya traían un ISBN real de ejemplo — al resto se le
+                // inventa uno con formato válido (dígito verificador incluido) en vez de
+                // dejarlo en null, para que la ficha del libro no se vea a medio llenar.
+                'isbn' => $item['codigo'] ?? fake()->isbn13(),
+                'tipo_material_id' => $tipoLibro->id,
+                'editorial' => $this->editoriales[array_rand($this->editoriales)],
+                'anio_publicacion' => $anio,
+                'clasificacion' => "{$dewey}.".random_int(10, 99)." {$cutter}{$inicialTitulo} {$anio}",
+                'coleccion' => $colecciones[array_rand($colecciones)],
             ]);
 
             $autor = Autor::firstOrCreate(['nombre' => $item['autor']]);
@@ -509,12 +559,13 @@ class SeedMockupData extends Command
                     // ReservaLibroController exigen estado_proceso = 'en_estante') y las
                     // demos/otros seeds quedarían rotos.
                     'estado_proceso' => 'en_estante',
+                    'ubicacion_id' => $ubicacionCentral->id,
                 ])->setRelation('libro', $libro));
             }
         }
 
         $totalLibros = count($this->catalogoLibros);
-        $this->line("  · {$totalLibros} libros creados en el catálogo ({$ejemplares->count()} ejemplares, con autor/categoría/carrera y disponibilidad)");
+        $this->line("  · {$totalLibros} libros creados en el catálogo ({$ejemplares->count()} ejemplares, con autor/categoría/carrera, ISBN, clasificación, editorial, año, ubicación y disponibilidad)");
 
         return $ejemplares;
     }

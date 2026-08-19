@@ -1321,6 +1321,21 @@ frontend/
   corriendo `schedule:work`) — quedó fuera de este cambio, no es un
   olvido. Tests: `NotificacionesTest.php` (usa `Notification::fake()`,
   no depende de mail real).
+- **Mockup de libros con campos de catalogación a medio llenar** (2026-08-19):
+  `SeedMockupData::seedLibros()` solo llenaba `titulo`/`isbn` (y el `isbn` solo
+  para 10 de los 34 libros — el resto quedaba `null`) además de autor/
+  categoría/carrera; `tipo_material_id`/`editorial`/`anio_publicacion`/
+  `clasificacion`/`coleccion` quedaban vacíos, y ningún `Ejemplar` tenía
+  `ubicacion_id` (todos "sin especificar"). Se agregó generación inventada
+  para los 5 primeros (ISBN real vía `fake()->isbn13()` para los que no
+  traían uno de ejemplo, `tipo_material_id` = "Libro" para todos, editorial
+  al azar de una lista corta, año 2005–2023, clasificación Dewey-ish
+  mapeada por categoría vía `$deweyPorCategoria`) y `ubicacion_id` =
+  "Biblioteca Central" (vía `Ubicacion::firstOrCreate`, no falla si la
+  migración de seed no corrió) para todos los ejemplares nuevos. No
+  reintroduzcas libros de mockup con estos campos en `null` — si agregás un
+  título nuevo a `$catalogoLibros`, va a heredar el mismo relleno
+  automáticamente sin cambios adicionales.
 
 ## Checklist antes de dar un módulo por terminado
 
