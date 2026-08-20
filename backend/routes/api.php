@@ -9,6 +9,8 @@ use App\Http\Controllers\Api\EjemplarController;
 use App\Http\Controllers\Api\EntradaController;
 use App\Http\Controllers\Api\EquipoController;
 use App\Http\Controllers\Api\EstadoLibroPersonalizadoController;
+use App\Http\Controllers\Api\GoogleAuthController;
+use App\Http\Controllers\Api\LdapAuthController;
 use App\Http\Controllers\Api\LibroController;
 use App\Http\Controllers\Api\PortalController;
 use App\Http\Controllers\Api\PortalReservaLibroController;
@@ -26,6 +28,13 @@ use Illuminate\Support\Facades\Route;
 
 Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:6,1');
 Route::post('/auth/usuario/login', [UsuarioAuthController::class, 'login'])->middleware('throttle:6,1');
+
+// Login unificado de LoginV2View.vue (staff o usuario, según a quién pertenezca
+// el email/identidad que confirme el proveedor externo) — ver GoogleAuthController/
+// LdapAuthController y su nota de "no configurado todavía" en .env.example.
+Route::get('/auth/google/redirect', [GoogleAuthController::class, 'redirect']);
+Route::get('/auth/google/callback', [GoogleAuthController::class, 'callback']);
+Route::post('/auth/ldap/login', [LdapAuthController::class, 'login'])->middleware('throttle:6,1');
 
 Route::middleware(['auth:sanctum', 'staff'])->group(function () {
     Route::get('/auth/me', [AuthController::class, 'me']);

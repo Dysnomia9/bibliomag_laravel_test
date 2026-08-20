@@ -27,6 +27,13 @@ export const useUsuarioAuthStore = defineStore('usuarioAuth', () => {
     }
   }
 
+  /** Ver auth.ts (staff) — mismo propósito para Google/LDAP desde el portal. */
+  function establecerToken(nuevoToken: string) {
+    token.value = nuevoToken
+    validated.value = false
+    localStorage.setItem('usuario_token', nuevoToken)
+  }
+
   async function logout() {
     try {
       await apiUsuario.post('/auth/usuario/logout')
@@ -63,5 +70,5 @@ export const useUsuarioAuthStore = defineStore('usuarioAuth', () => {
     }
   }
 
-  return { usuario, token, error, loading, login, logout, validar }
+  return { usuario, token, error, loading, login, establecerToken, logout, validar }
 })

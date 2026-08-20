@@ -1,9 +1,15 @@
 FROM php:8.3-cli
 
-# Dependencias del sistema + extensiones PHP necesarias para Laravel + Postgres
+# Dependencias del sistema + extensiones PHP necesarias para Laravel + Postgres.
+# libldap2-dev + ext-ldap: para directorytree/ldaprecord-laravel (login LDAP
+# institucional, ver LdapAuthController) — --with-libdir es necesario en Debian,
+# si no docker-php-ext-configure no encuentra libldap.so. Se resuelve con
+# dpkg-architecture en vez de hardcodear x86_64: esta imagen se builds tanto en
+# Apple Silicon (aarch64-linux-gnu) como en runners amd64 (x86_64-linux-gnu).
 RUN apt-get update && apt-get install -y \
-    git unzip libpq-dev libzip-dev libicu-dev \
-    && docker-php-ext-install pdo pdo_pgsql intl zip \
+    git unzip libpq-dev libzip-dev libicu-dev libldap2-dev \
+    && docker-php-ext-configure ldap --with-libdir=lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH) \
+    && docker-php-ext-install pdo pdo_pgsql intl zip ldap \
     && rm -rf /var/lib/apt/lists/*
 
 # Composer

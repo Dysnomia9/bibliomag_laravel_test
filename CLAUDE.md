@@ -1321,6 +1321,108 @@ frontend/
   corriendo `schedule:work`) — quedó fuera de este cambio, no es un
   olvido. Tests: `NotificacionesTest.php` (usa `Notification::fake()`,
   no depende de mail real).
+- **Login con Google y LDAP institucional — implementados y probados de
+  verdad, inactivos hasta tener credenciales/servidor real** (2026-08-20):
+  siguiendo `LoginV2View.vue` (ver entrada de abajo), se agregaron los dos
+  proveedores externos que faltaban. `App\Services\LoginUnificadoService`
+  es el punto compartido entre ambos: dado un email ya verificado por el
+  proveedor, busca primero en `Staff` y si no en `Usuario`, y emite el
+  token de Sanctum correspondiente — **ninguno de los dos auto-provisiona
+  cuentas nuevas**, si el email no existe en ninguna tabla (o la cuenta
+  está `activo = false`) el login se rechaza con un mensaje claro. Esto es
+  a propósito: una cuenta de Google/LDAP cualquiera no debe poder crearse
+  sola un acceso a Biblioteca UMAG sin que un admin la haya dado de alta
+  antes.
+  - **Google** (`GoogleAuthController` + `laravel/socialite`): flujo
+    redirect/callback estándar OAuth. Sin `GOOGLE_CLIENT_ID` (ver
+    `.env.example`), `redirect()`/`callback()` mandan de vuelta al
+    frontend con `?error=google_no_configurado` en vez de intentar
+    contactar a Google — **verificado con credenciales de prueba
+    inventadas** que Socialite arma bien la URL de `accounts.google.com`
+    (client_id/redirect_uri/scope correctos); no se pudo probar el
+    intercambio de código real porque no hay una cuenta de Google Cloud
+    real. Cuando se tenga, es solo completar `GOOGLE_CLIENT_ID`/
+    `GOOGLE_CLIENT_SECRET`/`GOOGLE_REDIRECT_URI` en `.env` — sin tocar
+    código.
+  - **LDAP** (`LdapAuthController` + `directorytree/ldaprecord-laravel`,
+    patrón **"search + bind"**): conecta con una cuenta de servicio
+    (`LDAP_BIND_USERNAME`/`PASSWORD`), busca al usuario por
+    `LDAP_USER_ATTRIBUTE` (configurable, default `mail` — no se conoce
+    todavía el esquema real del directorio de la UMAG, podría ser
+    `sAMAccountName` en Active Directory), y **recién ahí** reconecta como
+    esa persona con la contraseña que ingresó — no asume ningún formato
+    fijo de DN. Sin `LDAP_HOST` configurado responde 503 antes de
+    intentar conectar. **Verificado de punta a punta el 2026-08-20**
+    contra un servidor OpenLDAP real (`osixia/openldap` en Docker, no un
+    mock): credenciales válidas con cuenta local existente (200 + token),
+    contraseña incorrecta (422 genérico), usuario inexistente en LDAP
+    (422 genérico, mismo mensaje que el anterior — no revela cuál de los
+    dos falló), y cuenta LDAP válida pero sin cuenta habilitada en
+    Biblioteca UMAG (422 con mensaje distinto, "contacta a un
+    administrador"). También se probó el flujo completo en navegador real
+    (Playwright): click en "Cuenta institucional (LDAP)", login, y
+    redirección a `/dashboard` con el token guardado — sin errores de
+    consola.
+  - **Gotcha real encontrado al armar `config/ldap.php`**: LdapRecord
+    valida el array `connections.default` contra un esquema fijo y
+    **rechaza cualquier clave que no reconozca** (`ConfigurationException:
+    "Option X does not exist"`, tirado por
+    `DomainConfiguration::get()`) — casi rompe el build de la imagen
+    porque `php artisan package:discover` (que corre en el Dockerfile,
+    antes de que exista `.env`) instancia el `LdapServiceProvider` y
+    valida la config ahí mismo. `user_attribute`/`email_attribute` (que
+    son propios de `LdapAuthController`, no del paquete) **no pueden
+    vivir dentro de `connections.default`** — se movieron a una sección
+    separada `config('ldap.attributes.*')`. Si agregás una opción propia
+    nueva a este archivo, va afuera de `connections`, nunca adentro.
+  - **Gotcha de infraestructura**: la imagen base (`php:8.3-cli`)
+    necesitó `libldap2-dev` + `docker-php-ext-configure ldap` para
+    compilar `ext-ldap` — el flag `--with-libdir` no puede hardcodearse a
+    `x86_64-linux-gnu` porque esta imagen se builds tanto en Apple
+    Silicon (`aarch64-linux-gnu`, falla si se hardcodea x86_64) como en
+    CI/runners amd64; se resuelve con
+    `$(dpkg-architecture -qDEB_HOST_MULTIARCH)` en el Dockerfile. Se
+    subió también `guzzlehttp/guzzle` a `^7.15.2` al agregar
+    `laravel/socialite` (que lo trae como dependencia) — la versión que
+    se resolvía por default (7.15.0) tenía 4 advisories de seguridad
+    reportados el 2026-08.
+  - **Gotcha de testing, no de código**: probar el login LDAP contra un
+    servidor real vía variables de entorno inyectadas en
+    `docker-compose.yml` (`environment:`) **no alcanza** si `.env` ya
+    define esa misma clave (aunque sea vacía) — `php artisan serve`
+    maneja cada request con un proceso nuevo y en ese camino específico
+    terminó ganando el valor del `.env` en vez del real del proceso,
+    aunque `artisan tinker` sí veía el valor correcto. La forma
+    confiable de probar (o configurar) esto de verdad es editando el
+    `.env` real del contenedor (o `.env.example` + rebuild), igual que
+    cualquier otra credencial del proyecto — no hackear por
+    `docker-compose.yml` en runtime.
+  - Tests automatizados: `LoginExternoTest.php` (gates de "no
+    configurado" para los dos, más `LoginUnificadoService` aislado —
+    mapeo a staff/usuario, null si no hay match, null si la cuenta está
+    inactiva). El bind LDAP real contra un servidor de verdad **no** se
+    automatizó en la suite de tests (necesitaría levantar un contenedor
+    OpenLDAP en CI) — quedó como verificación manual documentada acá.
+- **`LoginV2View.vue` pasó de mockup decorativo a login unificado real**
+  (2026-08-20): antes tenía tres botones ("Continuar con correo @umag.cl",
+  "Cuenta SID/SIA", "Ingresar con cuenta externa") con un badge "Mockup ·
+  No funcional" — ninguno conectado a nada. Se reemplazó por un formulario
+  real de un solo campo identificador ("email institucional o RUT") +
+  contraseña, que detecta cuál de las dos capas de auth corresponde por el
+  **formato** del identificador (contiene "@" → intenta como `Staff` vía
+  `auth.login()`; si no → intenta como `Usuario` vía `usuarioAuth.login()`)
+  y redirige a `dashboard` o `portal-home` según corresponda. A propósito
+  **no se tocó** `AuthController`/`UsuarioAuthController` ni sus stores —
+  `LoginV2View.vue` solo orquesta los dos stores ya existentes y probados,
+  sin backend nuevo ni lógica de login duplicada. Sigue siendo una vista
+  secundaria (`/login/v2`, no es el flujo principal). Verificado
+  manualmente el 2026-08-20 con Playwright: login de staff por email,
+  login de usuario por RUT, y credenciales inválidas — los tres casos
+  redirigen o muestran error correctamente, sin errores de consola.
+  **Actualización (mismo día)**: los botones de Google y LDAP que en esta
+  misma entrada se habían dejado explícitamente afuera ya se agregaron
+  — ver la entrada "Login con Google y LDAP institucional" (más arriba en
+  este archivo) para el detalle completo de ambos.
 - **Mockup de libros con campos de catalogación a medio llenar** (2026-08-19):
   `SeedMockupData::seedLibros()` solo llenaba `titulo`/`isbn` (y el `isbn` solo
   para 10 de los 34 libros — el resto quedaba `null`) además de autor/

@@ -35,4 +35,20 @@ return [
         ],
     ],
 
+    // Login con Google (LoginV2View.vue) — ver GoogleAuthController. Sin
+    // GOOGLE_CLIENT_ID configurado, redirect() rechaza limpio antes de
+    // intentar nada contra Google (ver .env.example).
+    'google' => [
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+        'redirect' => env('GOOGLE_REDIRECT_URI'),
+    ],
+
+    // URL del frontend para redirects que cruzan de backend a SPA (ej. al volver
+    // del callback de Google) — mismo valor que ya usa config/cors.php, pero
+    // expuesto acá para que los controllers no lean env() directo.
+    'frontend' => [
+        'url' => env('FRONTEND_URL', 'http://localhost:5173'),
+    ],
+
 ];

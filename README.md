@@ -84,6 +84,15 @@ PostgreSQL** (backend API), 100% dockerizada.
   que hoy quedan escritas en `storage/logs/laravel.log` en vez de salir
   por correo real. Activarlas es solo configurar `MAIL_MAILER`/`MAIL_HOST`
   en `.env`, sin tocar código.
+- Login unificado (`/login/v2`) con Google y LDAP institucional además del
+  login local — un solo email/RUT ya autentica indistintamente contra
+  `staff` o `usuario` según a quién pertenezca. El bind LDAP (patrón
+  "search + bind", sin asumir un formato de DN fijo) se probó de punta a
+  punta contra un servidor OpenLDAP real; Google usa Socialite y quedó
+  verificado hasta donde se puede sin una cuenta de Google Cloud real.
+  Ninguno de los dos está activo sin configurar `.env` (`GOOGLE_CLIENT_ID`
+  o `LDAP_HOST`) — mismo criterio que las notificaciones: código real,
+  inactivo hasta tener las credenciales.
 
 ## Estructura
 

@@ -29,6 +29,18 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  /**
+   * Para logins que ya emitieron un token por fuera del flujo de auth.login()
+   * (Google/LDAP en LoginV2View.vue, ver GoogleAuthController/LdapAuthController) —
+   * evita repetir el POST /auth/login cuando el token ya viene emitido. staff se
+   * completa recién en la próxima validar()/GET /auth/me.
+   */
+  function establecerToken(nuevoToken: string) {
+    token.value = nuevoToken
+    validated.value = false
+    localStorage.setItem('token', nuevoToken)
+  }
+
   async function logout() {
     try {
       await api.post('/auth/logout')
@@ -73,5 +85,5 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { staff, token, error, loading, login, logout, validar }
+  return { staff, token, error, loading, login, establecerToken, logout, validar }
 })
