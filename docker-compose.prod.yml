@@ -53,6 +53,29 @@ services:
       DB_SSLMODE: require
       FRONTEND_URL: ${FRONTEND_URL}
       SANCTUM_STATEFUL_DOMAINS: ${SANCTUM_STATEFUL_DOMAINS}
+      # Notificaciones, Google y LDAP (ver backend/.env.production.example y
+      # docs/login-externo-pendientes.md) — antes esta lista no las reenviaba
+      # al contenedor, así que completarlas en .env.production no alcanzaba
+      # para activarlas. Todas opcionales: si quedan vacías, cada feature
+      # responde "no configurado" en vez de fallar (ver CLAUDE.md).
+      MAIL_MAILER: ${MAIL_MAILER:-log}
+      MAIL_HOST: ${MAIL_HOST:-}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-biblioteca@umag.cl}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Biblioteca UMAG}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
+      LDAP_HOST: ${LDAP_HOST:-}
+      LDAP_PORT: ${LDAP_PORT:-389}
+      LDAP_BASE_DN: ${LDAP_BASE_DN:-}
+      LDAP_BIND_USERNAME: ${LDAP_BIND_USERNAME:-}
+      LDAP_BIND_PASSWORD: ${LDAP_BIND_PASSWORD:-}
+      LDAP_USER_ATTRIBUTE: ${LDAP_USER_ATTRIBUTE:-}
+      LDAP_EMAIL_ATTRIBUTE: ${LDAP_EMAIL_ATTRIBUTE:-}
+      LDAP_TLS: ${LDAP_TLS:-false}
     ports:
       - "8000:8000"
 
