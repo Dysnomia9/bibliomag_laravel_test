@@ -19,6 +19,7 @@ use App\Models\Ubicacion;
 use App\Models\Usuario;
 use App\Support\Rut;
 use Illuminate\Console\Command;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
@@ -451,18 +452,32 @@ class SeedMockupData extends Command
         return $salas;
     }
 
+    /**
+     * Sin esto, toda reserva nace 'activa' sin hora_prestamo_real — y
+     * Reserva::plazoConfirmacion()/ReservaSalaService::liberarSiVencida() la
+     * convierte sola en 'no_show' (oculta en SalaController::index()) apenas
+     * alguien lee /salas después de que el bloque ya pasó. Como el seed genera
+     * fechas relativas a hoy pero corre una sola vez, el historial de "días
+     * anteriores" y los bloques de hoy que ya pasaron quedaban invisibles a los
+     * pocos minutos de sembrar — se veía "pelado" sin haber cambiado nada. Ahora
+     * los bloques ya terminados se simulan como asistencia real (85% llegó y
+     * devolvió la llave, 15% no-show real, para que reportería tenga algo que
+     * mostrar) en vez de dejarlos 'activa' camino a esconderse solos.
+     */
     private function seedReservas($salas, $usuarios): void
     {
         $bloques = [
             [8, 10], [10, 12], [12, 14], [14, 16], [16, 18], [18, 20], [20, 21],
         ];
 
+        $horaActual = (int) now()->format('H');
         $total = 0;
 
         // Reservas para hoy y algunos días recientes (no solo "hoy"), para que la
         // demo siga viéndose poblada aunque pasen días sin volver a correr el seed.
         foreach (range(0, 3) as $diasAtras) {
             $fecha = now()->subDays($diasAtras)->toDateString();
+            $esHoy = $diasAtras === 0;
 
             foreach ($salas as $sala) {
                 foreach ($bloques as [$inicio, $fin]) {
@@ -470,27 +485,90 @@ class SeedMockupData extends Command
                         continue;
                     }
 
-                    $cantidadPersonas = random_int(2, 5);
-                    $participantes = $usuarios->random(min($cantidadPersonas, $usuarios->count()))->values();
-
-                    $reserva = Reserva::create([
-                        'sala_id' => $sala->id,
-                        'usuario_id' => $participantes->first()->id,
-                        'rut_usuario' => $participantes->first()->rut,
-                        'cantidad_personas' => $cantidadPersonas,
-                        'fecha' => $fecha,
-                        'hora_inicio' => $inicio,
-                        'hora_fin' => $fin,
-                        'estado' => 'activa',
-                    ]);
-
-                    $reserva->participantes()->attach($participantes->pluck('id'));
+                    $yaTermino = ! $esHoy || $fin <= $horaActual;
+                    $this->crearReservaMockup($sala, $usuarios, $fecha, $inicio, $fin, $yaTermino);
                     $total++;
                 }
             }
         }
 
-        $this->line("  · {$total} reservas de logia creadas (hoy y últimos 3 días)");
+        // Unas pocas reservas del bloque de HOY que está corriendo ahora mismo,
+        // deliberadamente sin confirmar y a pocos minutos de vencer el plazo de 15
+        // minutos — para poder abrir el menú de confirmación de asistencia en
+        // SalasView.vue y ver el caso "por confirmar" sin esperar 15 minutos de
+        // verdad. Se agregan aparte del loop de arriba (que es puro azar) para no
+        // depender de que le haya tocado justo el bloque actual a alguna sala.
+        $bloqueActual = collect($bloques)->first(fn ($b) => $b[0] <= $horaActual && $horaActual < $b[1]);
+        $porConfirmar = 0;
+
+        if ($bloqueActual) {
+            [$inicio, $fin] = $bloqueActual;
+            $fechaHoy = now()->toDateString();
+
+            $salasLibres = $salas->reject(
+                fn ($sala) => Reserva::where('sala_id', $sala->id)->where('fecha', $fechaHoy)->where('hora_inicio', $inicio)->exists()
+            );
+
+            foreach ($salasLibres->random(min(3, $salasLibres->count())) as $sala) {
+                $this->crearReservaMockup($sala, $usuarios, $fechaHoy, $inicio, $fin, yaTermino: false, minutosParaVencer: random_int(2, 5));
+                $porConfirmar++;
+                $total++;
+            }
+        }
+
+        $detalle = $porConfirmar > 0 ? " ({$porConfirmar} por confirmar, a pocos minutos de vencer)" : '';
+        $this->line("  · {$total} reservas de logia creadas (hoy y últimos 3 días){$detalle}");
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, Usuario>  $usuarios
+     * @param  int|null  $minutosParaVencer  Si viene, la reserva queda 'activa' sin
+     *   confirmar con el plazo de 15 minutos venciendo en ese lapso (backdatea
+     *   created_at) — para el caso "por confirmar" de seedReservas(). Si no viene y
+     *   $yaTermino es true, se simula asistencia real (o no-show real, 15% de las veces).
+     */
+    private function crearReservaMockup($sala, $usuarios, string $fecha, int $inicio, int $fin, bool $yaTermino, ?int $minutosParaVencer = null): Reserva
+    {
+        $cantidadPersonas = random_int(2, 5);
+        $participantes = $usuarios->random(min($cantidadPersonas, $usuarios->count()))->values();
+
+        $reserva = Reserva::create([
+            'sala_id' => $sala->id,
+            'usuario_id' => $participantes->first()->id,
+            'rut_usuario' => $participantes->first()->rut,
+            'cantidad_personas' => $cantidadPersonas,
+            'fecha' => $fecha,
+            'hora_inicio' => $inicio,
+            'hora_fin' => $fin,
+            'estado' => 'activa',
+        ]);
+
+        $reserva->participantes()->attach($participantes->pluck('id'));
+
+        if ($minutosParaVencer !== null) {
+            $reserva->created_at = now()->subMinutes(15 - $minutosParaVencer);
+            $reserva->save();
+
+            return $reserva;
+        }
+
+        if ($yaTermino) {
+            if (random_int(0, 100) < 85) {
+                $horaLlegada = Carbon::parse($fecha)->setTime($inicio, random_int(0, 10), 0);
+                $reserva->update([
+                    'prestado_por' => 'Sistema (mockup)',
+                    'hora_prestamo_real' => $horaLlegada,
+                    'devuelto_por' => 'Sistema (mockup)',
+                    'hora_devolucion_real' => $horaLlegada->copy()->addHours($fin - $inicio)->subMinutes(random_int(0, 15)),
+                    'estado' => 'finalizada',
+                    'via' => random_int(0, 1) ? 'manual' : 'BC',
+                ]);
+            } else {
+                $reserva->update(['estado' => 'no_show']);
+            }
+        }
+
+        return $reserva;
     }
 
     /**

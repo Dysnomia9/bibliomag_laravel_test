@@ -1321,6 +1321,29 @@ frontend/
   corriendo `schedule:work`) — quedó fuera de este cambio, no es un
   olvido. Tests: `NotificacionesTest.php` (usa `Notification::fake()`,
   no depende de mail real).
+- **Ruta [login] not defined — 500 en vez de 401 sin `Accept: application/json`
+  explícito** (2026-08-20, encontrado al revisar los logs de Postgres tras un
+  `docker compose down && up`): cualquier request a una ruta `auth:sanctum`
+  protegida, sin estar autenticada y **sin mandar el header `Accept:
+  application/json`** (un `curl` liso, un healthcheck, Postman mal
+  configurado, etc.), devolvía un 500 con el stack trace completo de Laravel
+  en vez de un 401 limpio. Nunca se notó porque el frontend real (axios) sí
+  manda ese header por default, y los tests usan `getJson()`/`postJson()`
+  (que también lo mandan) — el bug estaba ahí desde siempre pero ningún
+  camino real lo pisaba. Causa: `ApplicationBuilder::withMiddleware()` (el
+  propio framework, no este proyecto) registra por default
+  `redirectGuestsTo(fn () => route('login'))` **antes** de aplicar la config
+  de `bootstrap/app.php` — y como esta app es 100% API (sin ninguna ruta web
+  llamada `login`, ver `routes/web.php`), `route('login')` tira
+  `RouteNotFoundException`. Hay DOS lugares independientes donde Laravel
+  intenta ese redirect (uno en `Authenticate` middleware, otro en el
+  `Handler`/`shouldReturnJson()` al renderizar la excepción) — hace falta
+  neutralizar los dos: `$middleware->redirectGuestsTo(fn () => null)` +
+  `$exceptions->shouldRenderJsonWhen(fn () => true)` en `bootstrap/app.php`.
+  Si algún día se agrega una ruta web real de verdad (no debería pasar, esto
+  es API-only), revisar si sigue teniendo sentido forzar JSON siempre.
+  Verificado: 401 limpio sin `Accept` header, 404/422 sin cambios, 205/205
+  tests en verde.
 - **Login con Google y LDAP institucional — implementados y probados de
   verdad, inactivos hasta tener credenciales/servidor real** (2026-08-20):
   siguiendo `LoginV2View.vue` (ver entrada de abajo), se agregaron los dos

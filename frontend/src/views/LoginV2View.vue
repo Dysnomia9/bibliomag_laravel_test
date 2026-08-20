@@ -170,7 +170,7 @@ onMounted(() => {
             type="submit"
             :disabled="enviando"
             class="w-full rounded-xl py-3 text-sm font-semibold text-white shadow-sm hover:shadow-md transition-all disabled:opacity-60"
-            style="background: linear-gradient(135deg, #31482f 0%, #4f6f4d 55%, #b5852c 120%);"
+            style="background: linear-gradient(135deg, #2D1B69 0%, #3B28A3 30%, #4338CA 60%, #4F46E5 100%);"
           >
             {{ enviando ? 'Ingresando…' : 'Ingresar' }}
           </button>
@@ -206,7 +206,7 @@ onMounted(() => {
             type="button"
             @click="ldapAbierto = !ldapAbierto"
             class="w-full rounded-xl py-2.5 text-sm font-semibold text-white shadow-sm hover:shadow-md transition-all"
-            style="background: linear-gradient(135deg, #31482f 0%, #4f6f4d 55%, #b5852c 120%);"
+            style="background: linear-gradient(135deg, #2D1B69 0%, #3B28A3 30%, #4338CA 60%, #4F46E5 100%);"
           >
             Cuenta institucional (LDAP)
           </button>
