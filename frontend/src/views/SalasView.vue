@@ -55,6 +55,11 @@ function pct(hhmm: string): number {
   return ((timeToMinutes(hhmm) - aperturaMin.value) / totalMin.value) * 100
 }
 
+/** Ancho del bloque en % de la línea de tiempo, con un piso mínimo para que un tramo corto (ej. 30 min) siga siendo clickeable y visible. */
+function anchoTramoPct(tramo: TramoReserva): number {
+  return Math.max(pct(tramo.hora_fin) - pct(tramo.hora_inicio), 2.5)
+}
+
 const modalOpen = ref(false)
 const selectedSala = ref<Sala | null>(null)
 const modalInmediata = ref(false)
@@ -380,12 +385,19 @@ async function liberarReservaAction(reservaId: number) {
   }
 }
 
-/** "Menú de confirmación": tramos de hoy que todavía no confirman llegada, con su plazo. */
+/**
+ * "Menú de confirmación": tramos de hoy que ya deberían haber llegado (su hora de
+ * inicio ya pasó) y todavía no confirman llegada. Un tramo que recién empieza más
+ * tarde hoy no pertenece acá — nadie puede "llegar" a algo que no ha comenzado. Sin
+ * este filtro por hora_inicio, la lista mostraba TODAS las reservas activas del día
+ * completo (incluidas las de la noche a primera hora de la mañana), con cuentas
+ * regresivas de cientos de minutos — un bug real, no la intención original.
+ */
 const pendientesConfirmacion = computed(() => {
   if (selectedDate.value !== hoy) return []
   return salas.value
     .flatMap((sala) => sala.tramos.map((tramo) => ({ sala, tramo })))
-    .filter(({ tramo }) => tramo.estado === 'activa' && !tramo.hora_prestamo_real)
+    .filter(({ tramo }) => tramo.estado === 'activa' && !tramo.hora_prestamo_real && timeToMinutes(tramo.hora_inicio) <= ahoraMin.value)
     .map(({ sala, tramo }) => ({
       sala,
       tramo,
@@ -581,12 +593,13 @@ function formatCuentaRegresiva(segundos: number) {
               <div
                 v-for="tramo in sala.tramos"
                 :key="tramo.reserva_id"
-                class="absolute inset-y-1 rounded-lg border flex items-center justify-center text-[10px] font-semibold px-1.5 overflow-hidden whitespace-nowrap shadow-sm hover:shadow-md hover:brightness-95 hover:z-10 transition-all"
-                :class="tramoClases(tramo)"
-                :style="{ left: pct(tramo.hora_inicio) + '%', width: Math.max(pct(tramo.hora_fin) - pct(tramo.hora_inicio), 3) + '%' }"
+                class="absolute inset-y-1 border flex items-center justify-center text-[10px] font-semibold overflow-hidden whitespace-nowrap shadow-sm hover:shadow-md hover:brightness-95 hover:z-20 hover:scale-y-105 transition-all cursor-pointer"
+                :class="[tramoClases(tramo), anchoTramoPct(tramo) < 6 ? 'rounded-full' : 'rounded-lg px-1.5']"
+                :style="{ left: pct(tramo.hora_inicio) + '%', width: anchoTramoPct(tramo) + '%' }"
+                :title="`${tramo.hora_inicio.slice(0, 5)} – ${tramo.hora_fin.slice(0, 5)} · ${tramo.cantidad_personas} persona(s)`"
                 @click.stop="verDetalle(sala, tramo)"
               >
-                {{ tramo.hora_inicio.slice(0, 5) }}–{{ tramo.hora_fin.slice(0, 5) }}
+                <span v-if="anchoTramoPct(tramo) >= 6">{{ tramo.hora_inicio.slice(0, 5) }}–{{ tramo.hora_fin.slice(0, 5) }}</span>
               </div>
               <div
                 v-if="esHoy"

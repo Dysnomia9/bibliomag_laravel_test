@@ -561,10 +561,12 @@ function formatFecha(iso: string | null) {
 
         <div
           v-if="usuario.multas_pendientes?.cantidad"
-          class="mb-6 flex items-center gap-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800"
+          class="mb-6 flex items-center gap-2 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700"
         >
           ⚠ Este usuario tiene {{ usuario.multas_pendientes.cantidad }} multa(s) pendiente(s) por
-          {{ formatMonto(usuario.multas_pendientes.monto_total) }}. Puede continuar con el préstamo igualmente.
+          {{ formatMonto(usuario.multas_pendientes.monto_total) }}. No debería llevarse un libro nuevo hasta pagar —
+          el sistema todavía no bloquea esto automáticamente (la verificación de pago real vendrá de otro sistema),
+          así que queda a criterio del personal.
         </div>
 
         <div class="flex gap-1 mb-4 bg-white rounded-xl shadow-sm p-1">

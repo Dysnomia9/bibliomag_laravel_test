@@ -51,6 +51,11 @@ function pct(hhmm: string): number {
   return ((timeToMinutes(hhmm) - aperturaMin.value) / totalMin.value) * 100
 }
 
+/** Ancho del bloque en % de la línea de tiempo, con un piso mínimo para que un tramo corto (ej. 30 min) siga siendo visible. */
+function anchoTramoPct(tramo: TramoReserva): number {
+  return Math.max(pct(tramo.hora_fin) - pct(tramo.hora_inicio), 2.5)
+}
+
 const ahora = ref(new Date())
 let relojTimer: ReturnType<typeof setInterval> | undefined
 onMounted(() => {
@@ -331,14 +336,16 @@ async function cancelarPropia(tramo: TramoReserva) {
               <div
                 v-for="tramo in sala.tramos"
                 :key="tramo.reserva_id"
-                class="absolute inset-y-1 rounded-lg border flex items-center justify-center text-[10px] font-semibold px-1.5 overflow-hidden whitespace-nowrap shadow-sm hover:shadow-md hover:z-10 transition-all"
-                :class="esMia(tramo) ? 'bg-indigo-100 border-indigo-300 text-indigo-800' : 'bg-red-100 border-red-300 text-red-700'"
-                :style="{ left: pct(tramo.hora_inicio) + '%', width: Math.max(pct(tramo.hora_fin) - pct(tramo.hora_inicio), 3) + '%' }"
+                class="absolute inset-y-1 border flex items-center justify-center text-[10px] font-semibold overflow-hidden whitespace-nowrap shadow-sm hover:shadow-md hover:z-20 hover:scale-y-105 transition-all"
+                :class="[esMia(tramo) ? 'bg-indigo-100 border-indigo-300 text-indigo-800' : 'bg-red-100 border-red-300 text-red-700', anchoTramoPct(tramo) < 6 ? 'rounded-full' : 'rounded-lg px-1.5']"
+                :style="{ left: pct(tramo.hora_inicio) + '%', width: anchoTramoPct(tramo) + '%' }"
+                :title="`${tramo.hora_inicio.slice(0, 5)} – ${tramo.hora_fin.slice(0, 5)}${esMia(tramo) ? ' · tu reserva' : ''}`"
               >
-                <button v-if="esMia(tramo)" @click.stop="cancelarPropia(tramo)" class="hover:underline">
-                  {{ tramo.hora_inicio.slice(0, 5) }}–{{ tramo.hora_fin.slice(0, 5) }} (cancelar)
+                <button v-if="esMia(tramo)" @click.stop="cancelarPropia(tramo)" class="hover:underline w-full h-full flex items-center justify-center">
+                  <span v-if="anchoTramoPct(tramo) >= 6">{{ tramo.hora_inicio.slice(0, 5) }}–{{ tramo.hora_fin.slice(0, 5) }} (cancelar)</span>
+                  <span v-else>×</span>
                 </button>
-                <span v-else>{{ tramo.hora_inicio.slice(0, 5) }}–{{ tramo.hora_fin.slice(0, 5) }}</span>
+                <span v-else-if="anchoTramoPct(tramo) >= 6">{{ tramo.hora_inicio.slice(0, 5) }}–{{ tramo.hora_fin.slice(0, 5) }}</span>
               </div>
               <div
                 class="absolute inset-y-0 w-[3px] -ml-px bg-indigo-600 pointer-events-none rounded-full shadow-[0_0_0_2px_rgba(79,70,229,0.15)]"

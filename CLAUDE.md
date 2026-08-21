@@ -1638,6 +1638,104 @@ frontend/
   (hace el POST real desde los datos ya validados). Si agregás una acción
   nueva de un solo click que escriba algo importante, seguí este mismo
   patrón en vez de un `@click` directo a la función que llama a la API.
+- **Segunda ronda de retoques post-horario-continuo** (2026-08-21, mismo
+  día que las dos entradas anteriores): varios pedidos más tras seguir
+  usando el sistema.
+  - **Mock de "¿Olvidaste tu contraseña?" en los logins de staff**
+    (`LoginView.vue`) **y unificado** (`LoginV2View.vue`) — el portal
+    (`PortalLoginView.vue`) ya lo tenía (`onOlvidoPassword()`, muestra un
+    toast informativo, no llama a ningún endpoint real). Se replicó el
+    mismo patrón en los otros dos: es intencionalmente un mock (no hay
+    flujo real de recuperación de contraseña con token/expiración/envío
+    de correo implementado) — el toast solo indica a quién contactar
+    (administrador del sistema para staff, o mesón/administrador para el
+    login unificado). Si algún día se implementa recuperación real,
+    reemplazar `onOlvidoPassword()` en los tres archivos, no solo
+    agregarla en uno.
+  - **Mockup: no había reservas de sala "en curso ya confirmadas"**
+    — `crearReservaMockup()` solo simulaba dos casos para hoy: tramos ya
+    terminados (asistencia real/no-show, 85/15) y tramos futuros (sin
+    tocar). Un tramo que ya empezó pero no ha terminado se dejaba siempre
+    `activa` sin `hora_prestamo_real`, como si nadie hubiera llegado
+    todavía — la demo se sentía irreal, con "salas en uso" que en
+    realidad nunca mostraban a nadie confirmado. Se agregó una tercera
+    fase `'en_curso'`: probabilidad de 55% de llegada ya confirmada si
+    todavía está dentro del plazo de 15 min, 90% si ya se pasó (más un
+    10% de pasar a `no_show`, simulando la expiración perezosa que
+    correspondería en un sistema real). Ver `SeedMockupData::
+    seedReservas()`/`crearReservaMockup()` — si tocás esto, no vuelvas a
+    dejar los tramos en curso siempre sin confirmar.
+  - **Bug real: el menú de confirmación de asistencia mostraba TODAS las
+    reservas activas sin confirmar del día completo**, incluidas las que
+    ni siquiera habían empezado — `pendientesConfirmacion` en
+    `SalasView.vue` filtraba por `estado === 'activa' && !
+    hora_prestamo_real` sin comparar `hora_inicio` contra la hora actual.
+    Con los bloques fijos viejos esto ya era un bug latente, pero pasaba
+    casi desapercibido (pocas reservas por día); con el horario continuo
+    y una demo más densa, un usuario reportó "como mil pendientes" con
+    cuentas regresivas de cientos de minutos — reservas de las 20:30 se
+    mostraban como "por confirmar" a las 07:30. Se agregó el filtro
+    faltante: `timeToMinutes(tramo.hora_inicio) <= ahoraMin.value`. El
+    backend nunca tuvo este bug (`estaVencidaSinConfirmar()` ya compara
+    contra `plazoConfirmacion()`, que para un tramo futuro también es
+    futuro) — era puramente un filtro faltante en el frontend.
+  - **Bloques de la línea de tiempo poco legibles cuando son cortos** (ej.
+    30 min): con el ancho mínimo de 3% de antes, un tramo corto quedaba
+    con texto "HH:MM–HH:MM" recortado y feo. Se agregó `anchoTramoPct()`
+    (mismo cálculo en `SalasView.vue` y `PortalSalasView.vue`) y, cuando
+    el ancho resultante es menor a 6%, el bloque oculta el texto interno
+    y pasa a `rounded-full` (una píldora de color limpia en vez de texto
+    cortado) — el detalle completo sigue disponible al hacer click
+    (`verDetalle()`, staff) o vía el atributo `title` nativo del
+    navegador (tooltip al pasar el mouse, ambas vistas). En el portal, el
+    botón de cancelar de "tu reserva" muestra un "×" en vez del texto
+    completo cuando el bloque es angosto, pero sigue siendo clickeable en
+    toda su área.
+  - **Aviso de multa pendiente al crear un préstamo, de ámbar a rojo**:
+    hasta acá decía "Puede continuar con el préstamo igualmente" en tono
+    neutro. El usuario pidió que sugiera explícitamente que NO debería
+    prestarse mientras haya multa pendiente — pero sin bloqueo duro
+    todavía, porque la verificación real de pago vendrá de un sistema de
+    pagos externo que hoy no existe integrado (ver Deuda técnica, "Multas:
+    aviso + vista consolidada, pero sin bloqueo duro" — esa decisión
+    **sigue vigente**, esto es solo un cambio de tono visual, no una
+    reversión de la decisión). El banner en `PrestamoView.vue` pasó de
+    `bg-amber-50`/`text-amber-800` a `bg-red-50`/`text-red-700`, mismo
+    estilo que el banner de "ya tiene un libro sin devolver" — pero a
+    diferencia de ese, **no deshabilita el botón de confirmar préstamo**.
+    Si en el futuro se integra un sistema de pagos real y se decide
+    bloquear de verdad, ahí sí correspondería deshabilitar el botón (y
+    probablemente mover el chequeo al backend) — no lo hagas todavía sin
+    que el usuario lo pida explícitamente, porque hoy no hay forma de
+    verificar un pago real.
+  - **Cola de espera de reserva de libro no mostraba cuándo se liberaría
+    una copia**: un usuario que se unía a la cola (`en_cola`) veía su
+    posición en la fila pero ningún indicio de cuándo podría tocarle.
+    Se agregó `ReservaLibroService::enriquecerColaLibro()` (nuevo,
+    compartido entre `ReservaLibroController` y
+    `PortalReservaLibroController` — de paso se eliminó una duplicación
+    real que ya existía entre ambos para calcular `posicion`, ver
+    convención 4): además de `posicion`, adjunta
+    `proxima_fecha_devolucion` — la `fecha_devolucion` más próxima entre
+    los préstamos activos (`estado != 'devuelto'`) de cualquier copia de
+    ese libro. Es una **estimación, no una promesa exacta** (no considera
+    cuántas personas hay delante en la fila ni cuántas copias existen en
+    total, solo la fecha acordada más cercana) — así se documenta en el
+    tooltip/texto del frontend ("una copia debería devolverse el...").
+    Se muestra en `PrestamoView.vue` (staff) y `PortalCatalogoView.vue`
+    (portal), junto a "Lugar #N en la fila". Puede venir `null` si por
+    algún motivo no hay ningún préstamo activo con fecha registrada sobre
+    ese libro (no debería pasar en operación normal, pero no rompe nada
+    si pasa).
+  - Verificado: `php artisan test` en 218/218, `vue-tsc -b` sin errores,
+    la estimación de fecha probada end-to-end con `curl` real (préstamo
+    real + reserva en cola + lectura del campo). La fase `'en_curso'` del
+    seeder se verificó simulando un mediodía con `Carbon::setTestNow()`
+    dentro de `tinker` (no el reloj real del sistema) para confirmar que
+    sí aparecen tramos ya confirmados, y después se volvió a sembrar con
+    la hora real para no dejar la base de datos de desarrollo con
+    timestamps falsos. **No verificado visualmente en navegador** (mismo
+    motivo que las dos entradas anteriores).
 
 ## Checklist antes de dar un módulo por terminado
 
