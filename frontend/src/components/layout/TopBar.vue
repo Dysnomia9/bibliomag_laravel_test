@@ -176,45 +176,45 @@ async function onLogout() {
         class="fixed inset-0 z-[200] flex items-start justify-center overflow-y-auto bg-black/50 backdrop-blur-sm p-4 sm:p-8"
         @click.self="cerrarMenuGestion"
       >
-        <div class="w-full max-w-5xl my-2 sm:my-6 rounded-3xl bg-white shadow-2xl">
-          <div class="px-6 py-8 sm:px-10 sm:py-10">
-            <div class="flex items-start justify-between gap-4 mb-8">
-              <div class="flex items-center gap-3">
-                <span class="w-1 h-8 rounded-full bg-indigo-600 shrink-0"></span>
+        <div class="w-full max-w-3xl lg:max-w-4xl my-2 sm:my-6 rounded-2xl bg-white shadow-2xl">
+          <div class="px-5 py-5 sm:px-7 sm:py-6">
+            <div class="flex items-start justify-between gap-4 mb-5">
+              <div class="flex items-center gap-2.5">
+                <span class="w-1 h-6 rounded-full bg-indigo-600 shrink-0"></span>
                 <div>
-                  <h2 class="text-2xl sm:text-3xl font-serif font-bold text-gray-900">Menú de Gestión</h2>
-                  <p class="text-sm text-gray-500 mt-0.5">Selecciona un módulo administrativo para continuar</p>
+                  <h2 class="text-lg sm:text-xl font-serif font-bold text-gray-900">Menú de Gestión</h2>
+                  <p class="text-xs text-gray-500 mt-0.5">Selecciona un módulo administrativo para continuar</p>
                 </div>
               </div>
               <button
                 @click="cerrarMenuGestion"
-                class="shrink-0 h-10 w-10 flex items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 hover:text-gray-800 hover:border-gray-300 shadow-sm transition-colors"
+                class="shrink-0 h-8 w-8 flex items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 hover:text-gray-800 hover:border-gray-300 shadow-sm transition-colors"
                 aria-label="Cerrar menú de gestión"
               >
-                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
 
-            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
               <router-link
                 v-for="link in adminLinksVisibles()"
                 :key="link.name"
                 :to="{ name: link.name }"
                 @click="cerrarMenuGestion"
-                class="group flex flex-col items-center rounded-2xl border border-t-4 border-gray-200 bg-white p-6 text-center shadow-sm transition-all hover:shadow-md active:scale-[0.98]"
+                class="group flex flex-col items-center rounded-xl border border-t-[3px] border-gray-200 bg-white p-3.5 text-center shadow-sm transition-all hover:shadow-md active:scale-[0.98]"
                 :class="[ADMIN_COLORS[link.color].border, ADMIN_COLORS[link.color].topBorder, route.name === link.name ? 'ring-2 ring-indigo-400' : '']"
               >
                 <div
-                  class="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl transition-colors group-hover:text-white"
+                  class="mb-2 flex h-9 w-9 items-center justify-center rounded-xl transition-colors group-hover:text-white"
                   :class="[ADMIN_COLORS[link.color].icon, ADMIN_COLORS[link.color].iconHover]"
                 >
-                  <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                  <svg class="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
                     <path stroke-linecap="round" stroke-linejoin="round" :d="link.icon" />
                   </svg>
                 </div>
-                <div class="text-[15px] font-semibold text-gray-900">{{ link.label }}</div>
+                <div class="text-xs font-semibold text-gray-900 leading-tight">{{ link.label }}</div>
               </router-link>
             </div>
           </div>

@@ -183,8 +183,10 @@ backend/
                           historial() (préstamos por copia, todo staff)
     EjemplarController  # opera sobre la copia física: buscarPorCodigo/store
                           ("agregar copia" a un libro existente, solo admin)/
-                          siguienteCodigoBarras (generador secuencial UMAG######,
-                          solo admin)/cambiarEstado (todo staff)/
+                          siguienteCodigoBarras (generador secuencial numérico de
+                          14 dígitos, ej. 30000003227565, formato heredado de
+                          Horizon — ver Gotchas 2026-08-21, solo admin)/
+                          cambiarEstado (todo staff)/
                           cambioMasivoPreview+cambioMasivoEjecutar (solo
                           admin, exige al menos un filtro, escribe
                           ejemplar_estado_historial con lote_id compartido)/
@@ -398,8 +400,11 @@ frontend/
   `SalaDevolucionTest`, `SalaReservaTest`, `StaffAtribucionTest`,
   `TipoMaterialTest`, `UsuarioAuthTest`), corren contra una DB Postgres
   dedicada (`biblioteca_test`, ver `docker-entrypoint.sh`) con
-  `docker compose exec backend php artisan test` — 197 tests al
-  2026-08-19. La catalogación de libros, el split Libro/Ejemplar, el
+  `docker compose exec backend php artisan test` — 215 tests al
+  2026-08-21 (197 al 2026-08-19; ver entrada "Reserva de salas: de 7
+  bloques fijos... a horario continuo" y la de "Un usuario podía llevarse
+  un libro nuevo sin haber devuelto el anterior" en Gotchas para el detalle del
+  salto). La catalogación de libros, el split Libro/Ejemplar, el
   cambio masivo de estado y el flujo completo de confirmación de
   asistencia de sala ya tienen cobertura completa. **Ojo**: hasta
   2026-08-19 `phpunit.xml` declaraba un testsuite "Unit" apuntando a
@@ -905,13 +910,19 @@ frontend/
   tipear la palabra "CONFIRMAR" en un modal antes de habilitar el botón de
   ejecutar — no es un simple `confirm()` de un click. Tests:
   `EjemplarCambioMasivoTest.php`.
-- **Generador de código de barras secuencial** (2026-08-15):
-  `GET /ejemplares/siguiente-codigo-barras` (solo admin) busca el mayor
-  sufijo numérico entre códigos con patrón `UMAG######` y devuelve el
-  siguiente, zero-padded a 6 dígitos (`UMAG000042`). Es solo una sugerencia
-  para rellenar el input — el staff puede editarlo antes de guardar, y la
-  regla `unique:ejemplares,codigo_barras` en `reglasCatalogacion()` sigue
-  validando en el submit. No auto-asigna nada por su cuenta.
+- **Generador de código de barras secuencial** (2026-08-15, formato
+  cambiado el 2026-08-21 — ver Gotchas de esa fecha): `GET /ejemplares/
+  siguiente-codigo-barras` (solo admin) busca el mayor código entre los que
+  matchean `^[0-9]{14}$` y devuelve el siguiente, zero-padded a 14 dígitos
+  (ej. `00000000000001`, o continuando una secuencia real tipo
+  `30000003227565` → `30000003227566`) — **ya no** es el formato
+  `UMAG######` con el que se lanzó originalmente esta función; los códigos
+  reales de biblioteca (y los que Horizon ya trae impresos en las copias
+  físicas) son numéricos de 14 dígitos, no alfanuméricos con prefijo. Es
+  solo una sugerencia para rellenar el input — el staff puede editarlo
+  antes de guardar, y la regla `unique:ejemplares,codigo_barras` en
+  `reglasCatalogacion()` sigue validando en el submit. No auto-asigna nada
+  por su cuenta.
 - **Historial de cambios de estado por ejemplar + historial de préstamos
   por libro** (2026-08-15), dos vistas nuevas y distintas — no las
   confundas: `EjemplarController::historialEstado()` +
@@ -1461,6 +1472,172 @@ frontend/
   reintroduzcas libros de mockup con estos campos en `null` — si agregás un
   título nuevo a `$catalogoLibros`, va a heredar el mismo relleno
   automáticamente sin cambios adicionales.
+- **Reserva de salas: de 7 bloques fijos de 2 horas a horario continuo**
+  (2026-08-21): el modelo de bloques (08–10, 10–12, ..., 20–21) vivía
+  **solo en el frontend** (`SalasView.vue`/`PortalSalasView.vue`, constante
+  `horariosBloques`) — el backend nunca los conoció, `reservas.hora_inicio`/
+  `hora_fin` eran enteros (0–23) sin relación con una duración real. Esto se
+  reemplazó por inicio libre (pasos de `config('salas.granularidad')`,
+  30 min) y duración de hasta `config('salas.duracion_maxima')` (2 h) por
+  reserva. Cambios clave:
+  - **Columnas `time`, no `integer`**: migración
+    `2026_08_21_000001_convert_reservas_horas_a_time` convierte
+    `reservas.hora_inicio`/`hora_fin` a `time` con `ALTER COLUMN ... USING
+    make_time(...)` — preserva los datos existentes (`14` → `14:00:00`),
+    documentada como irreversible sin pérdida si alguna vez se guardó un
+    minuto no exacto (no pasa hoy, pero el `down()` trunca a la hora). El
+    modelo `Reserva` sigue sin castear estas columnas a `datetime` (se
+    manejan como string `H:i:s` + `Reserva::duracionMinutos()`), mismo
+    criterio que ya se usaba para `fecha`.
+  - **`config/salas.php`** (nuevo) centraliza apertura/cierre/duración
+    mínima-máxima/granularidad/cuota diaria/plazo de confirmación — no
+    hardcodear estos valores en el service/controller, mismo patrón que
+    `config/multas.php`/`config/reservas_libro.php`.
+  - **Se eliminó la regla de "máximo 2 bloques adyacentes en la misma
+    sala"** (`ReservaSalaService::participanteExcedeLimiteDeBloques()`) —
+    con duración libre, "adyacente"/"misma sala" ya no tienen sentido. La
+    reemplaza `participanteExcedeCuotaDiaria()`: cada participante tiene un
+    tope de `config('salas.cuota_diaria')` (240 min = 4 h) de reservas
+    `activa` **o** `finalizada` por día, sin importar en cuántas salas
+    distintas se reparta (`no_show` no consume cuota). Si tocás esta
+    regla, no reintroduzcas el concepto de adyacencia — ya no aplica.
+  - **`ReservaSalaService::existeSolapamiento()`/`participanteConReservaSolapada()`**
+    cambiaron sus parámetros de `int` a `string` (`H:i`/`H:i:s`) pero la
+    lógica de intersección de intervalos (`hora_inicio < fin AND hora_fin >
+    inicio`) es la misma — sigue funcionando igual con `time` que con
+    `integer`, no hacía falta reescribirla.
+  - **Bandera `inmediata`** en `POST /reservas` y `POST /mi/reservas`: si
+    viene `true`, `ReservaSalaService::validarTramo()` sobrescribe
+    `hora_inicio` con la hora real del servidor (`now()->format('H:i')`)
+    **antes** de validar — así "Reservar ahora" no puede ser falseado
+    editando el reloj del navegador. Con `inmediata` también se salta el
+    chequeo de granularidad (el minuto exacto de "ahora" no tiene por qué
+    caer en :00/:30).
+  - **`GET /salas`/`GET /mi/salas` cambiaron de forma**: ya no devuelven un
+    array plano `reservas` — devuelven `salas[].tramos` (cada tramo con su
+    `reserva_id`, horario, estado, personas, plazo de confirmación, etc.),
+    más `libre_ahora`/`disponible_hasta_min` por sala (solo si `fecha` es
+    hoy — `null` para otras fechas) y `apertura`/`cierre`/`granularidad`/
+    `duracion_minima`/`duracion_maxima`/`cuota_diaria` a nivel raíz, para
+    que el frontend no hardcodee esos valores. El armado del JSON vive en
+    `ReservaSalaService::vistaDelDia()` (compartido entre `SalaController`
+    y `PortalController`, ver convención 4 — no dupliques este armado en
+    un controller). Si consumís este endpoint desde código nuevo, no
+    asumas la forma vieja (`{ salas: [...], reservas: [...] }`).
+  - **Frontend**: `SalasView.vue`/`PortalSalasView.vue` pasaron de una
+    tabla de grilla (sala × bloque) a una línea de tiempo por sala (barra
+    08:00–21:00 con los tramos ocupados posicionados por porcentaje,
+    marcador de "ahora", click en zona libre abre el modal con esa hora
+    redondeada a la próxima media hora). La disponibilidad máxima desde un
+    punto dado (`disponibilidadDesde()` en ambas vistas, espejo de
+    `ReservaSalaService::duracionMaximaDisponible()`) se calcula **en el
+    cliente** con los tramos que ya trae la vista, sin ida y vuelta al
+    servidor por cada cambio de hora en el modal — el backend igual
+    revalida todo al confirmar, así que un cálculo cliente desactualizado
+    nunca permite una reserva inválida, solo un mensaje de error si el
+    cliente estaba stale. Ya no existe `horariosBloques` — no la
+    reintroduzcas.
+  - **`escanearLogia()`** (check-in/check-out por código de barras Horizon)
+    solo cambió la comparación de hora entera a `H:i:s` — sigue sin crear
+    reservas, solo cierra el ciclo de una ya existente cuyo tramo contiene
+    el instante actual.
+  - Suite verde: 212 tests (`SalaReservaTest` reescrito — se sacaron los
+    4 casos de adyacencia y el de "otra sala sin solape" ahora se admite a
+    propósito—, `SalaConfirmacionAsistenciaTest`/`PortalReservaTest`
+    adaptados a `time`). Verificado además con `curl` contra la API real
+    (no solo tests): tramo no alineado a la granularidad → 422, overlap →
+    409, `inmediata` antes de la apertura → 422 (correcto: reflejaba la
+    hora real del servidor), creación + lectura de un tramo real en
+    `GET /salas`. **No se verificó visualmente en navegador** (sin
+    herramienta de automatización de browser disponible en esa sesión) —
+    si algo se ve mal en la línea de tiempo, probarlo ahí antes de asumir
+    que el bug está en el cálculo de porcentajes.
+- **Ajustes menores post-horario-continuo** (2026-08-21, mismo día que la
+  entrada anterior): cuatro retoques pedidos tras usar el módulo de salas
+  nuevo.
+  - **Códigos de barra de ejemplares en el seeder seguían con el formato
+    viejo `UMAG######`**, aunque el generador real
+    (`EjemplarController::siguienteCodigoBarras()`) ya usaba numérico de 14
+    dígitos desde antes (ver la entrada de arriba) — nadie había
+    actualizado `SeedMockupData::seedLibros()` para que coincidiera.
+    Corregido: cada `Ejemplar` sembrado ahora recibe un código
+    `30000000000001`, `...002`, etc. (secuencial, 14 dígitos, con la misma
+    pinta que un código real de Horizon) — cada copia sigue con su propio
+    código único, nunca comparte el de otra copia del mismo libro.
+  - **`fechaReserva` (reserva de libro para retiro, en
+    `PrestamoView.vue`) no traía la fecha de hoy precargada** — a
+    diferencia de `fechaPrestamo`, que sí lo hacía desde siempre. Se
+    igualó el criterio: `fechaReserva` ahora nace en `today` y vuelve a
+    `today` (no a `''`) tras crear una reserva, igual que `fechaPrestamo`.
+    Sigue siendo un campo editable, no bloqueado — el staff puede
+    cambiarlo si hace falta. `fechaRetiro` (el plazo límite para retirar,
+    no el día de la reserva) se dejó intencionalmente vacío, no tiene
+    sentido precargarlo con "hoy".
+  - **Línea de tiempo de salas con poco diseño**: los tramos ocupados
+    pasaron de un solo rojo parejo a un color por estado
+    (`tramoClases()` en `SalasView.vue`/lógica equivalente en
+    `PortalSalasView.vue`) — ámbar mientras está `activa` sin
+    `hora_prestamo_real` y dentro del plazo, naranja si ya venció el plazo
+    de 15 min sin confirmar, rojo una vez confirmada la llegada
+    (`hora_prestamo_real` seteado), gris si ya se devolvió la llave. Se
+    agregaron líneas guía verticales cada 2 horas (mismo criterio que las
+    etiquetas de hora del encabezado), bordes/sombra en los bloques
+    (`shadow-sm hover:shadow-md`), y el marcador de "ahora" pasó de una
+    línea de 2px a una barra de 3px con halo sutil. La leyenda de colores
+    de ambas vistas se actualizó para reflejar los 4-5 estados en vez de
+    solo "ocupada"/"disponible"/"devuelta".
+  - **"Menú de Gestión" (dropdown "Gestiones Admin" de `TopBar.vue`)
+    quedaba enorme en pantallas grandes**: `max-w-5xl` con tarjetas de
+    `p-6`, íconos de `h-14 w-14` y `gap-5` — en un monitor ancho se sentía
+    desproporcionado para solo 12 links. Se redujo a `max-w-3xl
+    lg:max-w-4xl`, tarjetas `p-3.5` con íconos `h-9 w-9` (svg 18px),
+    `gap-3`, y se agregó un breakpoint `xl:grid-cols-6` (antes tope en 4
+    columnas) para que en pantallas anchas se acomode en menos filas en
+    vez de una grilla angosta y alta. El comportamiento en mobile/tablet
+    (`grid-cols-2 sm:grid-cols-3`) no cambió.
+  - Verificado: `php artisan test` sigue en 212/212, `vue-tsc -b` sin
+    errores, `mockup:datos --fresh` corrido de nuevo para que los
+    ejemplares de demo ya tengan el código numérico nuevo. **No verificado
+    visualmente en navegador** (mismo motivo que la entrada anterior) — si
+    el "Menú de Gestión" o la línea de tiempo se ven mal en la práctica,
+    probarlos ahí antes de asumir que el problema está en otro lado.
+- **Un usuario podía llevarse un libro nuevo sin haber devuelto el
+  anterior** (2026-08-21, bug real encontrado en uso — un bibliotecario
+  probó prestarle un segundo libro a alguien que todavía tenía uno
+  afuera y el sistema lo dejó sin avisar nada): `PrestamoController::
+  store()` nunca chequeaba los préstamos existentes del `usuario_id`
+  recibido, solo la disponibilidad del `Ejemplar`/`Equipo` escaneado. Se
+  agregó un **bloqueo duro** (a propósito, no un simple aviso): si el
+  usuario ya tiene un `Prestamo` con `tipo_item = 'libro'` y
+  `estado != 'devuelto'`, el `store()` devuelve 409 antes de tocar el
+  ejemplar — dentro de la misma transacción, como primer chequeo del
+  branch `$esLibro`. **No es lo mismo que la política de multas** (ver
+  Deuda técnica, "sin bloqueo duro" — esa sigue siendo una decisión
+  explícita distinta): acá el usuario mismo confirmó que quiere el
+  bloqueo estricto para préstamos concurrentes, así que no lo relajes a
+  un aviso no bloqueante sin volver a confirmarlo. Alcance: **solo
+  libros** — un usuario puede seguir teniendo un libro Y un equipo
+  (audífonos/notebook/cargador) prestados al mismo tiempo sin problema,
+  y puede tener varios equipos de tipos distintos a la vez; el límite es
+  1 libro activo por usuario, no 1 préstamo total. Frontend
+  (`PrestamoView.vue`): aviso rojo persistente apenas se busca un usuario
+  con un libro activo (mismo lugar que el aviso ámbar de multas
+  pendientes, pero bloqueante en vez de informativo — el botón "Confirmar
+  Préstamo" queda deshabilitado), más chequeo duplicado client-side antes
+  de abrir el modal de confirmación (ver debajo) para no depender solo
+  del 409 del servidor. Tests: `PrestamoLibroTest.php` (bloqueo con libro
+  activo, éxito tras devolver el anterior, libro activo no bloquea
+  préstamo de equipo).
+- **Crear un préstamo de libro no tenía modal de confirmación** (mismo
+  día): a diferencia de "Confirmar devolución"/"Confirmar pago de multa"
+  (que ya usaban el patrón `xPendiente` ref + modal Cancelar/Confirmar en
+  este mismo archivo), el botón "Confirmar Préstamo" ejecutaba el
+  `POST /prestamos` directo al primer click. Se igualó el patrón:
+  `crearPrestamo()` se separó en `pedirConfirmacionPrestamo()` (valida y
+  llena `prestamoPendiente`, sin llamar a la API) + `confirmarPrestamo()`
+  (hace el POST real desde los datos ya validados). Si agregás una acción
+  nueva de un solo click que escriba algo importante, seguí este mismo
+  patrón en vez de un `@click` directo a la función que llama a la API.
 
 ## Checklist antes de dar un módulo por terminado
 

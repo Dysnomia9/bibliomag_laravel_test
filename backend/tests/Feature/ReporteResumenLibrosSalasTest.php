@@ -78,9 +78,9 @@ class ReporteResumenLibrosSalasTest extends TestCase
         $logiaA = Sala::factory()->create(['nombre' => 'Logia A']);
         $logiaB = Sala::factory()->create(['nombre' => 'Logia B']);
 
-        Reserva::factory()->create(['sala_id' => $logiaA->id, 'usuario_id' => Usuario::factory(), 'hora_inicio' => 10, 'hora_fin' => 12]);
-        Reserva::factory()->create(['sala_id' => $logiaA->id, 'usuario_id' => Usuario::factory(), 'hora_inicio' => 10, 'hora_fin' => 12]);
-        Reserva::factory()->create(['sala_id' => $logiaB->id, 'usuario_id' => Usuario::factory(), 'hora_inicio' => 16, 'hora_fin' => 18]);
+        Reserva::factory()->create(['sala_id' => $logiaA->id, 'usuario_id' => Usuario::factory(), 'hora_inicio' => '10:00', 'hora_fin' => '12:00']);
+        Reserva::factory()->create(['sala_id' => $logiaA->id, 'usuario_id' => Usuario::factory(), 'hora_inicio' => '10:00', 'hora_fin' => '12:00']);
+        Reserva::factory()->create(['sala_id' => $logiaB->id, 'usuario_id' => Usuario::factory(), 'hora_inicio' => '16:00', 'hora_fin' => '18:00']);
 
         $response = $this->getJson('/api/reportes/resumen?tab=logias');
 

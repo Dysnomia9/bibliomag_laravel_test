@@ -46,8 +46,8 @@ class PortalReservaTest extends TestCase
         $response = $this->postJson('/api/mi/reservas', [
             'sala_id' => $sala->id,
             'fecha' => now()->addDay()->toDateString(),
-            'hora_inicio' => 10,
-            'hora_fin' => 12,
+            'hora_inicio' => '10:00',
+            'hora_fin' => '12:00',
             'cantidad_personas' => 2,
             'ruts' => [$usuario->rut, Usuario::factory()->create()->rut],
         ]);
@@ -66,8 +66,8 @@ class PortalReservaTest extends TestCase
         $response = $this->postJson('/api/mi/reservas', [
             'sala_id' => $sala->id,
             'fecha' => now()->toDateString(),
-            'hora_inicio' => 10,
-            'hora_fin' => 12,
+            'hora_inicio' => '10:00',
+            'hora_fin' => '12:00',
             'cantidad_personas' => 2,
             'ruts' => [$usuario->rut, $otro->rut],
         ]);
@@ -75,7 +75,13 @@ class PortalReservaTest extends TestCase
         $response->assertStatus(201);
     }
 
-    public function test_usuario_no_puede_reservar_otra_sala_si_ya_tiene_una_activa(): void
+    /**
+     * Antes esto se rechazaba (regla de "una sala activa a la vez, salvo extender la
+     * misma"), eliminada con el horario continuo — ahora un mismo usuario puede tener
+     * reservas en salas distintas el mismo día siempre que no se solapen en horario y
+     * quepan dentro de la cuota diaria (ver R6/R5 de la spec).
+     */
+    public function test_usuario_puede_reservar_otra_sala_sin_solape_de_horario(): void
     {
         $usuario = Usuario::factory()->create();
         $otro = Usuario::factory()->create();
@@ -87,8 +93,8 @@ class PortalReservaTest extends TestCase
             'usuario_id' => $usuario->id,
             'rut_usuario' => $usuario->rut,
             'fecha' => now()->toDateString(),
-            'hora_inicio' => 10,
-            'hora_fin' => 12,
+            'hora_inicio' => '10:00',
+            'hora_fin' => '11:00',
             'cantidad_personas' => 2,
         ]);
 
@@ -97,43 +103,44 @@ class PortalReservaTest extends TestCase
         $response = $this->postJson('/api/mi/reservas', [
             'sala_id' => $salaNueva->id,
             'fecha' => now()->toDateString(),
-            'hora_inicio' => 14,
-            'hora_fin' => 16,
+            'hora_inicio' => '14:00',
+            'hora_fin' => '15:00',
             'cantidad_personas' => 2,
             'ruts' => [$usuario->rut, $otro->rut],
         ]);
 
-        $response->assertStatus(409)
-            ->assertJsonPath('message', 'Ya tienes una reserva activa en otra sala hoy — solo puedes reservar el bloque anterior o siguiente en la misma sala.');
+        $response->assertStatus(201);
     }
 
-    public function test_usuario_puede_extender_a_bloque_adyacente_de_la_misma_sala(): void
+    public function test_usuario_no_puede_exceder_la_cuota_diaria(): void
     {
         $usuario = Usuario::factory()->create();
         $otro = Usuario::factory()->create();
-        $sala = Sala::factory()->create();
+        $salaVieja = Sala::factory()->create();
+        $salaNueva = Sala::factory()->create();
 
         Reserva::factory()->conParticipantes([$usuario, $otro])->create([
-            'sala_id' => $sala->id,
+            'sala_id' => $salaVieja->id,
             'usuario_id' => $usuario->id,
             'rut_usuario' => $usuario->rut,
             'fecha' => now()->toDateString(),
-            'hora_inicio' => 10,
-            'hora_fin' => 12,
+            'hora_inicio' => '08:00',
+            'hora_fin' => '12:00',
             'cantidad_personas' => 2,
         ]);
 
         Sanctum::actingAs($usuario);
 
         $response = $this->postJson('/api/mi/reservas', [
-            'sala_id' => $sala->id,
+            'sala_id' => $salaNueva->id,
             'fecha' => now()->toDateString(),
-            'hora_inicio' => 12,
-            'hora_fin' => 14,
+            'hora_inicio' => '14:00',
+            'hora_fin' => '14:30',
             'cantidad_personas' => 2,
             'ruts' => [$usuario->rut, $otro->rut],
         ]);
 
-        $response->assertStatus(201);
+        $response->assertStatus(409)
+            ->assertJsonPath('message', 'Ya tienes 4 h reservados hoy; el máximo diario es de 4 h.');
     }
 }

@@ -120,18 +120,17 @@ class PortalController extends Controller
     public function salas(Request $request)
     {
         $fecha = $request->query('fecha', now()->toDateString());
-
         $salas = Sala::orderBy('id')->get();
-        $reservas = Reserva::where('fecha', $fecha)->where('estado', '!=', 'no_show')->get();
-
-        // Misma expiración perezosa que SalaController::index() — si el bloque de 15
-        // minutos para confirmar ya venció, el estudiante ve la sala libre de nuevo.
-        $reservas = $reservas->reject(fn ($r) => $this->reservaSalaService->liberarSiVencida($r))->values();
 
         return response()->json([
             'fecha' => $fecha,
-            'salas' => $salas,
-            'reservas' => $reservas,
+            'apertura' => config('salas.apertura'),
+            'cierre' => config('salas.cierre'),
+            'granularidad' => config('salas.granularidad'),
+            'duracion_minima' => config('salas.duracion_minima'),
+            'duracion_maxima' => config('salas.duracion_maxima'),
+            'cuota_diaria' => config('salas.cuota_diaria'),
+            'salas' => $this->reservaSalaService->vistaDelDia($salas, $fecha),
         ]);
     }
 
@@ -140,9 +139,10 @@ class PortalController extends Controller
         $data = $request->validate([
             'sala_id' => ['required', 'exists:salas,id'],
             'fecha' => ['required', 'date'],
-            'hora_inicio' => ['required', 'integer', 'min:8', 'max:20'],
-            'hora_fin' => ['required', 'integer', 'gt:hora_inicio', 'max:21'],
+            'hora_inicio' => ['required', 'date_format:H:i'],
+            'hora_fin' => ['required', 'date_format:H:i', 'after:hora_inicio'],
             'cantidad_personas' => ['required', 'integer', 'min:2', 'max:5'],
+            'inmediata' => ['sometimes', 'boolean'],
             'ruts' => ['required', 'array'],
             // A diferencia del registro de entrada externo, aquí los RUT deben
             // pertenecer a usuarios ya registrados: no se admiten visitantes externos.
@@ -164,6 +164,12 @@ class PortalController extends Controller
 
         $usuario = $request->user();
 
+        $inmediata = $data['inmediata'] ?? false;
+        $error = $this->reservaSalaService->validarTramo($data, $inmediata);
+        if ($error) {
+            return response()->json(['message' => $error], 422);
+        }
+
         $existe = $this->reservaSalaService->existeSolapamiento(
             $data['sala_id'],
             $data['fecha'],
@@ -172,7 +178,7 @@ class PortalController extends Controller
         );
 
         if ($existe) {
-            return response()->json(['message' => 'Ese bloque ya se encuentra reservado'], 409);
+            return response()->json(['message' => 'Ese tramo ya se encuentra reservado'], 409);
         }
 
         $rutConflicto = $this->reservaSalaService->participanteConReservaSolapada(
@@ -190,16 +196,15 @@ class PortalController extends Controller
             return response()->json(['message' => $mensaje], 409);
         }
 
-        $excedeLimite = $this->reservaSalaService->participanteExcedeLimiteDeBloques(
+        $excedeCuota = $this->reservaSalaService->participanteExcedeCuotaDiaria(
             $data['ruts'],
-            $data['sala_id'],
             $data['fecha'],
             $data['hora_inicio'],
             $data['hora_fin'],
         );
 
-        if ($excedeLimite) {
-            return response()->json(['message' => $this->reservaSalaService->mensajeLimiteBloques($excedeLimite, $usuario->rut)], 409);
+        if ($excedeCuota) {
+            return response()->json(['message' => $this->reservaSalaService->mensajeCuotaExcedida($excedeCuota, $usuario->rut)], 409);
         }
 
         $reserva = Reserva::create([

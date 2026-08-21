@@ -32,10 +32,11 @@ const fechaDevolucion = ref('')
 const codigoBarras = ref('')
 const libroEncontrado = ref('')
 const libroDisponible = ref(true)
-const fechaReserva = ref('')
+const fechaReserva = ref(today)
 const fechaRetiro = ref('')
 
 const prestamosLibros = computed(() => prestamos.value.filter((p) => p.tipo_item === 'libro' || !p.tipo_item))
+const tieneLibroActivo = computed(() => prestamosLibros.value.some((p) => p.estado !== 'devuelto'))
 const prestamosAudifonos = computed(() => prestamos.value.filter((p) => p.tipo_item === 'audifonos'))
 const prestamosNotebooks = computed(() => prestamos.value.filter((p) => p.tipo_item === 'notebook'))
 const prestamosCargadores = computed(() => prestamos.value.filter((p) => p.tipo_item === 'cargador'))
@@ -131,7 +132,10 @@ function buscarLibroPorCodigoPrestamo(valor: string) {
   }, 250)
 }
 
-async function crearPrestamo() {
+const prestamoPendiente = ref<{ codigoBarras: string; titulo: string; fechaPrestamo: string; fechaDevolucion: string } | null>(null)
+const creandoPrestamo = ref(false)
+
+function pedirConfirmacionPrestamo() {
   if (!codigoBarrasPrestamo.value.trim() || !libroEncontradoPrestamo.value) {
     toast.error('Escanee o ingrese un código de barras válido')
     return
@@ -140,26 +144,45 @@ async function crearPrestamo() {
     toast.error('Este libro ya está reservado/prestado por otra persona')
     return
   }
+  if (tieneLibroActivo.value) {
+    toast.error('Este usuario ya tiene un libro prestado sin devolver')
+    return
+  }
   if (!fechaPrestamo.value || !fechaDevolucion.value) {
     toast.error('Seleccione la fecha de préstamo y de devolución')
     return
   }
+  prestamoPendiente.value = {
+    codigoBarras: codigoBarrasPrestamo.value,
+    titulo: libroEncontradoPrestamo.value,
+    fechaPrestamo: fechaPrestamo.value,
+    fechaDevolucion: fechaDevolucion.value,
+  }
+}
+
+async function confirmarPrestamo() {
+  if (!prestamoPendiente.value) return
+  creandoPrestamo.value = true
   try {
     await api.post('/prestamos', {
       usuario_id: usuario.value!.id,
-      codigo_barras: codigoBarrasPrestamo.value,
-      fecha_prestamo: fechaPrestamo.value,
-      fecha_devolucion: fechaDevolucion.value,
+      codigo_barras: prestamoPendiente.value.codigoBarras,
+      fecha_prestamo: prestamoPendiente.value.fechaPrestamo,
+      fecha_devolucion: prestamoPendiente.value.fechaDevolucion,
     })
-    toast.success(`Préstamo registrado: "${libroEncontradoPrestamo.value}"`)
+    toast.success(`Préstamo registrado: "${prestamoPendiente.value.titulo}"`)
     codigoBarrasPrestamo.value = ''
     libroEncontradoPrestamo.value = ''
     fechaPrestamo.value = today
     fechaDevolucion.value = ''
     showForm.value = false
+    prestamoPendiente.value = null
     await cargarPrestamosYReservas()
   } catch (e: any) {
     toast.error(e?.response?.data?.message ?? 'No se pudo crear el préstamo')
+    prestamoPendiente.value = null
+  } finally {
+    creandoPrestamo.value = false
   }
 }
 
@@ -282,7 +305,7 @@ async function crearReserva() {
     )
     codigoBarras.value = ''
     libroEncontrado.value = ''
-    fechaReserva.value = ''
+    fechaReserva.value = today
     fechaRetiro.value = ''
     showReservaForm.value = false
     await cargarPrestamosYReservas()
@@ -451,8 +474,8 @@ function formatFecha(iso: string | null) {
                   />
                 </div>
                 <button
-                  @click="crearPrestamo"
-                  :disabled="!libroEncontradoPrestamo || !libroDisponiblePrestamo || !fechaPrestamo || !fechaDevolucion"
+                  @click="pedirConfirmacionPrestamo"
+                  :disabled="!libroEncontradoPrestamo || !libroDisponiblePrestamo || !fechaPrestamo || !fechaDevolucion || tieneLibroActivo"
                   class="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Confirmar Préstamo
@@ -527,6 +550,13 @@ function formatFecha(iso: string | null) {
               </div>
             </div>
           </div>
+        </div>
+
+        <div
+          v-if="tieneLibroActivo"
+          class="mb-3 flex items-center gap-2 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700"
+        >
+          ⚠ Este usuario ya tiene un libro prestado sin devolver — no puede llevarse otro hasta devolverlo.
         </div>
 
         <div
@@ -792,6 +822,36 @@ function formatFecha(iso: string | null) {
               </div>
               <p v-if="!prestamosCargadores.length" class="text-xs text-gray-400 text-center py-2">Sin préstamos de cargadores.</p>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div
+        v-if="prestamoPendiente"
+        class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        @click.self="prestamoPendiente = null"
+      >
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+          <h3 class="text-lg font-bold text-gray-900 mb-1">¿Confirmar préstamo?</h3>
+          <p class="text-sm text-gray-500 mb-6">
+            Se prestará <strong class="font-mono">{{ prestamoPendiente.titulo }}</strong> a
+            <strong>{{ usuario?.nombre }} {{ usuario?.apellido }}</strong>, con devolución acordada para el
+            {{ prestamoPendiente.fechaDevolucion }}.
+          </p>
+          <div class="flex gap-3">
+            <button
+              @click="prestamoPendiente = null"
+              class="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors font-medium text-sm"
+            >
+              Cancelar
+            </button>
+            <button
+              @click="confirmarPrestamo"
+              :disabled="creandoPrestamo"
+              class="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm disabled:opacity-60"
+            >
+              {{ creandoPrestamo ? 'Confirmando…' : 'Sí, prestar' }}
+            </button>
           </div>
         </div>
       </div>

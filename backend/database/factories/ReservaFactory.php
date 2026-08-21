@@ -20,8 +20,8 @@ class ReservaFactory extends Factory
             'rut_usuario' => Rut::formatear(fake()->unique()->numberBetween(1000000, 25000000)),
             'cantidad_personas' => 2,
             'fecha' => now()->toDateString(),
-            'hora_inicio' => 10,
-            'hora_fin' => 12,
+            'hora_inicio' => '10:00:00',
+            'hora_fin' => '12:00:00',
             'estado' => 'activa',
         ];
     }

@@ -69,6 +69,20 @@ class PrestamoController extends Controller
             $equipo = null;
 
             if ($esLibro) {
+                // Un usuario no puede tener dos libros prestados a la vez — debe devolver
+                // el que tiene antes de llevarse otro. A diferencia de las multas (aviso
+                // no bloqueante, ver Deuda técnica), esta regla es un bloqueo duro. Solo
+                // aplica a libros: los equipos (audífonos/notebook/cargador) no tienen
+                // este límite.
+                $yaTieneLibro = Prestamo::where('usuario_id', $data['usuario_id'])
+                    ->where('tipo_item', 'libro')
+                    ->where('estado', '!=', 'devuelto')
+                    ->exists();
+
+                if ($yaTieneLibro) {
+                    return [['message' => 'Este usuario ya tiene un libro prestado sin devolver — debe devolverlo antes de llevarse otro.'], 409];
+                }
+
                 $ejemplar = Ejemplar::where('codigo_barras', $data['codigo_barras'])->lockForUpdate()->first();
 
                 if (! $ejemplar) {

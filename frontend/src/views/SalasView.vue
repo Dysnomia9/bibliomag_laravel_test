@@ -5,56 +5,76 @@ import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import api from '@/services/api'
 import { useToast } from '@/composables/useToast'
 import { formatRut } from '@/composables/useRut'
-import type { Reserva, Sala } from '@/types'
+import type { Sala, TramoReserva } from '@/types'
 
 const toast = useToast()
 
 const hoy = new Date().toISOString().slice(0, 10)
 
-const horariosBloques = [
-  { inicio: 8, fin: 10, label: '08:00 – 10:00' },
-  { inicio: 10, fin: 12, label: '10:00 – 12:00' },
-  { inicio: 12, fin: 14, label: '12:00 – 14:00' },
-  { inicio: 14, fin: 16, label: '14:00 – 16:00' },
-  { inicio: 16, fin: 18, label: '16:00 – 18:00' },
-  { inicio: 18, fin: 20, label: '18:00 – 20:00' },
-  { inicio: 20, fin: 21, label: '20:00 – 21:00' },
-]
+const DURACIONES = [30, 60, 90, 120]
 
 const CANTIDAD_MIN = 2
 const CANTIDAD_MAX = 5
 
 const salas = ref<Sala[]>([])
-const reservas = ref<Reserva[]>([])
 const apiError = ref(false)
 const selectedDate = ref(hoy)
 const busqueda = ref('')
 const page = ref(0)
 const salasPerPage = 10
 
+// Ventana de atención y reglas del día — vienen del backend (config/salas.php), nunca hardcodeadas acá.
+const apertura = ref('08:00')
+const cierre = ref('21:00')
+const granularidad = ref(30)
+const duracionMinima = ref(30)
+const duracionMaxima = ref(120)
+const cuotaDiaria = ref(240)
+
+function timeToMinutes(hhmm: string): number {
+  const [h, m] = hhmm.split(':').map(Number)
+  return h * 60 + m
+}
+function minutesToTime(min: number): string {
+  const h = Math.floor(min / 60)
+  const m = min % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+function formatMinutos(min: number): string {
+  const h = Math.floor(min / 60)
+  const m = min % 60
+  if (h === 0) return `${m} min`
+  return m === 0 ? `${h} h` : `${h} h ${m} min`
+}
+
+const aperturaMin = computed(() => timeToMinutes(apertura.value))
+const cierreMin = computed(() => timeToMinutes(cierre.value))
+const totalMin = computed(() => cierreMin.value - aperturaMin.value)
+
+function pct(hhmm: string): number {
+  return ((timeToMinutes(hhmm) - aperturaMin.value) / totalMin.value) * 100
+}
+
 const modalOpen = ref(false)
 const selectedSala = ref<Sala | null>(null)
-const selectedBloque = ref<(typeof horariosBloques)[number] | null>(null)
+const modalInmediata = ref(false)
+const modalHoraInicio = ref('')
+const modalDuracion = ref(60)
 const cantidadPersonas = ref(CANTIDAD_MIN)
 const rutsReserva = ref<string[]>(Array.from({ length: CANTIDAD_MIN }, () => ''))
 const rutErrores = ref<Record<number, string>>({})
 
 const detalleOpen = ref(false)
-const detalleReserva = ref<Reserva | null>(null)
+const detalleTramo = ref<TramoReserva | null>(null)
 const detalleSala = ref<Sala | null>(null)
-const detalleBloque = ref<(typeof horariosBloques)[number] | null>(null)
 
-const cancelacionPendiente = ref<{ salaId: number; horaInicio: number; salaNombre: string; bloqueLabel: string } | null>(null)
-
-const devolucionPendiente = ref<{ reservaId: number; salaNombre: string; bloqueLabel: string } | null>(null)
+const cancelacionPendiente = ref<{ reservaId: number; salaNombre: string; label: string } | null>(null)
+const devolucionPendiente = ref<{ reservaId: number; salaNombre: string; label: string } | null>(null)
 const devolviendo = ref(false)
-
-const llegadaPendiente = ref<{ reservaId: number; salaNombre: string; bloqueLabel: string } | null>(null)
+const llegadaPendiente = ref<{ reservaId: number; salaNombre: string; label: string } | null>(null)
 const confirmandoLlegada = ref(false)
 const liberando = ref<number | null>(null)
 
-// Reloj reactivo para que la cuenta regresiva del menú de confirmación se actualice
-// sola, sin depender de que el staff refresque la página a mano.
 const ahora = ref(new Date())
 let relojTimer: ReturnType<typeof setInterval> | undefined
 let refrescoTimer: ReturnType<typeof setInterval> | undefined
@@ -75,21 +95,22 @@ async function cargar() {
   try {
     const { data } = await api.get('/salas', { params: { fecha: selectedDate.value } })
     salas.value = data.salas
-    reservas.value = data.reservas
+    apertura.value = data.apertura
+    cierre.value = data.cierre
+    granularidad.value = data.granularidad
+    duracionMinima.value = data.duracion_minima
+    duracionMaxima.value = data.duracion_maxima
+    cuotaDiaria.value = data.cuota_diaria
     apiError.value = false
   } catch {
     apiError.value = true
     salas.value = []
-    reservas.value = []
   }
 }
 
 onMounted(() => {
   cargar()
   relojTimer = setInterval(() => (ahora.value = new Date()), 1000)
-  // Refresca la lista cada minuto — además de mantener el panel de confirmación al
-  // día, esto es lo que dispara la expiración perezosa del backend (SalaController::
-  // index() libera reservas vencidas al cargarlas) sin que el staff tenga que refrescar.
   refrescoTimer = setInterval(cargar, 60000)
 })
 onUnmounted(() => {
@@ -127,52 +148,98 @@ const filteredSalas = computed(() => {
 const totalPages = computed(() => Math.max(1, Math.ceil(filteredSalas.value.length / salasPerPage)))
 const salasPage = computed(() => filteredSalas.value.slice(page.value * salasPerPage, (page.value + 1) * salasPerPage))
 
-function getReserva(salaId: number, horaInicio: number) {
-  return reservas.value.find((r) => r.sala_id === salaId && r.hora_inicio === horaInicio)
-}
-function isOcupado(salaId: number, horaInicio: number) {
-  return !!getReserva(salaId, horaInicio)
+const esHoy = computed(() => selectedDate.value === hoy)
+const ahoraMin = computed(() => ahora.value.getHours() * 60 + ahora.value.getMinutes())
+const nowPct = computed(() => Math.min(100, Math.max(0, ((ahoraMin.value - aperturaMin.value) / totalMin.value) * 100)))
+
+/** Minutos libres en `sala` desde `desdeMin` (calculado en el cliente con los mismos datos que ya trae la vista, sin ida y vuelta al servidor — el backend vuelve a validar todo al confirmar). */
+function disponibilidadDesde(sala: Sala, desdeMin: number): number {
+  if (desdeMin >= cierreMin.value) return 0
+
+  const ocupando = sala.tramos.some((t) => timeToMinutes(t.hora_inicio) <= desdeMin && timeToMinutes(t.hora_fin) > desdeMin)
+  if (ocupando) return 0
+
+  const siguientes = sala.tramos
+    .map((t) => timeToMinutes(t.hora_inicio))
+    .filter((inicio) => inicio >= desdeMin)
+    .sort((a, b) => a - b)
+
+  const limite = siguientes.length ? siguientes[0] : cierreMin.value
+  return Math.max(0, Math.min(limite - desdeMin, duracionMaxima.value))
 }
 
-const totalOcupadas = computed(() => reservas.value.length)
-const totalBloques = computed(() => salas.value.length * horariosBloques.length)
-const porcentajeOcupacion = computed(() => (totalBloques.value ? Math.round((totalOcupadas.value / totalBloques.value) * 100) : 0))
+const modalInicioMin = computed(() => timeToMinutes(modalHoraInicio.value || apertura.value))
+const modalDisponibleMin = computed(() => (selectedSala.value ? disponibilidadDesde(selectedSala.value, modalInicioMin.value) : 0))
+const modalDuracionesValidas = computed(() => DURACIONES.filter((d) => d >= duracionMinima.value && d <= modalDisponibleMin.value))
 
-const horaActual = new Date().getHours()
-const bloqueActual = horariosBloques.find((b) => horaActual >= b.inicio && horaActual < b.fin)
-const disponiblesAhora = computed(() => {
-  if (!bloqueActual) return salas.value.length
-  return salas.value.filter((s) => !isOcupado(s.id, bloqueActual!.inicio)).length
+const horaInicioOpciones = computed(() => {
+  const opciones: string[] = []
+  let minimoInicio = aperturaMin.value
+  if (esHoy.value) {
+    minimoInicio = Math.max(minimoInicio, Math.ceil(ahoraMin.value / granularidad.value) * granularidad.value)
+  }
+  for (let m = minimoInicio; m <= cierreMin.value - duracionMinima.value; m += granularidad.value) {
+    opciones.push(minutesToTime(m))
+  }
+  return opciones
 })
 
-function reservarAhora() {
-  if (!bloqueActual) {
-    toast.error('Fuera del horario de atención (08:00 – 21:00)')
-    return
-  }
-  const salaLibre = salas.value.find((s) => !isOcupado(s.id, bloqueActual!.inicio))
-  if (!salaLibre) {
-    toast.error('No hay logias disponibles en este momento')
-    return
-  }
-  openReservaModal(salaLibre, bloqueActual)
-}
-
-function openReservaModal(sala: Sala, bloque: (typeof horariosBloques)[number]) {
+function abrirModalProgramado(sala: Sala, inicioSugeridoMin: number) {
   selectedSala.value = sala
-  selectedBloque.value = bloque
+  modalInmediata.value = false
+  const alineado = Math.max(aperturaMin.value, Math.ceil(inicioSugeridoMin / granularidad.value) * granularidad.value)
+  modalHoraInicio.value = minutesToTime(Math.min(alineado, cierreMin.value - duracionMinima.value))
+  const disponibles = DURACIONES.filter((d) => d >= duracionMinima.value && d <= disponibilidadDesde(sala, timeToMinutes(modalHoraInicio.value)))
+  modalDuracion.value = disponibles.length ? disponibles[disponibles.length - 1] : duracionMinima.value
   cantidadPersonas.value = CANTIDAD_MIN
   rutsReserva.value = Array.from({ length: CANTIDAD_MIN }, () => '')
   rutErrores.value = {}
   modalOpen.value = true
 }
 
-function verDetalle(sala: Sala, bloque: (typeof horariosBloques)[number]) {
-  const reserva = getReserva(sala.id, bloque.inicio)
-  if (!reserva) return
-  detalleReserva.value = reserva
+function abrirModalInmediata(sala: Sala) {
+  selectedSala.value = sala
+  modalInmediata.value = true
+  modalHoraInicio.value = minutesToTime(ahoraMin.value)
+  const disponibles = DURACIONES.filter((d) => d >= duracionMinima.value && d <= disponibilidadDesde(sala, ahoraMin.value))
+  modalDuracion.value = disponibles.length ? disponibles[disponibles.length - 1] : duracionMinima.value
+  cantidadPersonas.value = CANTIDAD_MIN
+  rutsReserva.value = Array.from({ length: CANTIDAD_MIN }, () => '')
+  rutErrores.value = {}
+  modalOpen.value = true
+}
+
+function onTimelineClick(sala: Sala, event: MouseEvent) {
+  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  const fraccion = (event.clientX - rect.left) / rect.width
+  const minutoClickeado = aperturaMin.value + fraccion * totalMin.value
+
+  if (esHoy.value && minutoClickeado < ahoraMin.value) return
+  if (disponibilidadDesde(sala, Math.ceil(minutoClickeado / granularidad.value) * granularidad.value) <= 0) return
+
+  abrirModalProgramado(sala, minutoClickeado)
+}
+
+function reservarAhora() {
+  const candidatas = filteredSalas.value
+    .map((s) => ({ sala: s, disponible: disponibilidadDesde(s, ahoraMin.value) }))
+    .filter((c) => c.disponible >= duracionMinima.value)
+    .sort((a, b) => b.disponible - a.disponible)
+
+  if (!candidatas.length) {
+    toast.error('No hay salas disponibles en este momento')
+    return
+  }
+
+  abrirModalInmediata(candidatas[0].sala)
+  if (candidatas[0].disponible < duracionMaxima.value) {
+    toast.error(`Ninguna sala tiene ${formatMinutos(duracionMaxima.value)} libres ahora; ${candidatas[0].sala.nombre} está libre ${formatMinutos(candidatas[0].disponible)}`)
+  }
+}
+
+function verDetalle(sala: Sala, tramo: TramoReserva) {
   detalleSala.value = sala
-  detalleBloque.value = bloque
+  detalleTramo.value = tramo
   detalleOpen.value = true
 }
 
@@ -185,24 +252,37 @@ function onRutInput(index: number, event: Event) {
   }
 }
 
+function labelTramo(inicio: string, fin: string): string {
+  return `${inicio} – ${fin}`
+}
+
+/** Color del bloque en la línea de tiempo según su estado — más informativo que un solo rojo parejo para "ocupado". */
+function tramoClases(tramo: TramoReserva): string {
+  if (tramo.hora_devolucion_real) return 'bg-gray-100 border-gray-300 text-gray-500'
+  if (tramo.hora_prestamo_real) return 'bg-red-100 border-red-300 text-red-700'
+  if (tramo.vencida_sin_confirmar) return 'bg-orange-100 border-orange-300 text-orange-700'
+  return 'bg-amber-100 border-amber-300 text-amber-700'
+}
+
 async function confirmarReserva() {
   if (rutsReserva.value.some((r) => !r.trim())) {
     toast.error('Complete el RUT de cada persona')
     return
   }
-  if (!selectedSala.value || !selectedBloque.value) return
+  if (!selectedSala.value) return
 
   rutErrores.value = {}
   try {
-    await api.post('/reservas', {
+    const { data } = await api.post('/reservas', {
       sala_id: selectedSala.value.id,
       fecha: selectedDate.value,
-      hora_inicio: selectedBloque.value.inicio,
-      hora_fin: selectedBloque.value.fin,
+      hora_inicio: modalHoraInicio.value,
+      hora_fin: minutesToTime(Math.min(modalInicioMin.value + modalDuracion.value, cierreMin.value)),
       cantidad_personas: cantidadPersonas.value,
       ruts: rutsReserva.value,
+      inmediata: modalInmediata.value,
     })
-    toast.success(`${selectedSala.value.nombre} reservada de ${selectedBloque.value.label} para ${cantidadPersonas.value} persona(s)`)
+    toast.success(`${selectedSala.value.nombre} reservada de ${labelTramo(data.hora_inicio.slice(0, 5), data.hora_fin.slice(0, 5))} para ${cantidadPersonas.value} persona(s)`)
     modalOpen.value = false
     await cargar()
   } catch (e: any) {
@@ -223,20 +303,14 @@ async function confirmarReserva() {
   }
 }
 
-function pedirCancelacion(salaNombre: string, bloqueLabel: string, salaId: number, horaInicio: number) {
-  cancelacionPendiente.value = { salaId, horaInicio, salaNombre, bloqueLabel }
+function pedirCancelacion(sala: Sala, tramo: TramoReserva) {
+  cancelacionPendiente.value = { reservaId: tramo.reserva_id, salaNombre: sala.nombre, label: labelTramo(tramo.hora_inicio, tramo.hora_fin) }
 }
 
 async function confirmarCancelacion() {
   if (!cancelacionPendiente.value) return
-  const { salaId, horaInicio } = cancelacionPendiente.value
-  const reserva = getReserva(salaId, horaInicio)
-  if (!reserva) {
-    cancelacionPendiente.value = null
-    return
-  }
   try {
-    await api.delete(`/reservas/${reserva.id}`)
+    await api.delete(`/reservas/${cancelacionPendiente.value.reservaId}`)
     toast.success('Reserva cancelada')
     detalleOpen.value = false
     await cargar()
@@ -247,8 +321,8 @@ async function confirmarCancelacion() {
   }
 }
 
-function pedirDevolucion(salaNombre: string, bloqueLabel: string, reservaId: number) {
-  devolucionPendiente.value = { reservaId, salaNombre, bloqueLabel }
+function pedirDevolucion(sala: Sala, tramo: TramoReserva) {
+  devolucionPendiente.value = { reservaId: tramo.reserva_id, salaNombre: sala.nombre, label: labelTramo(tramo.hora_inicio, tramo.hora_fin) }
 }
 
 async function confirmarDevolucion() {
@@ -271,8 +345,8 @@ function formatFechaLarga(fecha: string) {
   return fecha === hoy ? 'Hoy' : new Date(`${fecha}T12:00:00`).toLocaleDateString('es-CL')
 }
 
-function pedirLlegada(salaNombre: string, bloqueLabel: string, reservaId: number) {
-  llegadaPendiente.value = { reservaId, salaNombre, bloqueLabel }
+function pedirLlegada(sala: Sala, tramo: TramoReserva) {
+  llegadaPendiente.value = { reservaId: tramo.reserva_id, salaNombre: sala.nombre, label: labelTramo(tramo.hora_inicio, tramo.hora_fin) }
 }
 
 async function confirmarLlegadaAction() {
@@ -292,10 +366,10 @@ async function confirmarLlegadaAction() {
   }
 }
 
-async function liberarReservaAction(reserva: Reserva) {
-  liberando.value = reserva.id
+async function liberarReservaAction(reservaId: number) {
+  liberando.value = reservaId
   try {
-    await api.patch(`/reservas/${reserva.id}/liberar`)
+    await api.patch(`/reservas/${reservaId}/liberar`)
     toast.success('Sala liberada por no presentación')
     detalleOpen.value = false
     await cargar()
@@ -306,17 +380,17 @@ async function liberarReservaAction(reserva: Reserva) {
   }
 }
 
-/** "Menú de confirmación": reservas de hoy que todavía no confirman llegada, con su plazo. */
+/** "Menú de confirmación": tramos de hoy que todavía no confirman llegada, con su plazo. */
 const pendientesConfirmacion = computed(() => {
   if (selectedDate.value !== hoy) return []
-  return reservas.value
-    .filter((r) => r.estado === 'activa' && !r.hora_prestamo_real)
-    .map((r) => ({
-      reserva: r,
-      sala: salas.value.find((s) => s.id === r.sala_id),
-      bloque: horariosBloques.find((b) => b.inicio === r.hora_inicio),
-      vencida: r.vencida_sin_confirmar ?? false,
-      segundosRestantes: r.plazo_confirmacion ? Math.floor((new Date(r.plazo_confirmacion).getTime() - ahora.value.getTime()) / 1000) : 0,
+  return salas.value
+    .flatMap((sala) => sala.tramos.map((tramo) => ({ sala, tramo })))
+    .filter(({ tramo }) => tramo.estado === 'activa' && !tramo.hora_prestamo_real)
+    .map(({ sala, tramo }) => ({
+      sala,
+      tramo,
+      vencida: tramo.vencida_sin_confirmar,
+      segundosRestantes: Math.floor((new Date(tramo.plazo_confirmacion).getTime() - ahora.value.getTime()) / 1000),
     }))
     .sort((a, b) => a.segundosRestantes - b.segundosRestantes)
 })
@@ -338,7 +412,9 @@ function formatCuentaRegresiva(segundos: number) {
       >
         <div class="px-6 py-5">
           <h1 class="text-2xl font-serif font-bold tracking-tight text-white">Salas de Estudio</h1>
-          <p class="text-sm text-white/60 mt-1">15 logias de estudio, Sala de Seminarios, Sala de Postgrado y Sala AGACI · Horario 08:00 – 21:00</p>
+          <p class="text-sm text-white/60 mt-1">
+            15 logias de estudio, Sala de Seminarios, Sala de Postgrado y Sala AGACI · Horario {{ apertura }} – {{ cierre }} · Reservas de hasta {{ formatMinutos(duracionMaxima) }}
+          </p>
         </div>
       </div>
 
@@ -348,25 +424,20 @@ function formatCuentaRegresiva(segundos: number) {
         <div class="bg-white rounded-xl shadow-md p-5">
           <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Ocupación Hoy</div>
           <div class="flex items-end gap-2">
-            <span class="text-3xl font-bold text-indigo-700">{{ porcentajeOcupacion }}%</span>
-            <span class="text-sm text-gray-400 mb-1">{{ totalOcupadas }}/{{ totalBloques }} bloques</span>
-          </div>
-          <div class="mt-2 h-2 bg-gray-100 rounded-full overflow-hidden">
-            <div class="h-full bg-indigo-600 rounded-full transition-all" :style="{ width: `${porcentajeOcupacion}%` }" />
+            <span class="text-3xl font-bold text-indigo-700">
+              {{ totalMin ? Math.round((salas.reduce((s, sala) => s + sala.tramos.reduce((s2, t) => s2 + (timeToMinutes(t.hora_fin) - timeToMinutes(t.hora_inicio)), 0), 0) / (salas.length * totalMin || 1)) * 100) : 0 }}%
+            </span>
           </div>
         </div>
         <div class="bg-white rounded-xl shadow-md p-5">
-          <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
-            Salas Disponibles Ahora
-            <span v-if="bloqueActual" class="normal-case text-gray-400">· bloque {{ bloqueActual.label }}</span>
-          </div>
+          <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Salas Disponibles Ahora</div>
           <div class="flex items-end justify-between gap-2 flex-wrap">
             <div class="flex items-end gap-2">
-              <span class="text-3xl font-bold text-emerald-600">{{ disponiblesAhora }}</span>
+              <span class="text-3xl font-bold text-emerald-600">{{ salas.filter((s) => s.libre_ahora).length }}</span>
               <span class="text-sm text-gray-400 mb-1">de {{ salas.length }} salas</span>
             </div>
             <button
-              v-if="bloqueActual"
+              v-if="esHoy"
               @click="reservarAhora"
               class="px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-xs font-medium shrink-0"
             >
@@ -387,21 +458,21 @@ function formatCuentaRegresiva(segundos: number) {
       <div v-if="selectedDate === hoy" class="bg-white rounded-xl shadow-md p-5 mb-6">
         <h3 class="text-sm font-semibold text-gray-900 mb-1">Menú de confirmación de asistencia</h3>
         <p class="text-xs text-gray-400 mb-4">
-          Cada reserva tiene 15 minutos desde el inicio del bloque (o desde que se creó, si fue "reservar ahora") para
-          confirmar que el grupo llegó. Pasado ese plazo, la sala se libera sola.
+          Cada reserva tiene 15 minutos desde su hora de inicio para confirmar que el grupo llegó. Pasado ese plazo, la
+          sala se libera sola.
         </p>
 
         <div v-if="pendientesConfirmacion.length" class="rounded-lg border border-gray-200 divide-y divide-gray-100">
           <div
             v-for="p in pendientesConfirmacion"
-            :key="p.reserva.id"
+            :key="p.tramo.reserva_id"
             class="flex items-center justify-between gap-3 px-4 py-3 flex-wrap"
           >
             <div class="min-w-0">
               <p class="text-sm font-medium text-gray-900">
-                {{ p.sala?.nombre ?? 'Sala' }} · {{ p.bloque?.label }}
+                {{ p.sala.nombre }} · {{ labelTramo(p.tramo.hora_inicio, p.tramo.hora_fin) }}
               </p>
-              <p class="text-xs text-gray-400">{{ p.reserva.cantidad_personas }} persona(s) · {{ p.reserva.rut_usuario }}</p>
+              <p class="text-xs text-gray-400">{{ p.tramo.cantidad_personas }} persona(s) · {{ p.tramo.rut_usuario }}</p>
             </div>
             <div class="flex items-center gap-3 shrink-0">
               <span
@@ -412,18 +483,18 @@ function formatCuentaRegresiva(segundos: number) {
               </span>
               <button
                 v-if="!p.vencida"
-                @click="pedirLlegada(p.sala?.nombre ?? 'Sala', p.bloque?.label ?? '', p.reserva.id)"
+                @click="pedirLlegada(p.sala, p.tramo)"
                 class="text-xs font-medium px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
               >
                 Confirmar llegada
               </button>
               <button
                 v-else
-                @click="liberarReservaAction(p.reserva)"
-                :disabled="liberando === p.reserva.id"
+                @click="liberarReservaAction(p.tramo.reserva_id)"
+                :disabled="liberando === p.tramo.reserva_id"
                 class="text-xs font-medium px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-60"
               >
-                {{ liberando === p.reserva.id ? 'Liberando…' : 'Liberar ahora' }}
+                {{ liberando === p.tramo.reserva_id ? 'Liberando…' : 'Liberar ahora' }}
               </button>
             </div>
           </div>
@@ -480,73 +551,54 @@ function formatCuentaRegresiva(segundos: number) {
         </div>
       </div>
 
-      <div class="bg-white rounded-xl shadow-md overflow-hidden">
-        <div class="overflow-x-auto">
-          <table class="w-full">
-            <thead>
-              <tr class="bg-gray-50">
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase sticky left-0 bg-gray-50 z-10 min-w-[140px]">Sala</th>
-                <th
-                  v-for="b in horariosBloques"
-                  :key="b.inicio"
-                  class="px-3 py-3 text-center text-xs font-medium uppercase min-w-[120px]"
-                  :class="b.inicio === bloqueActual?.inicio ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500'"
-                >
-                  {{ b.label }}
-                  <span v-if="b.inicio === bloqueActual?.inicio" class="block text-[10px] normal-case font-semibold text-indigo-500">Ahora</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-100">
-              <tr v-for="sala in salasPage" :key="sala.id" class="hover:bg-gray-50/50">
-                <td class="px-4 py-3 sticky left-0 bg-white z-10">
-                  <div class="font-medium text-sm text-gray-900">{{ sala.nombre }}</div>
-                  <div class="text-xs text-gray-400">{{ sala.capacidad }} personas</div>
-                </td>
-                <td v-for="bloque in horariosBloques" :key="bloque.inicio" class="px-2 py-2 text-center">
-                  <div
-                    v-if="isOcupado(sala.id, bloque.inicio) && getReserva(sala.id, bloque.inicio)?.hora_devolucion_real"
-                    class="group relative bg-gray-50 border border-gray-200 rounded-lg px-2 py-2 cursor-pointer hover:bg-gray-100 transition-colors"
-                    @click="verDetalle(sala, bloque)"
-                  >
-                    <div class="flex items-center justify-center gap-1 text-xs font-medium text-gray-500">
-                      <svg class="w-3 h-3 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                      Llave devuelta
-                    </div>
-                    <div class="text-[10px] text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">Click para ver detalle</div>
-                  </div>
-                  <div
-                    v-else-if="isOcupado(sala.id, bloque.inicio)"
-                    class="group relative bg-red-50 border border-red-200 rounded-lg px-2 py-2 cursor-pointer hover:bg-red-100 transition-colors"
-                    @click="verDetalle(sala, bloque)"
-                  >
-                    <div class="text-xs font-medium text-red-700">{{ getReserva(sala.id, bloque.inicio)?.cantidad_personas }} persona(s)</div>
-                    <div class="text-[10px] text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">Click para ver detalle</div>
-                    <button
-                      @click.stop="pedirCancelacion(sala.nombre, bloque.label, sala.id, bloque.inicio)"
-                      class="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs"
-                      title="Cancelar reserva"
-                    >
-                      ×
-                    </button>
-                  </div>
-                  <button
-                    v-else
-                    @click="openReservaModal(sala, bloque)"
-                    class="w-full bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-2 hover:bg-emerald-100 transition-colors group"
-                  >
-                    <div class="text-xs font-medium text-emerald-700">Disponible</div>
-                    <div class="text-[10px] text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity">Click para reservar</div>
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+      <div class="bg-white rounded-xl shadow-md p-5">
+        <div class="flex text-[10px] font-medium text-gray-400 mb-2 px-[132px] justify-between">
+          <span v-for="h in [8, 10, 12, 14, 16, 18, 20]" :key="h">{{ String(h).padStart(2, '0') }}:00</span>
+        </div>
+        <div class="space-y-2.5">
+          <div v-for="sala in salasPage" :key="sala.id" class="flex items-center gap-3">
+            <div class="w-[120px] shrink-0">
+              <div class="font-medium text-sm text-gray-900 truncate">{{ sala.nombre }}</div>
+              <div class="text-xs text-gray-400">{{ sala.capacidad }} personas</div>
+            </div>
+            <div
+              class="relative h-12 flex-1 bg-emerald-50/70 rounded-xl overflow-hidden border border-emerald-100 shadow-inner cursor-pointer"
+              @click="onTimelineClick(sala, $event)"
+            >
+              <div class="absolute inset-0 flex pointer-events-none">
+                <div
+                  v-for="h in [10, 12, 14, 16, 18, 20]"
+                  :key="h"
+                  class="absolute inset-y-0 border-l border-emerald-900/[0.06]"
+                  :style="{ left: pct(`${h}:00`) + '%' }"
+                />
+              </div>
+              <div
+                v-if="esHoy"
+                class="absolute inset-y-0 left-0 bg-gray-500/[0.06] pointer-events-none"
+                :style="{ width: nowPct + '%' }"
+              />
+              <div
+                v-for="tramo in sala.tramos"
+                :key="tramo.reserva_id"
+                class="absolute inset-y-1 rounded-lg border flex items-center justify-center text-[10px] font-semibold px-1.5 overflow-hidden whitespace-nowrap shadow-sm hover:shadow-md hover:brightness-95 hover:z-10 transition-all"
+                :class="tramoClases(tramo)"
+                :style="{ left: pct(tramo.hora_inicio) + '%', width: Math.max(pct(tramo.hora_fin) - pct(tramo.hora_inicio), 3) + '%' }"
+                @click.stop="verDetalle(sala, tramo)"
+              >
+                {{ tramo.hora_inicio.slice(0, 5) }}–{{ tramo.hora_fin.slice(0, 5) }}
+              </div>
+              <div
+                v-if="esHoy"
+                class="absolute inset-y-0 w-[3px] -ml-px bg-indigo-600 pointer-events-none rounded-full shadow-[0_0_0_2px_rgba(79,70,229,0.15)]"
+                :style="{ left: nowPct + '%' }"
+              />
+            </div>
+          </div>
+          <p v-if="!salasPage.length" class="text-sm text-gray-400 text-center py-6">Sin salas que coincidan con la búsqueda.</p>
         </div>
 
-        <div v-if="totalPages > 1" class="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+        <div v-if="totalPages > 1" class="flex items-center justify-between pt-4 mt-4 border-t border-gray-100">
           <span class="text-sm text-gray-500">
             Mostrando {{ page * salasPerPage + 1 }}–{{ Math.min((page + 1) * salasPerPage, filteredSalas.length) }} de {{ filteredSalas.length }} salas
           </span>
@@ -569,24 +621,60 @@ function formatCuentaRegresiva(segundos: number) {
         </div>
       </div>
 
-      <div class="flex gap-4 mt-4 text-xs text-gray-500">
-        <div class="flex items-center gap-1.5"><div class="w-3 h-3 rounded bg-emerald-100 border border-emerald-200" /> Disponible</div>
-        <div class="flex items-center gap-1.5"><div class="w-3 h-3 rounded bg-red-100 border border-red-200" /> Ocupada</div>
-        <div class="flex items-center gap-1.5"><div class="w-3 h-3 rounded bg-gray-100 border border-gray-200" /> Llave devuelta</div>
+      <div class="flex flex-wrap gap-x-4 gap-y-1.5 mt-4 text-xs text-gray-500">
+        <div class="flex items-center gap-1.5"><div class="w-3 h-3 rounded bg-emerald-50 border border-emerald-100" /> Disponible (click para reservar)</div>
+        <div class="flex items-center gap-1.5"><div class="w-3 h-3 rounded bg-amber-100 border border-amber-300" /> Por confirmar</div>
+        <div class="flex items-center gap-1.5"><div class="w-3 h-3 rounded bg-orange-100 border border-orange-300" /> Plazo vencido</div>
+        <div class="flex items-center gap-1.5"><div class="w-3 h-3 rounded bg-red-100 border border-red-300" /> Confirmada / en uso</div>
+        <div class="flex items-center gap-1.5"><div class="w-3 h-3 rounded bg-gray-100 border border-gray-300" /> Llave devuelta</div>
+        <div class="flex items-center gap-1.5"><div class="w-1 h-3 rounded-full bg-indigo-600" /> Ahora</div>
       </div>
 
       <div
-        v-if="modalOpen && selectedSala && selectedBloque"
+        v-if="modalOpen && selectedSala"
         class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
         @click.self="modalOpen = false"
       >
         <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
           <h3 class="text-lg font-bold text-gray-900 mb-1">Reservar {{ selectedSala.nombre }}</h3>
           <p class="text-sm text-gray-500 mb-5">
-            {{ selectedBloque.label }} · {{ selectedSala.capacidad }} personas · {{ formatFechaLarga(selectedDate) }}
+            {{ selectedSala.capacidad }} personas · {{ formatFechaLarga(selectedDate) }}
           </p>
 
           <div class="space-y-4">
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Hora de inicio</label>
+                <select
+                  v-if="!modalInmediata"
+                  v-model="modalHoraInicio"
+                  class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                >
+                  <option v-for="h in horaInicioOpciones" :key="h" :value="h">{{ h }}</option>
+                </select>
+                <div v-else class="px-3 py-2.5 border border-gray-200 bg-gray-50 rounded-lg text-gray-600 font-mono text-sm">
+                  Ahora ({{ modalHoraInicio }})
+                </div>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Duración</label>
+                <select
+                  v-model.number="modalDuracion"
+                  class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                >
+                  <option v-for="d in DURACIONES" :key="d" :value="d" :disabled="!modalDuracionesValidas.includes(d)">
+                    {{ formatMinutos(d) }}{{ !modalDuracionesValidas.includes(d) ? ' (no disponible)' : '' }}
+                  </option>
+                </select>
+              </div>
+            </div>
+            <p v-if="modalDisponibleMin < duracionMinima" class="text-xs text-red-600">
+              Esta sala está libre solo {{ formatMinutos(modalDisponibleMin) }} desde las {{ modalHoraInicio }}.
+            </p>
+            <p v-else class="text-xs text-gray-400">
+              Libre {{ formatMinutos(modalDisponibleMin) }} desde las {{ modalHoraInicio }}.
+            </p>
+
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Cantidad de personas</label>
               <select
@@ -624,7 +712,8 @@ function formatCuentaRegresiva(segundos: number) {
             </button>
             <button
               @click="confirmarReserva"
-              class="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
+              :disabled="modalDisponibleMin < duracionMinima"
+              class="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm disabled:opacity-50"
             >
               Confirmar
             </button>
@@ -633,19 +722,19 @@ function formatCuentaRegresiva(segundos: number) {
       </div>
 
       <div
-        v-if="detalleOpen && detalleReserva && detalleSala && detalleBloque"
+        v-if="detalleOpen && detalleTramo && detalleSala"
         class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
         @click.self="detalleOpen = false"
       >
         <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
           <h3 class="text-lg font-bold text-gray-900 mb-1">{{ detalleSala.nombre }} — Ocupada</h3>
           <p class="text-sm text-gray-500 mb-5">
-            {{ detalleBloque.label }} · {{ detalleReserva.cantidad_personas }} persona(s) · {{ formatFechaLarga(selectedDate) }}
+            {{ labelTramo(detalleTramo.hora_inicio, detalleTramo.hora_fin) }} · {{ detalleTramo.cantidad_personas }} persona(s) · {{ formatFechaLarga(selectedDate) }}
           </p>
 
           <div class="space-y-2 mb-6">
             <div
-              v-for="(persona, idx) in detalleReserva.personas ?? []"
+              v-for="(persona, idx) in detalleTramo.personas ?? []"
               :key="idx"
               class="flex items-center justify-between px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg"
             >
@@ -654,32 +743,32 @@ function formatCuentaRegresiva(segundos: number) {
             </div>
           </div>
 
-          <div v-if="detalleReserva.prestado_por || detalleReserva.devuelto_por" class="space-y-1.5 mb-6 text-sm border-t border-gray-100 pt-4">
-            <div v-if="detalleReserva.prestado_por" class="flex justify-between">
+          <div v-if="detalleTramo.prestado_por || detalleTramo.devuelto_por" class="space-y-1.5 mb-6 text-sm border-t border-gray-100 pt-4">
+            <div v-if="detalleTramo.prestado_por" class="flex justify-between">
               <span class="text-gray-500">Entregada por</span>
-              <span class="text-gray-900 font-medium">{{ detalleReserva.prestado_por }}</span>
+              <span class="text-gray-900 font-medium">{{ detalleTramo.prestado_por }}</span>
             </div>
-            <div v-if="detalleReserva.devuelto_por" class="flex justify-between">
+            <div v-if="detalleTramo.devuelto_por" class="flex justify-between">
               <span class="text-gray-500">Devuelta por</span>
-              <span class="text-gray-900 font-medium">{{ detalleReserva.devuelto_por }}</span>
+              <span class="text-gray-900 font-medium">{{ detalleTramo.devuelto_por }}</span>
             </div>
           </div>
 
-          <div v-if="detalleReserva.hora_devolucion_real" class="mb-6 flex items-center gap-2 px-3 py-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700">
+          <div v-if="detalleTramo.hora_devolucion_real" class="mb-6 flex items-center gap-2 px-3 py-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700">
             <svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
             </svg>
             Devolución de llave confirmada
           </div>
           <div
-            v-else-if="!detalleReserva.hora_prestamo_real"
+            v-else-if="!detalleTramo.hora_prestamo_real"
             class="mb-6 flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm"
-            :class="detalleReserva.vencida_sin_confirmar ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-amber-50 border border-amber-200 text-amber-700'"
+            :class="detalleTramo.vencida_sin_confirmar ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-amber-50 border border-amber-200 text-amber-700'"
           >
             <svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
             </svg>
-            {{ detalleReserva.vencida_sin_confirmar ? 'Venció el plazo de 15 minutos sin confirmar llegada' : 'Todavía no se confirma la llegada del grupo' }}
+            {{ detalleTramo.vencida_sin_confirmar ? 'Venció el plazo de 15 minutos sin confirmar llegada' : 'Todavía no se confirma la llegada del grupo' }}
           </div>
 
           <div class="flex gap-3">
@@ -689,32 +778,32 @@ function formatCuentaRegresiva(segundos: number) {
             >
               Cerrar
             </button>
-            <template v-if="!detalleReserva.hora_devolucion_real">
+            <template v-if="!detalleTramo.hora_devolucion_real">
               <button
-                v-if="!detalleReserva.hora_prestamo_real && detalleReserva.vencida_sin_confirmar"
-                @click="liberarReservaAction(detalleReserva)"
-                :disabled="liberando === detalleReserva.id"
+                v-if="!detalleTramo.hora_prestamo_real && detalleTramo.vencida_sin_confirmar"
+                @click="liberarReservaAction(detalleTramo.reserva_id)"
+                :disabled="liberando === detalleTramo.reserva_id"
                 class="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium text-sm disabled:opacity-60"
               >
-                {{ liberando === detalleReserva.id ? 'Liberando…' : 'Liberar (no llegó)' }}
+                {{ liberando === detalleTramo.reserva_id ? 'Liberando…' : 'Liberar (no llegó)' }}
               </button>
               <template v-else>
                 <button
-                  @click="pedirCancelacion(detalleSala.nombre, detalleBloque.label, detalleSala.id, detalleBloque.inicio)"
+                  @click="pedirCancelacion(detalleSala, detalleTramo)"
                   class="flex-1 px-4 py-2.5 border border-red-300 text-red-700 rounded-lg hover:bg-red-50 transition-colors font-medium text-sm"
                 >
                   Cancelar reserva
                 </button>
                 <button
-                  v-if="!detalleReserva.hora_prestamo_real"
-                  @click="pedirLlegada(detalleSala.nombre, detalleBloque.label, detalleReserva.id)"
+                  v-if="!detalleTramo.hora_prestamo_real"
+                  @click="pedirLlegada(detalleSala, detalleTramo)"
                   class="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm"
                 >
                   Confirmar llegada
                 </button>
                 <button
                   v-else
-                  @click="pedirDevolucion(detalleSala.nombre, detalleBloque.label, detalleReserva.id)"
+                  @click="pedirDevolucion(detalleSala, detalleTramo)"
                   class="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium text-sm"
                 >
                   Confirmar devolución
@@ -733,8 +822,8 @@ function formatCuentaRegresiva(segundos: number) {
         <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
           <h3 class="text-lg font-bold text-gray-900 mb-1">¿Cancelar esta reserva?</h3>
           <p class="text-sm text-gray-500 mb-6">
-            Se cancelará la reserva de <strong>{{ cancelacionPendiente.salaNombre }}</strong> para el bloque
-            <strong>{{ cancelacionPendiente.bloqueLabel }}</strong>. Esta acción no se puede deshacer.
+            Se cancelará la reserva de <strong>{{ cancelacionPendiente.salaNombre }}</strong> para el tramo
+            <strong>{{ cancelacionPendiente.label }}</strong>. Esta acción no se puede deshacer.
           </p>
           <div class="flex gap-3">
             <button
@@ -761,8 +850,8 @@ function formatCuentaRegresiva(segundos: number) {
         <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
           <h3 class="text-lg font-bold text-gray-900 mb-1">Confirmar devolución de llave</h3>
           <p class="text-sm text-gray-500 mb-6">
-            Se registrará la devolución de <strong>{{ devolucionPendiente.salaNombre }}</strong> para el bloque
-            <strong>{{ devolucionPendiente.bloqueLabel }}</strong>. La reserva queda marcada como finalizada
+            Se registrará la devolución de <strong>{{ devolucionPendiente.salaNombre }}</strong> para el tramo
+            <strong>{{ devolucionPendiente.label }}</strong>. La reserva queda marcada como finalizada
             (no se borra, a diferencia de cancelar).
           </p>
           <div class="flex gap-3">
@@ -791,8 +880,8 @@ function formatCuentaRegresiva(segundos: number) {
         <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
           <h3 class="text-lg font-bold text-gray-900 mb-1">Confirmar llegada</h3>
           <p class="text-sm text-gray-500 mb-6">
-            Se registrará que el grupo se presentó en <strong>{{ llegadaPendiente.salaNombre }}</strong> para el bloque
-            <strong>{{ llegadaPendiente.bloqueLabel }}</strong>.
+            Se registrará que el grupo se presentó en <strong>{{ llegadaPendiente.salaNombre }}</strong> para el tramo
+            <strong>{{ llegadaPendiente.label }}</strong>.
           </p>
           <div class="flex gap-3">
             <button

@@ -466,54 +466,65 @@ class SeedMockupData extends Command
      */
     private function seedReservas($salas, $usuarios): void
     {
-        $bloques = [
-            [8, 10], [10, 12], [12, 14], [14, 16], [16, 18], [18, 20], [20, 21],
-        ];
-
-        $horaActual = (int) now()->format('H');
+        // Horario continuo (inicio libre, duración de hasta 2 horas) — ya no son
+        // bloques fijos, ver spec "reserva de salas con horario continuo". Cada sala
+        // se recorre desde la apertura sorteando si se reserva o no un tramo de
+        // duración aleatoria (alineada a la granularidad de config/salas.php).
+        $duraciones = [30, 60, 90, 120];
+        $ahora = now();
         $total = 0;
 
         // Reservas para hoy y algunos días recientes (no solo "hoy"), para que la
         // demo siga viéndose poblada aunque pasen días sin volver a correr el seed.
         foreach (range(0, 3) as $diasAtras) {
-            $fecha = now()->subDays($diasAtras)->toDateString();
+            $fecha = $ahora->copy()->subDays($diasAtras)->toDateString();
             $esHoy = $diasAtras === 0;
 
             foreach ($salas as $sala) {
-                foreach ($bloques as [$inicio, $fin]) {
-                    if (random_int(0, 100) > 40) {
+                $cursor = Carbon::parse(config('salas.apertura'));
+                $cierre = Carbon::parse(config('salas.cierre'));
+
+                while ($cursor->lessThan($cierre)) {
+                    if (random_int(0, 100) > 55) {
+                        $cursor->addMinutes(config('salas.granularidad'));
+
                         continue;
                     }
 
-                    $yaTermino = ! $esHoy || $fin <= $horaActual;
-                    $this->crearReservaMockup($sala, $usuarios, $fecha, $inicio, $fin, $yaTermino);
+                    $duracion = min($duraciones[array_rand($duraciones)], $cursor->diffInMinutes($cierre));
+                    $fin = $cursor->copy()->addMinutes($duracion);
+
+                    $yaTermino = ! $esHoy || $fin->format('H:i:s') <= $ahora->format('H:i:s');
+                    $this->crearReservaMockup($sala, $usuarios, $fecha, $cursor->format('H:i:s'), $fin->format('H:i:s'), $yaTermino);
                     $total++;
+                    $cursor = $fin->copy();
                 }
             }
         }
 
-        // Unas pocas reservas del bloque de HOY que está corriendo ahora mismo,
-        // deliberadamente sin confirmar y a pocos minutos de vencer el plazo de 15
-        // minutos — para poder abrir el menú de confirmación de asistencia en
-        // SalasView.vue y ver el caso "por confirmar" sin esperar 15 minutos de
-        // verdad. Se agregan aparte del loop de arriba (que es puro azar) para no
-        // depender de que le haya tocado justo el bloque actual a alguna sala.
-        $bloqueActual = collect($bloques)->first(fn ($b) => $b[0] <= $horaActual && $horaActual < $b[1]);
+        // Unas pocas reservas de HOY corriendo ahora mismo, deliberadamente sin
+        // confirmar y a pocos minutos de vencer el plazo de 15 minutos — para poder
+        // abrir el menú de confirmación de asistencia en SalasView.vue y ver el caso
+        // "por confirmar" sin esperar 15 minutos de verdad.
+        $fechaHoy = $ahora->toDateString();
+        $inicioActual = $ahora->copy()->subMinutes(random_int(5, 20));
+        $finActual = $inicioActual->copy()->addMinutes($duraciones[array_rand($duraciones)]);
+        if ($finActual->lessThanOrEqualTo($ahora)) {
+            $finActual = $ahora->copy()->addMinutes(60);
+        }
+
+        $salasLibres = $salas->reject(
+            fn ($sala) => Reserva::where('sala_id', $sala->id)->where('fecha', $fechaHoy)
+                ->where('hora_inicio', '<', $finActual->format('H:i:s'))
+                ->where('hora_fin', '>', $inicioActual->format('H:i:s'))
+                ->exists()
+        );
+
         $porConfirmar = 0;
-
-        if ($bloqueActual) {
-            [$inicio, $fin] = $bloqueActual;
-            $fechaHoy = now()->toDateString();
-
-            $salasLibres = $salas->reject(
-                fn ($sala) => Reserva::where('sala_id', $sala->id)->where('fecha', $fechaHoy)->where('hora_inicio', $inicio)->exists()
-            );
-
-            foreach ($salasLibres->random(min(3, $salasLibres->count())) as $sala) {
-                $this->crearReservaMockup($sala, $usuarios, $fechaHoy, $inicio, $fin, yaTermino: false, minutosParaVencer: random_int(2, 5));
-                $porConfirmar++;
-                $total++;
-            }
+        foreach ($salasLibres->random(min(3, $salasLibres->count())) as $sala) {
+            $this->crearReservaMockup($sala, $usuarios, $fechaHoy, $inicioActual->format('H:i:s'), $finActual->format('H:i:s'), yaTermino: false, minutosParaVencer: random_int(2, 5));
+            $porConfirmar++;
+            $total++;
         }
 
         $detalle = $porConfirmar > 0 ? " ({$porConfirmar} por confirmar, a pocos minutos de vencer)" : '';
@@ -527,7 +538,7 @@ class SeedMockupData extends Command
      *   created_at) — para el caso "por confirmar" de seedReservas(). Si no viene y
      *   $yaTermino es true, se simula asistencia real (o no-show real, 15% de las veces).
      */
-    private function crearReservaMockup($sala, $usuarios, string $fecha, int $inicio, int $fin, bool $yaTermino, ?int $minutosParaVencer = null): Reserva
+    private function crearReservaMockup($sala, $usuarios, string $fecha, string $inicio, string $fin, bool $yaTermino, ?int $minutosParaVencer = null): Reserva
     {
         $cantidadPersonas = random_int(2, 5);
         $participantes = $usuarios->random(min($cantidadPersonas, $usuarios->count()))->values();
@@ -546,7 +557,7 @@ class SeedMockupData extends Command
         $reserva->participantes()->attach($participantes->pluck('id'));
 
         if ($minutosParaVencer !== null) {
-            $reserva->created_at = now()->subMinutes(15 - $minutosParaVencer);
+            $reserva->created_at = now()->subMinutes(config('salas.plazo_confirmacion', 15) - $minutosParaVencer);
             $reserva->save();
 
             return $reserva;
@@ -554,12 +565,13 @@ class SeedMockupData extends Command
 
         if ($yaTermino) {
             if (random_int(0, 100) < 85) {
-                $horaLlegada = Carbon::parse($fecha)->setTime($inicio, random_int(0, 10), 0);
+                $duracionMin = Carbon::parse($inicio)->diffInMinutes(Carbon::parse($fin));
+                $horaLlegada = Carbon::parse($fecha.' '.$inicio)->addMinutes(random_int(0, 10));
                 $reserva->update([
                     'prestado_por' => 'Sistema (mockup)',
                     'hora_prestamo_real' => $horaLlegada,
                     'devuelto_por' => 'Sistema (mockup)',
-                    'hora_devolucion_real' => $horaLlegada->copy()->addHours($fin - $inicio)->subMinutes(random_int(0, 15)),
+                    'hora_devolucion_real' => $horaLlegada->copy()->addMinutes($duracionMin)->subMinutes(random_int(0, 15)),
                     'estado' => 'finalizada',
                     'via' => random_int(0, 1) ? 'manual' : 'BC',
                 ]);
@@ -630,7 +642,11 @@ class SeedMockupData extends Command
                 $ejemplares->push(Ejemplar::create([
                     'libro_id' => $libro->id,
                     'numero_copia' => $copia,
-                    'codigo_barras' => 'UMAG'.str_pad((string) $contadorCodigo++, 6, '0', STR_PAD_LEFT),
+                    // Numérico de 14 dígitos, mismo formato que EjemplarController::
+                    // siguienteCodigoBarras() genera para copias reales (heredado de
+                    // Horizon, ej. 30000003227565) — cada copia tiene su propio código,
+                    // nunca comparte el del libro ni el de otra copia.
+                    'codigo_barras' => (string) (30000000000000 + $contadorCodigo++),
                     'disponible' => random_int(0, 100) < 78,
                     // Los ejemplares de prueba ya están catalogados y en estante: si no,
                     // ninguno sería prestable/reservable (PrestamoController/

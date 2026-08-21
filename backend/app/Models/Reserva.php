@@ -66,17 +66,18 @@ class Reserva extends Model
 
     /**
      * Plazo máximo para que el grupo se presente a confirmar la reserva: 15 minutos
-     * desde que comienza el bloque reservado — salvo que la reserva se haya creado
-     * DESPUÉS de que el bloque ya empezó (ej. "Reservar ahora" a las 15:00 dentro de un
-     * bloque 14:00-16:00), en cuyo caso el plazo corre desde el momento de la reserva,
-     * no desde el inicio nominal del bloque (que ya pasó).
+     * desde que comienza el tramo reservado — salvo que la reserva se haya creado
+     * DESPUÉS de que el tramo ya empezó (ej. "Reservar ahora" a las 15:40 dentro de un
+     * tramo 15:00-17:00 no debería pasar, pero por seguridad se toma el máximo entre
+     * ambos), en cuyo caso el plazo corre desde el momento de la reserva, no desde el
+     * inicio nominal del tramo (que ya pasó).
      */
     public function plazoConfirmacion(): Carbon
     {
-        $inicioBloque = Carbon::parse($this->fecha->toDateString())->setTime($this->hora_inicio, 0, 0);
-        $base = $this->created_at->greaterThan($inicioBloque) ? $this->created_at : $inicioBloque;
+        $inicioTramo = Carbon::parse($this->fecha->toDateString().' '.$this->hora_inicio);
+        $base = $this->created_at->greaterThan($inicioTramo) ? $this->created_at : $inicioTramo;
 
-        return $base->copy()->addMinutes(15);
+        return $base->copy()->addMinutes(config('salas.plazo_confirmacion', 15));
     }
 
     public function estaVencidaSinConfirmar(): bool
@@ -84,5 +85,11 @@ class Reserva extends Model
         return $this->estado === 'activa'
             && ! $this->hora_prestamo_real
             && now()->greaterThan($this->plazoConfirmacion());
+    }
+
+    /** Minutos que dura el tramo reservado (hora_fin - hora_inicio). */
+    public function duracionMinutos(): int
+    {
+        return Carbon::parse($this->hora_inicio)->diffInMinutes(Carbon::parse($this->hora_fin));
     }
 }

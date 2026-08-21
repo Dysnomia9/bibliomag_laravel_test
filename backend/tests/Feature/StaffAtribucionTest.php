@@ -70,8 +70,8 @@ class StaffAtribucionTest extends TestCase
         $reserva = Reserva::factory()->create([
             'sala_id' => $sala->id,
             'fecha' => now()->toDateString(),
-            'hora_inicio' => now()->hour,
-            'hora_fin' => now()->hour + 1,
+            'hora_inicio' => now()->format('H:00'),
+            'hora_fin' => now()->addHour()->format('H:00'),
             'estado' => 'activa',
         ]);
 

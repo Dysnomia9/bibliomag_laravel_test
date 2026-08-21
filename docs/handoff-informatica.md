@@ -14,7 +14,7 @@ El sistema está funcionalmente completo: gestión de usuarios, préstamos,
 devoluciones, reservas de sala y de libro, catalogación, reportes,
 dashboard, código QR de acceso, portal de autoservicio para
 estudiantes/docentes/funcionarios, y panel de administración. Corre 100%
-en Docker. Tiene 205 tests automatizados que verifican el comportamiento
+en Docker. Tiene 215 tests automatizados que verifican el comportamiento
 real contra una base de datos Postgres (no simulada) — no es una demo, es
 una implementación completa.
 
@@ -78,6 +78,11 @@ Para que no se lean como carencias en la revisión:
   seguir pidiendo préstamos (se le avisa al personal, pero no se le
   rechaza). Decisión de alcance confirmada explícitamente durante el
   desarrollo, no un olvido.
+- **Con bloqueo duro de préstamos concurrentes de libro** (distinto del
+  punto anterior, no confundir): un usuario no puede llevarse un segundo
+  libro mientras tenga uno sin devolver — acá sí se rechaza el préstamo,
+  no es solo un aviso. Aplica solo a libros, no a equipos (audífonos/
+  notebooks/cargadores).
 - **Sin renovación de préstamos** ni **aviso automático de "tu préstamo
   vence mañana"** (el segundo necesitaría un proceso de cron corriendo
   aparte, que hoy no está montado en el `docker-compose.prod.yml`).
@@ -95,7 +100,7 @@ Para que no se lean como carencias en la revisión:
 
 1. Levante `docker-compose.prod.yml` en un ambiente de prueba propio
    (staging) con datos ficticios primero, no directo a producción.
-2. Corra `docker compose exec backend php artisan test` ahí — si los 205
+2. Corra `docker compose exec backend php artisan test` ahí — si los 215
    tests pasan en su infraestructura, es una buena señal de que el entorno
    está bien armado.
 3. Revise que `APP_DEBUG=false` haya quedado activo (ya viene forzado por

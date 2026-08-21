@@ -217,33 +217,48 @@ export type ReservaLibro = {
   ejemplar?: Ejemplar
 }
 
+// Tramo reservado dentro de una sala — horario continuo (hora_inicio/hora_fin en
+// formato "H:i"), ya no bloques fijos de 2 horas. Forma parte de Sala.tramos, la
+// respuesta de SalaController::index()/PortalController::salas() (ver
+// ReservaSalaService::vistaDelDia()).
+export type TramoReserva = {
+  reserva_id: number
+  hora_inicio: string
+  hora_fin: string
+  estado: string
+  cantidad_personas: number
+  rut_usuario: string
+  usuario_id: number | null
+  personas: { rut: string; nombre: string | null }[]
+  prestado_por: string | null
+  devuelto_por: string | null
+  hora_prestamo_real: string | null
+  hora_devolucion_real: string | null
+  plazo_confirmacion: string
+  vencida_sin_confirmar: boolean
+}
+
 export type Sala = {
   id: number
   nombre: string
   capacidad: number
   tipo: 'logia' | 'puesto' | 'sala'
   codigo_barras: string | null
+  // Solo si la fecha consultada es hoy — null para otras fechas.
+  libre_ahora: boolean | null
+  disponible_hasta_min: number | null
+  tramos: TramoReserva[]
 }
 
-export type Reserva = {
-  id: number
-  sala_id: number
-  usuario_id: number | null
-  rut_usuario: string
-  cantidad_personas: number
-  personas?: { rut: string; nombre: string | null }[]
+export type VistaSalasDia = {
   fecha: string
-  hora_inicio: number
-  hora_fin: number
-  estado: string
-  prestado_por: string | null
-  devuelto_por: string | null
-  hora_prestamo_real: string | null
-  hora_devolucion_real: string | null
-  via: 'manual' | 'BC'
-  // Solo presentes en la respuesta de SalaController::index()/PortalController::salas().
-  plazo_confirmacion?: string
-  vencida_sin_confirmar?: boolean
+  apertura: string
+  cierre: string
+  granularidad: number
+  duracion_minima: number
+  duracion_maxima: number
+  cuota_diaria: number
+  salas: Sala[]
 }
 
 export type SerieItem = {

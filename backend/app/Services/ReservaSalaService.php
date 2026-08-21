@@ -6,6 +6,8 @@ use App\Models\Reserva;
 use App\Models\Sala;
 use App\Models\Staff;
 use App\Models\Usuario;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 class ReservaSalaService
 {
@@ -25,8 +27,8 @@ class ReservaSalaService
         $ahora = now();
         $reserva = Reserva::where('sala_id', $sala->id)
             ->where('fecha', $ahora->toDateString())
-            ->where('hora_inicio', '<=', $ahora->hour)
-            ->where('hora_fin', '>', $ahora->hour)
+            ->where('hora_inicio', '<=', $ahora->format('H:i:s'))
+            ->where('hora_fin', '>', $ahora->format('H:i:s'))
             ->where('estado', 'activa')
             ->first();
 
@@ -134,8 +136,59 @@ class ReservaSalaService
         return true;
     }
 
-    public function existeSolapamiento(int $salaId, string $fecha, int $horaInicio, int $horaFin, ?int $ignorarReservaId = null): bool
+    /**
+     * Valida el tramo horario (ventana de atención, duración, granularidad) y, si
+     * $inmediata es true, sobrescribe `hora_inicio` en $data con la hora real del
+     * servidor — para que la hora de "Reservar ahora" la fije el backend, no el
+     * navegador del usuario. Normaliza hora_inicio/hora_fin a H:i:s al terminar.
+     * Devuelve el mensaje de error si algo no cumple, o null si el tramo es válido.
+     * Compartido entre SalaController::storeReserva() y PortalController::
+     * reservarSala() (ver convención 4 de CLAUDE.md).
+     */
+    public function validarTramo(array &$data, bool $inmediata): ?string
     {
+        if ($inmediata) {
+            $data['hora_inicio'] = now()->format('H:i');
+        }
+
+        $horaInicio = Carbon::parse($data['hora_inicio']);
+        $horaFin = Carbon::parse($data['hora_fin']);
+
+        if ($horaFin->lessThanOrEqualTo($horaInicio)) {
+            return 'La hora de término debe ser posterior a la hora de inicio.';
+        }
+
+        $apertura = Carbon::parse(config('salas.apertura'));
+        $cierre = Carbon::parse(config('salas.cierre'));
+
+        if ($horaInicio->lessThan($apertura) || $horaFin->greaterThan($cierre)) {
+            return 'La reserva debe estar dentro del horario de atención ('.config('salas.apertura').' – '.config('salas.cierre').').';
+        }
+
+        $duracion = $horaInicio->diffInMinutes($horaFin);
+        $minima = config('salas.duracion_minima');
+        $maxima = config('salas.duracion_maxima');
+
+        if ($duracion < $minima || $duracion > $maxima) {
+            return "La reserva debe durar entre {$minima} minutos y ".($maxima / 60).' horas.';
+        }
+
+        $granularidad = config('salas.granularidad');
+        if (! $inmediata && ($horaInicio->minute % $granularidad !== 0 || $horaFin->minute % $granularidad !== 0)) {
+            return 'El inicio y el término deben caer en una hora en punto o media.';
+        }
+
+        $data['hora_inicio'] = $horaInicio->format('H:i:s');
+        $data['hora_fin'] = $horaFin->format('H:i:s');
+
+        return null;
+    }
+
+    public function existeSolapamiento(int $salaId, string $fecha, string $horaInicio, string $horaFin, ?int $ignorarReservaId = null): bool
+    {
+        $horaInicio = Carbon::parse($horaInicio)->format('H:i:s');
+        $horaFin = Carbon::parse($horaFin)->format('H:i:s');
+
         $candidatas = Reserva::where('sala_id', $salaId)
             ->where('fecha', $fecha)
             ->where('hora_inicio', '<', $horaFin)
@@ -153,20 +206,21 @@ class ReservaSalaService
     }
 
     /**
-     * Un mismo participante no puede tener reservas 'activa' en salas distintas ni en
-     * bloques no adyacentes de la misma sala el mismo día — solo puede "extender" su
-     * estadía al bloque inmediatamente anterior o siguiente de la sala que ya tiene
-     * reservada, y como máximo una vez (no ambas direcciones a la vez). Las reservas
-     * ya 'finalizada' (llave devuelta) o 'no_show' no cuentan — una vez que alguien
-     * terminó, puede volver a reservar libremente más tarde ese mismo día. Devuelve
-     * `[rut, motivo]` del primer participante que violaría la regla, o null si todos
-     * pueden reservar sin problema.
+     * Cuota diaria de minutos por participante (config('salas.cuota_diaria'), 240 por
+     * defecto — reemplaza la vieja regla de "máximo 2 bloques adyacentes en la misma
+     * sala": con duración libre, adyacencia/misma-sala dejan de tener sentido, lo que
+     * importa es el total de minutos reservados ese día, en cualquier sala. Cuentan las
+     * reservas 'activa' y 'finalizada'; 'no_show' no consume cuota. Devuelve
+     * `[rut, minutosYaUsados]` del primer participante que excedería la cuota al sumar
+     * la reserva solicitada, o null si todos caben.
      *
-     * @return array{0: string, 1: 'otra_sala'|'no_adyacente'|'limite'}|null
+     * @return array{0: string, 1: int}|null
      */
-    public function participanteExcedeLimiteDeBloques(array $ruts, int $salaId, string $fecha, int $horaInicio, int $horaFin, ?int $ignorarReservaId = null): ?array
+    public function participanteExcedeCuotaDiaria(array $ruts, string $fecha, string $horaInicio, string $horaFin, ?int $ignorarReservaId = null): ?array
     {
         $idPorRut = Usuario::whereIn('rut', $ruts)->pluck('id', 'rut');
+        $duracionSolicitada = Carbon::parse($horaInicio)->diffInMinutes(Carbon::parse($horaFin));
+        $cuota = config('salas.cuota_diaria', 240);
 
         foreach ($ruts as $rut) {
             $usuarioId = $idPorRut->get($rut);
@@ -174,32 +228,16 @@ class ReservaSalaService
                 continue; // RUT inválido — ya lo rechaza la regla 'exists' del validator.
             }
 
-            $reservasActivas = Reserva::where('fecha', $fecha)
-                ->where('estado', 'activa')
+            $minutosUsados = Reserva::where('fecha', $fecha)
+                ->whereIn('estado', ['activa', 'finalizada'])
                 ->whereHas('participantes', fn ($q) => $q->where('usuarios.id', $usuarioId))
                 ->when($ignorarReservaId, fn ($q) => $q->where('id', '!=', $ignorarReservaId))
                 ->get()
-                ->reject(fn (Reserva $r) => $this->liberarSiVencida($r))
-                ->values();
+                ->reject(fn (Reserva $r) => $r->estado === 'activa' && $this->liberarSiVencida($r))
+                ->sum(fn (Reserva $r) => $r->duracionMinutos());
 
-            if ($reservasActivas->isEmpty()) {
-                continue;
-            }
-
-            if ($reservasActivas->count() >= 2) {
-                return [$rut, 'limite'];
-            }
-
-            $existente = $reservasActivas->first();
-            $mismaSala = (int) $existente->sala_id === $salaId;
-            $esAdyacente = (int) $existente->hora_fin === $horaInicio || (int) $existente->hora_inicio === $horaFin;
-
-            if (! $mismaSala) {
-                return [$rut, 'otra_sala'];
-            }
-
-            if (! $esAdyacente) {
-                return [$rut, 'no_adyacente'];
+            if ($minutosUsados + $duracionSolicitada > $cuota) {
+                return [$rut, (int) $minutosUsados];
             }
         }
 
@@ -207,40 +245,145 @@ class ReservaSalaService
     }
 
     /**
-     * Arma el mensaje 409 para participanteExcedeLimiteDeBloques() — en 2ª persona
-     * ("Ya tienes...") si el RUT que violó la regla es el del propio usuario
+     * Arma el mensaje 409 para participanteExcedeCuotaDiaria() — en 2ª persona
+     * ("Ya tienes...") si el RUT que excedió la cuota es el del propio usuario
      * autenticado (portal), o en 3ª persona ("El RUT X ya tiene...") en cualquier
      * otro caso (staff reservando para un grupo). Mismo criterio que el mensaje de
      * participanteConReservaSolapada en PortalController::reservarSala().
      *
-     * @param array{0: string, 1: 'otra_sala'|'no_adyacente'|'limite'} $excedeLimite
+     * @param array{0: string, 1: int} $excedeCuota
      */
-    public function mensajeLimiteBloques(array $excedeLimite, ?string $rutPropio = null): string
+    public function mensajeCuotaExcedida(array $excedeCuota, ?string $rutPropio = null): string
     {
-        [$rut, $motivo] = $excedeLimite;
+        [$rut, $minutosUsados] = $excedeCuota;
+        $maximo = $this->formatearMinutos(config('salas.cuota_diaria', 240));
+        $usados = $this->formatearMinutos($minutosUsados);
 
         if ($rut === $rutPropio) {
-            return match ($motivo) {
-                'otra_sala' => 'Ya tienes una reserva activa en otra sala hoy — solo puedes reservar el bloque anterior o siguiente en la misma sala.',
-                'no_adyacente' => 'Ya tienes una reserva activa en esta sala en un bloque no consecutivo — solo puedes agregar el bloque inmediatamente anterior o siguiente.',
-                default => 'Ya alcanzaste el máximo de bloques reservados por hoy (2, en la misma sala).',
-            };
+            return "Ya tienes {$usados} reservados hoy; el máximo diario es de {$maximo}.";
         }
 
-        return match ($motivo) {
-            'otra_sala' => "El RUT {$rut} ya tiene una reserva activa en otra sala hoy — solo puede reservar el bloque anterior o siguiente en la misma sala.",
-            'no_adyacente' => "El RUT {$rut} ya tiene una reserva activa en esta sala en un bloque no consecutivo — solo puede agregar el bloque inmediatamente anterior o siguiente.",
-            default => "El RUT {$rut} ya alcanzó el máximo de bloques reservados por hoy (2, en la misma sala).",
-        };
+        return "El RUT {$rut} ya tiene {$usados} reservados hoy; el máximo diario es de {$maximo}.";
+    }
+
+    private function formatearMinutos(int $minutos): string
+    {
+        $horas = intdiv($minutos, 60);
+        $resto = $minutos % 60;
+
+        if ($horas === 0) {
+            return "{$resto} min";
+        }
+
+        return $resto === 0 ? "{$horas} h" : "{$horas} h {$resto} min";
+    }
+
+    /**
+     * Minutos libres en la sala desde $desde (formato H:i o H:i:s) ese día, acotados
+     * por el cierre y por duracion_maxima — usado para "Reservar ahora" y para avisar
+     * en el frontend cuánto tiempo real queda disponible antes de que choque con la
+     * siguiente reserva. Devuelve 0 si la sala está ocupada justo en ese instante.
+     */
+    public function duracionMaximaDisponible(int $salaId, string $fecha, string $desde): int
+    {
+        $desde = Carbon::parse($desde);
+        $cierre = Carbon::parse(config('salas.cierre', '21:00'));
+        $maxima = config('salas.duracion_maxima', 120);
+
+        if ($desde->greaterThanOrEqualTo($cierre)) {
+            return 0;
+        }
+
+        $ocupadaAhora = Reserva::where('sala_id', $salaId)
+            ->where('fecha', $fecha)
+            ->where('estado', '!=', 'no_show')
+            ->where('hora_inicio', '<=', $desde->format('H:i:s'))
+            ->where('hora_fin', '>', $desde->format('H:i:s'))
+            ->get()
+            ->reject(fn (Reserva $r) => $r->estado === 'activa' && $this->liberarSiVencida($r));
+
+        if ($ocupadaAhora->isNotEmpty()) {
+            return 0;
+        }
+
+        $siguiente = Reserva::where('sala_id', $salaId)
+            ->where('fecha', $fecha)
+            ->where('estado', '!=', 'no_show')
+            ->where('hora_inicio', '>=', $desde->format('H:i:s'))
+            ->get()
+            ->reject(fn (Reserva $r) => $r->estado === 'activa' && $this->liberarSiVencida($r))
+            ->sortBy('hora_inicio')
+            ->first();
+
+        $limite = $siguiente ? Carbon::parse($siguiente->hora_inicio) : $cierre;
+        $minutosLibres = $desde->diffInMinutes($limite);
+
+        return max(0, min($minutosLibres, $maxima));
+    }
+
+    /**
+     * Arma la vista de un día para el módulo de salas: por cada sala, sus tramos
+     * reservados (ordenados por hora) más disponibilidad "ahora mismo" si $fecha es
+     * hoy. Compartido entre SalaController::index() (staff) y PortalController::
+     * salas() (portal) para no duplicar el armado del JSON en los dos lados (ver
+     * convención 4 de CLAUDE.md).
+     */
+    public function vistaDelDia(Collection $salas, string $fecha): Collection
+    {
+        $reservas = Reserva::with('participantes:id,nombre,apellido,rut')
+            ->where('fecha', $fecha)
+            ->where('estado', '!=', 'no_show')
+            ->get()
+            ->reject(fn (Reserva $r) => $this->liberarSiVencida($r))
+            ->values();
+
+        $esHoy = $fecha === now()->toDateString();
+        $ahora = now()->format('H:i:s');
+
+        $tramosPorSala = $reservas->groupBy('sala_id')->map(
+            fn ($grupo) => $grupo->map(fn (Reserva $r) => [
+                'reserva_id' => $r->id,
+                'hora_inicio' => substr($r->hora_inicio, 0, 5),
+                'hora_fin' => substr($r->hora_fin, 0, 5),
+                'estado' => $r->estado,
+                'cantidad_personas' => $r->cantidad_personas,
+                'rut_usuario' => $r->rut_usuario,
+                'usuario_id' => $r->usuario_id,
+                'prestado_por' => $r->prestado_por,
+                'devuelto_por' => $r->devuelto_por,
+                'hora_prestamo_real' => $r->hora_prestamo_real,
+                'hora_devolucion_real' => $r->hora_devolucion_real,
+                'plazo_confirmacion' => $r->plazoConfirmacion(),
+                'vencida_sin_confirmar' => $r->estaVencidaSinConfirmar(),
+                'personas' => $r->participantes->map(fn ($u) => ['rut' => $u->rut, 'nombre' => "{$u->nombre} {$u->apellido}"])->values(),
+            ])->sortBy('hora_inicio')->values()
+        );
+
+        return $salas->map(function (Sala $sala) use ($tramosPorSala, $esHoy, $fecha, $ahora) {
+            $disponibleHastaMin = $esHoy ? $this->duracionMaximaDisponible($sala->id, $fecha, $ahora) : null;
+
+            return [
+                'id' => $sala->id,
+                'nombre' => $sala->nombre,
+                'capacidad' => $sala->capacidad,
+                'tipo' => $sala->tipo,
+                'codigo_barras' => $sala->codigo_barras,
+                'libre_ahora' => $esHoy ? $disponibleHastaMin > 0 : null,
+                'disponible_hasta_min' => $disponibleHastaMin,
+                'tramos' => $tramosPorSala->get($sala->id, collect())->values(),
+            ];
+        })->values();
     }
 
     /**
      * Devuelve el primer RUT que ya participa en otra reserva (en cualquier sala)
-     * cuyo horario se solape con el bloque solicitado, o null si ninguno choca.
+     * cuyo horario se solape con el tramo solicitado, o null si ninguno choca.
      */
-    public function participanteConReservaSolapada(array $ruts, string $fecha, int $horaInicio, int $horaFin, ?int $ignorarReservaId = null): ?string
+    public function participanteConReservaSolapada(array $ruts, string $fecha, string $horaInicio, string $horaFin, ?int $ignorarReservaId = null): ?string
     {
         $idPorRut = Usuario::whereIn('rut', $ruts)->pluck('id', 'rut');
+        $horaInicio = Carbon::parse($horaInicio)->format('H:i:s');
+        $horaFin = Carbon::parse($horaFin)->format('H:i:s');
 
         $idsConflicto = Reserva::where('fecha', $fecha)
             ->where('hora_inicio', '<', $horaFin)

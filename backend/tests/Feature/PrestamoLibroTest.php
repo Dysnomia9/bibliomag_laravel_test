@@ -118,4 +118,85 @@ class PrestamoLibroTest extends TestCase
 
         $response->assertStatus(422);
     }
+
+    public function test_usuario_con_libro_activo_sin_devolver_no_puede_llevarse_otro(): void
+    {
+        Sanctum::actingAs(Staff::factory()->create());
+        $usuario = Usuario::factory()->create();
+        $yaPrestado = Ejemplar::factory()->for(Libro::factory())->create();
+        $nuevoLibro = Ejemplar::factory()->for(Libro::factory())->create();
+
+        $this->postJson('/api/prestamos', [
+            'usuario_id' => $usuario->id,
+            'tipo_item' => 'libro',
+            'codigo_barras' => $yaPrestado->codigo_barras,
+            'fecha_prestamo' => now()->toDateString(),
+            'fecha_devolucion' => now()->addDays(7)->toDateString(),
+        ])->assertStatus(201);
+
+        $response = $this->postJson('/api/prestamos', [
+            'usuario_id' => $usuario->id,
+            'tipo_item' => 'libro',
+            'codigo_barras' => $nuevoLibro->codigo_barras,
+            'fecha_prestamo' => now()->toDateString(),
+            'fecha_devolucion' => now()->addDays(7)->toDateString(),
+        ]);
+
+        $response->assertStatus(409)
+            ->assertJsonPath('message', 'Este usuario ya tiene un libro prestado sin devolver — debe devolverlo antes de llevarse otro.');
+        // El segundo ejemplar no debe quedar marcado como prestado tras el rechazo.
+        $this->assertDatabaseHas('ejemplares', ['id' => $nuevoLibro->id, 'disponible' => true]);
+    }
+
+    public function test_usuario_puede_llevarse_un_libro_nuevo_despues_de_devolver_el_anterior(): void
+    {
+        Sanctum::actingAs(Staff::factory()->create());
+        $usuario = Usuario::factory()->create();
+        $primero = Ejemplar::factory()->for(Libro::factory())->create();
+        $segundo = Ejemplar::factory()->for(Libro::factory())->create();
+
+        $prestamo = $this->postJson('/api/prestamos', [
+            'usuario_id' => $usuario->id,
+            'tipo_item' => 'libro',
+            'codigo_barras' => $primero->codigo_barras,
+            'fecha_prestamo' => now()->toDateString(),
+            'fecha_devolucion' => now()->addDays(7)->toDateString(),
+        ])->json();
+
+        $this->patchJson("/api/prestamos/{$prestamo['id']}/devolver")->assertStatus(200);
+
+        $response = $this->postJson('/api/prestamos', [
+            'usuario_id' => $usuario->id,
+            'tipo_item' => 'libro',
+            'codigo_barras' => $segundo->codigo_barras,
+            'fecha_prestamo' => now()->toDateString(),
+            'fecha_devolucion' => now()->addDays(7)->toDateString(),
+        ]);
+
+        $response->assertStatus(201);
+    }
+
+    public function test_libro_activo_no_bloquea_prestamo_de_equipo(): void
+    {
+        Sanctum::actingAs(Staff::factory()->create());
+        $usuario = Usuario::factory()->create();
+        $libro = Ejemplar::factory()->for(Libro::factory())->create();
+        $equipo = \App\Models\Equipo::factory()->create(['tipo' => 'audifonos']);
+
+        $this->postJson('/api/prestamos', [
+            'usuario_id' => $usuario->id,
+            'tipo_item' => 'libro',
+            'codigo_barras' => $libro->codigo_barras,
+            'fecha_prestamo' => now()->toDateString(),
+            'fecha_devolucion' => now()->addDays(7)->toDateString(),
+        ])->assertStatus(201);
+
+        $response = $this->postJson('/api/prestamos', [
+            'usuario_id' => $usuario->id,
+            'tipo_item' => 'audifonos',
+            'codigo_barras' => $equipo->codigo_barras,
+        ]);
+
+        $response->assertStatus(201);
+    }
 }
