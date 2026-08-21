@@ -56,7 +56,11 @@ class SalaController extends Controller
         }
 
         $inmediata = $data['inmediata'] ?? false;
-        $error = $this->reservaSalaService->validarTramo($data, $inmediata);
+        // Solo el admin puede agendar en una hora que ya pasó hoy (ej. registrar algo
+        // que se atendió sin pasar por el sistema en su momento) — el resto del staff
+        // sigue restringido a "desde ahora en adelante", igual que el portal.
+        $permitirHoraPasada = $request->user()->rol === 'admin';
+        $error = $this->reservaSalaService->validarTramo($data, $inmediata, $permitirHoraPasada);
         if ($error) {
             return response()->json(['message' => $error], 422);
         }

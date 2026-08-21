@@ -400,11 +400,11 @@ frontend/
   `SalaDevolucionTest`, `SalaReservaTest`, `StaffAtribucionTest`,
   `TipoMaterialTest`, `UsuarioAuthTest`), corren contra una DB Postgres
   dedicada (`biblioteca_test`, ver `docker-entrypoint.sh`) con
-  `docker compose exec backend php artisan test` — 215 tests al
-  2026-08-21 (197 al 2026-08-19; ver entrada "Reserva de salas: de 7
-  bloques fijos... a horario continuo" y la de "Un usuario podía llevarse
-  un libro nuevo sin haber devuelto el anterior" en Gotchas para el detalle del
-  salto). La catalogación de libros, el split Libro/Ejemplar, el
+  `docker compose exec backend php artisan test` — 222 tests al
+  2026-08-21 (197 al 2026-08-19; ver las entradas de Gotchas fechadas
+  2026-08-21 para el detalle de cada salto — horario continuo de salas,
+  el bloqueo de préstamos concurrentes, y el permiso de admin para
+  agendar en horas pasadas). La catalogación de libros, el split Libro/Ejemplar, el
   cambio masivo de estado y el flujo completo de confirmación de
   asistencia de sala ya tienen cobertura completa. **Ojo**: hasta
   2026-08-19 `phpunit.xml` declaraba un testsuite "Unit" apuntando a
@@ -1736,6 +1736,69 @@ frontend/
     la hora real para no dejar la base de datos de desarrollo con
     timestamps falsos. **No verificado visualmente en navegador** (mismo
     motivo que las dos entradas anteriores).
+- **Tercera ronda, mismo día**: el mockup de salas quedaba prácticamente
+  lleno todo el día en las 18 salas (la probabilidad de ocupar cada
+  tramo candidato era 55%, que compuesta contra la granularidad de 30 min
+  da ~75% de ocupación esperada del día) — sin huecos reales, no se podía
+  practicar el flujo de "reservar en un espacio libre" en la demo. Se
+  bajó a 25% (~38% de ocupación esperada, ver comentario en
+  `SeedMockupData::seedReservas()`). Además, la línea de tiempo no daba
+  ninguna pista visual de que un tramo libre fuera clickeable —
+  `onTimelineClick()` funcionaba bien, pero un click sobre un tramo ya
+  pasado o ya ocupado fallaba en silencio (sin toast, sin mensaje), lo
+  que se sentía como "no pasa nada" para quien probaba. Se agregó: texto
+  fijo arriba de la grilla ("Click en cualquier espacio libre... para
+  reservar"), fondo con `hover:bg-emerald-100/90` en toda la franja
+  clickeable, una etiqueta centrada "+ Click para reservar" cuando la
+  sala no tiene ningún tramo ese día, y toasts de error explícitos para
+  los dos casos que antes retornaban sin avisar (hora ya pasada / hora ya
+  ocupada) — mismo patrón en `SalasView.vue` y `PortalSalasView.vue`. Si
+  agregás un nuevo caso de "click inválido" a `onTimelineClick()`, no lo
+  dejes retornar en silencio.
+- **Admin puede agendar en una hora ya pasada hoy; el resto del staff y
+  el portal, no** (2026-08-21, mismo día que las entradas anteriores):
+  hasta acá `ReservaSalaService::validarTramo()` no chequeaba en
+  absoluto si `hora_inicio` ya había pasado — la única protección era el
+  guard del frontend en `onTimelineClick()` (`SalasView.vue`/
+  `PortalSalasView.vue`), que bloqueaba el click para TODOS por igual.
+  Ahora hay una regla real: `validarTramo(array &$data, bool $inmediata,
+  bool $permitirHoraPasada = false)` rechaza con 422 ("Esa hora ya pasó")
+  una reserva de hoy con `hora_inicio < now()`, salvo que
+  `$permitirHoraPasada` sea `true` — y **solo** `SalaController::
+  storeReserva()` lo pasa en `true`, condicionado a
+  `$request->user()->rol === 'admin'` (mismo criterio que
+  `EnsureIsAdmin`, ver convención 7). `PortalController::reservarSala()`
+  nunca lo pasa (siempre `false` por default) — un usuario del portal
+  jamás puede agendar en el pasado, sin excepción. La regla se ignora
+  automáticamente cuando `$inmediata` es `true` (siempre usa la hora real
+  del servidor, nunca puede quedar en el pasado). **El chequeo de si ya
+  está ocupada sigue aplicando igual para el admin** — el bypass es solo
+  sobre "¿ya pasó la hora?", no sobre solapamiento.
+  Frontend: `esAdmin = computed(() => auth.staff?.rol === 'admin')` en
+  `SalasView.vue` (no aplica a `PortalSalasView.vue`, ahí no existe el
+  concepto de admin) — condiciona tanto el guard de `onTimelineClick()`
+  como el piso de `horaInicioOpciones()` (el `<select>` de hora de inicio
+  del modal), para que un admin vea y pueda elegir horas pasadas de hoy
+  en el dropdown, no solo hacer click en el pasado en la línea de tiempo.
+  Como con cualquier restricción de rol: **el backend es la única capa
+  que realmente protege** — el chequeo del frontend es solo para no
+  mostrarle a un staff no-admin una opción que el servidor rechazaría
+  igual. Tests nuevos en `SalaReservaTest.php` (staff no-admin bloqueado,
+  admin permitido, admin igual bloqueado si ya está ocupada, portal
+  bloqueado) — **ojo**: agregar este chequeo hizo que 4 tests ya
+  existentes empezaran a fallar de forma no determinística (usaban
+  `now()->toDateString()` con una hora hardcodeada tipo `'14:00'`, sin
+  fijar el reloj — si el test corría después de esa hora en el reloj
+  real de la máquina, la reserva "de prueba" ya quedaba en el pasado de
+  verdad). Se corrigieron fijando `Carbon::setTestNow(now()->setTime(6,
+  0))` al principio de esos tests (`PortalReservaTest.php`) o ajustando
+  el horario de la reserva a uno posterior al `Carbon::setTestNow()` ya
+  fijado en el test (`SalaConfirmacionAsistenciaTest.php`). Si escribís
+  un test nuevo que reserva "hoy" con una hora fija, fijá el reloj
+  también — no asumas que la hora hardcodeada va a seguir siendo futura.
+  Verificado además con `curl` real: login como staff no-admin (creado
+  y borrado solo para la prueba) rechazado con 422, mismo intento como
+  admin aceptado con 201.
 
 ## Checklist antes de dar un módulo por terminado
 

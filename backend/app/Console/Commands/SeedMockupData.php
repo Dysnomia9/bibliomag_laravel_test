@@ -485,7 +485,13 @@ class SeedMockupData extends Command
                 $cierre = Carbon::parse(config('salas.cierre'));
 
                 while ($cursor->lessThan($cierre)) {
-                    if (random_int(0, 100) > 55) {
+                    // 25% de probabilidad de ocupar cada tramo candidato — da una ocupación
+                    // esperada de ~38% del día (25% de aceptar × duración promedio 75 min,
+                    // contra 75% de rechazar × 30 min de la granularidad). A propósito bajo:
+                    // con 55% quedaba prácticamente lleno todo el día en las 18 salas, sin
+                    // huecos reales para poder probar el flujo de "reservar en un espacio
+                    // libre" en la demo.
+                    if (random_int(0, 100) > 25) {
                         $cursor->addMinutes(config('salas.granularidad'));
 
                         continue;

@@ -145,7 +145,7 @@ class ReservaSalaService
      * Compartido entre SalaController::storeReserva() y PortalController::
      * reservarSala() (ver convención 4 de CLAUDE.md).
      */
-    public function validarTramo(array &$data, bool $inmediata): ?string
+    public function validarTramo(array &$data, bool $inmediata, bool $permitirHoraPasada = false): ?string
     {
         if ($inmediata) {
             $data['hora_inicio'] = now()->format('H:i');
@@ -156,6 +156,15 @@ class ReservaSalaService
 
         if ($horaFin->lessThanOrEqualTo($horaInicio)) {
             return 'La hora de término debe ser posterior a la hora de inicio.';
+        }
+
+        // Fuera de 'inmediata' (que siempre usa la hora real del servidor, nunca
+        // queda en el pasado), por defecto no se puede agendar una hora que ya pasó
+        // hoy — salvo que el caller pase $permitirHoraPasada=true (solo el staff con
+        // rol admin, ver SalaController::storeReserva()). El portal nunca pasa esto
+        // en true: un usuario del portal jamás puede agendar en el pasado.
+        if (! $inmediata && ! $permitirHoraPasada && $data['fecha'] === now()->toDateString() && $horaInicio->format('H:i') < now()->format('H:i')) {
+            return 'Esa hora ya pasó — elige un horario desde ahora en adelante.';
         }
 
         $apertura = Carbon::parse(config('salas.apertura'));

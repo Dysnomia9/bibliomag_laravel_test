@@ -5,9 +5,17 @@ import ApiErrorBanner from '@/components/ApiErrorBanner.vue'
 import api from '@/services/api'
 import { useToast } from '@/composables/useToast'
 import { formatRut } from '@/composables/useRut'
+import { useAuthStore } from '@/stores/auth'
 import type { Sala, TramoReserva } from '@/types'
 
 const toast = useToast()
+const auth = useAuthStore()
+// Solo el admin puede agendar en un horario ya pasado (ej. registrar algo que se
+// atendió sin pasar por el sistema) — el resto del staff sigue restringido a "desde
+// ahora en adelante", igual que antes. El backend re-valida esto igual (ver
+// ReservaSalaService::validarTramo()), esto solo evita mostrar una opción que el
+// servidor rechazaría para quien no es admin.
+const esAdmin = computed(() => auth.staff?.rol === 'admin')
 
 const hoy = new Date().toISOString().slice(0, 10)
 
@@ -180,7 +188,7 @@ const modalDuracionesValidas = computed(() => DURACIONES.filter((d) => d >= dura
 const horaInicioOpciones = computed(() => {
   const opciones: string[] = []
   let minimoInicio = aperturaMin.value
-  if (esHoy.value) {
+  if (esHoy.value && !esAdmin.value) {
     minimoInicio = Math.max(minimoInicio, Math.ceil(ahoraMin.value / granularidad.value) * granularidad.value)
   }
   for (let m = minimoInicio; m <= cierreMin.value - duracionMinima.value; m += granularidad.value) {
@@ -219,8 +227,14 @@ function onTimelineClick(sala: Sala, event: MouseEvent) {
   const fraccion = (event.clientX - rect.left) / rect.width
   const minutoClickeado = aperturaMin.value + fraccion * totalMin.value
 
-  if (esHoy.value && minutoClickeado < ahoraMin.value) return
-  if (disponibilidadDesde(sala, Math.ceil(minutoClickeado / granularidad.value) * granularidad.value) <= 0) return
+  if (esHoy.value && !esAdmin.value && minutoClickeado < ahoraMin.value) {
+    toast.error('Esa hora ya pasó — elige un horario desde ahora en adelante, o usa "Reservar ahora".')
+    return
+  }
+  if (disponibilidadDesde(sala, Math.ceil(minutoClickeado / granularidad.value) * granularidad.value) <= 0) {
+    toast.error('Esa hora ya está ocupada en esta sala.')
+    return
+  }
 
   abrirModalProgramado(sala, minutoClickeado)
 }
@@ -564,6 +578,9 @@ function formatCuentaRegresiva(segundos: number) {
       </div>
 
       <div class="bg-white rounded-xl shadow-md p-5">
+        <p class="text-xs text-gray-400 mb-3">
+          Click en cualquier espacio libre (verde) de la línea de tiempo para reservar esa sala a esa hora.
+        </p>
         <div class="flex text-[10px] font-medium text-gray-400 mb-2 px-[132px] justify-between">
           <span v-for="h in [8, 10, 12, 14, 16, 18, 20]" :key="h">{{ String(h).padStart(2, '0') }}:00</span>
         </div>
@@ -574,7 +591,7 @@ function formatCuentaRegresiva(segundos: number) {
               <div class="text-xs text-gray-400">{{ sala.capacidad }} personas</div>
             </div>
             <div
-              class="relative h-12 flex-1 bg-emerald-50/70 rounded-xl overflow-hidden border border-emerald-100 shadow-inner cursor-pointer"
+              class="group relative h-12 flex-1 bg-emerald-50/70 hover:bg-emerald-100/90 rounded-xl overflow-hidden border border-emerald-100 shadow-inner cursor-pointer transition-colors"
               @click="onTimelineClick(sala, $event)"
             >
               <div class="absolute inset-0 flex pointer-events-none">
@@ -585,6 +602,12 @@ function formatCuentaRegresiva(segundos: number) {
                   :style="{ left: pct(`${h}:00`) + '%' }"
                 />
               </div>
+              <p
+                v-if="!sala.tramos.length"
+                class="absolute inset-0 flex items-center justify-center text-[11px] font-medium text-emerald-700/60 group-hover:text-emerald-700 pointer-events-none transition-colors"
+              >
+                + Click para reservar
+              </p>
               <div
                 v-if="esHoy"
                 class="absolute inset-y-0 left-0 bg-gray-500/[0.06] pointer-events-none"

@@ -388,6 +388,96 @@ class SalaReservaTest extends TestCase
         $response->assertStatus(201)->assertJsonPath('hora_inicio', '15:42:00');
     }
 
+    public function test_staff_no_admin_no_puede_reservar_hora_ya_pasada_hoy(): void
+    {
+        Sanctum::actingAs(Staff::factory()->create(['rol' => 'staff']));
+        Carbon::setTestNow('2026-07-10 15:00:00');
+
+        $sala = Sala::factory()->create();
+        $usuarios = Usuario::factory()->count(2)->create();
+
+        $response = $this->postJson('/api/reservas', [
+            'sala_id' => $sala->id,
+            'fecha' => '2026-07-10',
+            'hora_inicio' => '10:00',
+            'hora_fin' => '11:00',
+            'cantidad_personas' => 2,
+            'ruts' => $usuarios->pluck('rut')->all(),
+        ]);
+
+        $response->assertStatus(422)->assertJsonPath('message', 'Esa hora ya pasó — elige un horario desde ahora en adelante.');
+    }
+
+    public function test_admin_puede_reservar_hora_ya_pasada_hoy(): void
+    {
+        Sanctum::actingAs(Staff::factory()->create(['rol' => 'admin']));
+        Carbon::setTestNow('2026-07-10 15:00:00');
+
+        $sala = Sala::factory()->create();
+        $usuarios = Usuario::factory()->count(2)->create();
+
+        $response = $this->postJson('/api/reservas', [
+            'sala_id' => $sala->id,
+            'fecha' => '2026-07-10',
+            'hora_inicio' => '10:00',
+            'hora_fin' => '11:00',
+            'cantidad_personas' => 2,
+            'ruts' => $usuarios->pluck('rut')->all(),
+        ]);
+
+        $response->assertStatus(201);
+    }
+
+    /** El admin sigue sin poder agendar sobre un tramo ya ocupado, aunque sea en el pasado. */
+    public function test_admin_no_puede_reservar_hora_pasada_si_ya_esta_ocupada(): void
+    {
+        Sanctum::actingAs(Staff::factory()->create(['rol' => 'admin']));
+        Carbon::setTestNow('2026-07-10 15:00:00');
+
+        $sala = Sala::factory()->create();
+        Reserva::factory()->conParticipantes(Usuario::factory()->count(2)->create())->create([
+            'sala_id' => $sala->id,
+            'fecha' => '2026-07-10',
+            'hora_inicio' => '10:00',
+            'hora_fin' => '11:00',
+            'cantidad_personas' => 2,
+        ]);
+
+        $usuarios = Usuario::factory()->count(2)->create();
+
+        $response = $this->postJson('/api/reservas', [
+            'sala_id' => $sala->id,
+            'fecha' => '2026-07-10',
+            'hora_inicio' => '10:00',
+            'hora_fin' => '11:00',
+            'cantidad_personas' => 2,
+            'ruts' => $usuarios->pluck('rut')->all(),
+        ]);
+
+        $response->assertStatus(409);
+    }
+
+    public function test_usuario_del_portal_no_puede_reservar_hora_ya_pasada_hoy(): void
+    {
+        $usuario = Usuario::factory()->create();
+        Sanctum::actingAs($usuario);
+        Carbon::setTestNow('2026-07-10 15:00:00');
+
+        $sala = Sala::factory()->create();
+        $otro = Usuario::factory()->create();
+
+        $response = $this->postJson('/api/mi/reservas', [
+            'sala_id' => $sala->id,
+            'fecha' => '2026-07-10',
+            'hora_inicio' => '10:00',
+            'hora_fin' => '11:00',
+            'cantidad_personas' => 2,
+            'ruts' => [$usuario->rut, $otro->rut],
+        ]);
+
+        $response->assertStatus(422)->assertJsonPath('message', 'Esa hora ya pasó — elige un horario desde ahora en adelante.');
+    }
+
     public function test_duracion_maxima_disponible_calcula_minutos_correctos(): void
     {
         $sala = Sala::factory()->create();

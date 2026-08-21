@@ -152,8 +152,14 @@ function onTimelineClick(sala: Sala, event: MouseEvent) {
   const fraccion = (event.clientX - rect.left) / rect.width
   const minutoClickeado = aperturaMin.value + fraccion * totalMin.value
 
-  if (minutoClickeado < ahoraMin.value) return
-  if (disponibilidadDesde(sala, Math.ceil(minutoClickeado / granularidad.value) * granularidad.value) <= 0) return
+  if (minutoClickeado < ahoraMin.value) {
+    toast.error('Esa hora ya pasó — elige un horario desde ahora en adelante, o usa "Reservar ahora".')
+    return
+  }
+  if (disponibilidadDesde(sala, Math.ceil(minutoClickeado / granularidad.value) * granularidad.value) <= 0) {
+    toast.error('Esa hora ya está ocupada en esta sala.')
+    return
+  }
 
   abrirModal(sala, minutoClickeado)
 }
@@ -311,6 +317,9 @@ async function cancelarPropia(tramo: TramoReserva) {
       </div>
 
       <div class="bg-white border border-gray-200 rounded-lg p-4">
+        <p class="text-xs text-gray-400 mb-3">
+          Click en cualquier espacio libre (verde) de la línea de tiempo para reservar esa sala a esa hora.
+        </p>
         <div class="flex text-[10px] font-medium text-gray-400 mb-2 px-[112px] justify-between">
           <span v-for="h in [8, 10, 12, 14, 16, 18, 20]" :key="h">{{ String(h).padStart(2, '0') }}:00</span>
         </div>
@@ -321,7 +330,7 @@ async function cancelarPropia(tramo: TramoReserva) {
               <div class="text-xs text-gray-400">{{ sala.capacidad }} personas</div>
             </div>
             <div
-              class="relative h-12 flex-1 bg-emerald-50/70 rounded-xl overflow-hidden border border-emerald-100 shadow-inner cursor-pointer"
+              class="group relative h-12 flex-1 bg-emerald-50/70 hover:bg-emerald-100/90 rounded-xl overflow-hidden border border-emerald-100 shadow-inner cursor-pointer transition-colors"
               @click="onTimelineClick(sala, $event)"
             >
               <div class="absolute inset-0 flex pointer-events-none">
@@ -332,6 +341,12 @@ async function cancelarPropia(tramo: TramoReserva) {
                   :style="{ left: pct(`${h}:00`) + '%' }"
                 />
               </div>
+              <p
+                v-if="!sala.tramos.length"
+                class="absolute inset-0 flex items-center justify-center text-[11px] font-medium text-emerald-700/60 group-hover:text-emerald-700 pointer-events-none transition-colors"
+              >
+                + Click para reservar
+              </p>
               <div class="absolute inset-y-0 left-0 bg-gray-500/[0.06] pointer-events-none" :style="{ width: nowPct + '%' }" />
               <div
                 v-for="tramo in sala.tramos"

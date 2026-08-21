@@ -116,10 +116,16 @@ class SalaConfirmacionAsistenciaTest extends TestCase
         Carbon::setTestNow('2026-08-15 14:16:00');
         $nuevos = Usuario::factory()->count(2)->create();
 
+        // El nuevo intento arranca en 14:30 (el próximo tramo alineado a la
+        // granularidad desde "ahora"), no en el 14:00 original — con horario continuo,
+        // un tramo cuyo inicio ya pasó no se puede volver a reservar tal cual (ver
+        // ReservaSalaService::validarTramo(), regla nueva de "hora ya pasada"); lo que
+        // importa acá es que la sala vuelve a estar libre tras el no-show, no el
+        // horario exacto de la reserva original.
         $response = $this->postJson('/api/reservas', [
             'sala_id' => $sala->id,
             'fecha' => '2026-08-15',
-            'hora_inicio' => '14:00',
+            'hora_inicio' => '14:30',
             'hora_fin' => '16:00',
             'cantidad_personas' => 2,
             'ruts' => $nuevos->pluck('rut')->all(),

@@ -6,12 +6,19 @@ use App\Models\Reserva;
 use App\Models\Sala;
 use App\Models\Usuario;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class PortalReservaTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+        parent::tearDown();
+    }
 
     public function test_usuario_no_puede_cancelar_reserva_que_no_le_pertenece(): void
     {
@@ -58,6 +65,7 @@ class PortalReservaTest extends TestCase
 
     public function test_usuario_puede_reservar_para_el_dia_de_hoy(): void
     {
+        Carbon::setTestNow(now()->setTime(6, 0));
         $usuario = Usuario::factory()->create();
         Sanctum::actingAs($usuario);
         $sala = Sala::factory()->create();
@@ -83,6 +91,7 @@ class PortalReservaTest extends TestCase
      */
     public function test_usuario_puede_reservar_otra_sala_sin_solape_de_horario(): void
     {
+        Carbon::setTestNow(now()->setTime(6, 0));
         $usuario = Usuario::factory()->create();
         $otro = Usuario::factory()->create();
         $salaVieja = Sala::factory()->create();
@@ -114,6 +123,7 @@ class PortalReservaTest extends TestCase
 
     public function test_usuario_no_puede_exceder_la_cuota_diaria(): void
     {
+        Carbon::setTestNow(now()->setTime(6, 0));
         $usuario = Usuario::factory()->create();
         $otro = Usuario::factory()->create();
         $salaVieja = Sala::factory()->create();
