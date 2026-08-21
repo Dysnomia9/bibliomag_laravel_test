@@ -29,18 +29,7 @@ class PortalReservaLibroController extends Controller
             ->latest('created_at')
             ->get();
 
-        foreach ($reservas as $reserva) {
-            if ($reserva->estado !== 'en_cola') {
-                continue;
-            }
-
-            $posicion = ReservaLibro::where('libro_id', $reserva->libro_id)
-                ->where('estado', 'en_cola')
-                ->where('id', '<', $reserva->id)
-                ->count() + 1;
-
-            $reserva->setAttribute('posicion', $posicion);
-        }
+        $this->reservaLibroService->enriquecerColaLibro($reservas);
 
         return response()->json($reservas);
     }

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Ejemplar;
 use App\Models\Libro;
+use App\Models\Prestamo;
 use App\Models\ReservaLibro;
 use App\Models\Usuario;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -53,6 +54,27 @@ class PortalReservaLibroTest extends TestCase
 
         $response->assertStatus(200);
         $this->assertSame(2, collect($response->json())->firstWhere('usuario_id', $usuario->id)['posicion']);
+    }
+
+    public function test_usuario_ve_la_proxima_fecha_de_devolucion_estimada_en_su_listado(): void
+    {
+        $ejemplar = Ejemplar::factory()->for(Libro::factory())->create(['disponible' => false]);
+        $fechaDevolucion = now()->addDays(3);
+        Prestamo::factory()->create([
+            'usuario_id' => Usuario::factory()->create()->id,
+            'ejemplar_id' => $ejemplar->id,
+            'tipo_item' => 'libro',
+            'fecha_devolucion' => $fechaDevolucion,
+        ]);
+
+        $usuario = Usuario::factory()->create();
+        Sanctum::actingAs($usuario);
+        $this->postJson('/api/mi/reservas-libro', ['libro_id' => $ejemplar->libro_id])->assertStatus(201);
+
+        $response = $this->getJson('/api/mi/reservas-libro');
+
+        $reserva = collect($response->json())->firstWhere('usuario_id', $usuario->id);
+        $this->assertSame($fechaDevolucion->toDateString(), \Illuminate\Support\Carbon::parse($reserva['proxima_fecha_devolucion'])->toDateString());
     }
 
     public function test_usuario_no_puede_cancelar_la_reserva_de_otro(): void

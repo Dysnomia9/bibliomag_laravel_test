@@ -3,8 +3,10 @@
 namespace App\Services;
 
 use App\Models\Ejemplar;
+use App\Models\Prestamo;
 use App\Models\ReservaLibro;
 use App\Notifications\ReservaListaParaRetirarNotification;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -107,6 +109,39 @@ class ReservaLibroService
         ]);
 
         return [$reserva->load('libro'), null, 201];
+    }
+
+    /**
+     * Enriquece las reservas 'en_cola' de la colección con `posicion` (lugar en la
+     * fila, 1 = siguiente) y `proxima_fecha_devolucion` (la fecha de devolución más
+     * próxima entre los préstamos activos de copias de ese libro — una estimación de
+     * cuándo podría liberarse una copia, no una promesa exacta: no considera cuántas
+     * personas hay delante en la fila ni cuántas copias existen, solo la fecha
+     * acordada más cercana). Compartido entre ReservaLibroController (staff) y
+     * PortalReservaLibroController (portal) para no duplicar esta lógica dos veces
+     * (ya pasó una vez con la posición en la cola — ver convención 4 de CLAUDE.md).
+     *
+     * @param  Collection<int, ReservaLibro>  $reservas
+     */
+    public function enriquecerColaLibro(Collection $reservas): void
+    {
+        foreach ($reservas as $reserva) {
+            if ($reserva->estado !== 'en_cola') {
+                continue;
+            }
+
+            $posicion = ReservaLibro::where('libro_id', $reserva->libro_id)
+                ->where('estado', 'en_cola')
+                ->where('id', '<', $reserva->id)
+                ->count() + 1;
+            $reserva->setAttribute('posicion', $posicion);
+
+            $proximaDevolucion = Prestamo::whereHas('ejemplar', fn ($q) => $q->where('libro_id', $reserva->libro_id))
+                ->where('estado', '!=', 'devuelto')
+                ->whereNotNull('fecha_devolucion')
+                ->min('fecha_devolucion');
+            $reserva->setAttribute('proxima_fecha_devolucion', $proximaDevolucion);
+        }
     }
 
     public function cancelar(ReservaLibro $reserva): void

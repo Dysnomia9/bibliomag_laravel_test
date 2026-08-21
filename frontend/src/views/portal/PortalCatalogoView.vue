@@ -128,6 +128,9 @@ async function cancelar(reserva: ReservaLibro) {
                 </span>
                 <span v-if="r.estado === 'en_cola' && r.posicion" class="text-[11px] text-gray-400">
                   Lugar #{{ r.posicion }} en la fila
+                  <template v-if="r.proxima_fecha_devolucion">
+                    · una copia debería devolverse el {{ new Date(r.proxima_fecha_devolucion).toLocaleDateString('es-CL') }}
+                  </template>
                 </span>
                 <span v-else-if="r.estado === 'pendiente' && r.fecha_retiro" class="text-[11px] text-gray-400">
                   Retirar antes del {{ new Date(r.fecha_retiro).toLocaleDateString('es-CL') }}

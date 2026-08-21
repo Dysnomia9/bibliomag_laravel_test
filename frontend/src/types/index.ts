@@ -211,8 +211,12 @@ export type ReservaLibro = {
   fecha_reserva: string
   fecha_retiro: string | null
   estado: 'pendiente' | 'retirado' | 'cancelado' | 'en_cola'
-  // Solo presente cuando estado === 'en_cola' — lugar en la fila (1 = siguiente).
+  // Ambos solo presentes cuando estado === 'en_cola'.
   posicion?: number | null
+  // Estimación (no una promesa exacta): la fecha de devolución más próxima entre los
+  // préstamos activos de copias de este libro. Puede venir null si por algún motivo
+  // no hay ningún préstamo activo con fecha registrada.
+  proxima_fecha_devolucion?: string | null
   libro?: Libro
   ejemplar?: Ejemplar
 }

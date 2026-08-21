@@ -22,7 +22,7 @@ class ReservaLibroController extends Controller
         }
 
         $reservas = $query->latest('fecha_reserva')->get();
-        $this->adjuntarPosicionEnCola($reservas);
+        $this->reservaLibroService->enriquecerColaLibro($reservas);
 
         return response()->json($reservas);
     }
@@ -59,22 +59,5 @@ class ReservaLibroController extends Controller
         $this->reservaLibroService->cancelar($reservaLibro);
 
         return response()->json($reservaLibro->fresh());
-    }
-
-    /** @param  \Illuminate\Support\Collection<int, ReservaLibro>  $reservas */
-    private function adjuntarPosicionEnCola($reservas): void
-    {
-        foreach ($reservas as $reserva) {
-            if ($reserva->estado !== 'en_cola') {
-                continue;
-            }
-
-            $posicion = ReservaLibro::where('libro_id', $reserva->libro_id)
-                ->where('estado', 'en_cola')
-                ->where('id', '<', $reserva->id)
-                ->count() + 1;
-
-            $reserva->setAttribute('posicion', $posicion);
-        }
     }
 }

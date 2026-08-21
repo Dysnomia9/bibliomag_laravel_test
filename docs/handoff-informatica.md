@@ -14,7 +14,7 @@ El sistema está funcionalmente completo: gestión de usuarios, préstamos,
 devoluciones, reservas de sala y de libro, catalogación, reportes,
 dashboard, código QR de acceso, portal de autoservicio para
 estudiantes/docentes/funcionarios, y panel de administración. Corre 100%
-en Docker. Tiene 215 tests automatizados que verifican el comportamiento
+en Docker. Tiene 218 tests automatizados que verifican el comportamiento
 real contra una base de datos Postgres (no simulada) — no es una demo, es
 una implementación completa.
 
@@ -100,7 +100,7 @@ Para que no se lean como carencias en la revisión:
 
 1. Levante `docker-compose.prod.yml` en un ambiente de prueba propio
    (staging) con datos ficticios primero, no directo a producción.
-2. Corra `docker compose exec backend php artisan test` ahí — si los 215
+2. Corra `docker compose exec backend php artisan test` ahí — si los 218
    tests pasan en su infraestructura, es una buena señal de que el entorno
    está bien armado.
 3. Revise que `APP_DEBUG=false` haya quedado activo (ya viene forzado por

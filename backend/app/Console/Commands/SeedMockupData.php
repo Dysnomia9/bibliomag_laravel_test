@@ -494,8 +494,17 @@ class SeedMockupData extends Command
                     $duracion = min($duraciones[array_rand($duraciones)], $cursor->diffInMinutes($cierre));
                     $fin = $cursor->copy()->addMinutes($duracion);
 
-                    $yaTermino = ! $esHoy || $fin->format('H:i:s') <= $ahora->format('H:i:s');
-                    $this->crearReservaMockup($sala, $usuarios, $fecha, $cursor->format('H:i:s'), $fin->format('H:i:s'), $yaTermino);
+                    // 'terminada': el tramo ya pasó (o es de un día anterior) — se simula
+                    // asistencia real o no-show, como siempre. 'en_curso': el tramo empezó
+                    // pero no ha terminado — mayoría con llegada ya confirmada, para que la
+                    // demo muestre salas realmente en uso, no solo "por confirmar". 'futura':
+                    // todavía no empieza, se deja intacta.
+                    $fase = match (true) {
+                        ! $esHoy || $fin->format('H:i:s') <= $ahora->format('H:i:s') => 'terminada',
+                        $cursor->format('H:i:s') <= $ahora->format('H:i:s') => 'en_curso',
+                        default => 'futura',
+                    };
+                    $this->crearReservaMockup($sala, $usuarios, $fecha, $cursor->format('H:i:s'), $fin->format('H:i:s'), $fase);
                     $total++;
                     $cursor = $fin->copy();
                 }
@@ -522,7 +531,7 @@ class SeedMockupData extends Command
 
         $porConfirmar = 0;
         foreach ($salasLibres->random(min(3, $salasLibres->count())) as $sala) {
-            $this->crearReservaMockup($sala, $usuarios, $fechaHoy, $inicioActual->format('H:i:s'), $finActual->format('H:i:s'), yaTermino: false, minutosParaVencer: random_int(2, 5));
+            $this->crearReservaMockup($sala, $usuarios, $fechaHoy, $inicioActual->format('H:i:s'), $finActual->format('H:i:s'), fase: 'en_curso', minutosParaVencer: random_int(2, 5));
             $porConfirmar++;
             $total++;
         }
@@ -533,12 +542,16 @@ class SeedMockupData extends Command
 
     /**
      * @param  \Illuminate\Support\Collection<int, Usuario>  $usuarios
+     * @param  string  $fase  'terminada' (el tramo ya pasó — se simula asistencia real
+     *   o no-show, 85/15), 'en_curso' (el tramo ya empezó y no ha terminado — mayoría
+     *   con llegada ya confirmada, para que la demo no muestre todo como "por
+     *   confirmar"), o 'futura' (todavía no empieza, se deja intacta sin simular nada).
      * @param  int|null  $minutosParaVencer  Si viene, la reserva queda 'activa' sin
      *   confirmar con el plazo de 15 minutos venciendo en ese lapso (backdatea
-     *   created_at) — para el caso "por confirmar" de seedReservas(). Si no viene y
-     *   $yaTermino es true, se simula asistencia real (o no-show real, 15% de las veces).
+     *   created_at) — para el caso "por confirmar, a punto de vencer" de
+     *   seedReservas(), y hace que $fase se ignore por completo.
      */
-    private function crearReservaMockup($sala, $usuarios, string $fecha, string $inicio, string $fin, bool $yaTermino, ?int $minutosParaVencer = null): Reserva
+    private function crearReservaMockup($sala, $usuarios, string $fecha, string $inicio, string $fin, string $fase, ?int $minutosParaVencer = null): Reserva
     {
         $cantidadPersonas = random_int(2, 5);
         $participantes = $usuarios->random(min($cantidadPersonas, $usuarios->count()))->values();
@@ -563,7 +576,7 @@ class SeedMockupData extends Command
             return $reserva;
         }
 
-        if ($yaTermino) {
+        if ($fase === 'terminada') {
             if (random_int(0, 100) < 85) {
                 $duracionMin = Carbon::parse($inicio)->diffInMinutes(Carbon::parse($fin));
                 $horaLlegada = Carbon::parse($fecha.' '.$inicio)->addMinutes(random_int(0, 10));
@@ -576,6 +589,26 @@ class SeedMockupData extends Command
                     'via' => random_int(0, 1) ? 'manual' : 'BC',
                 ]);
             } else {
+                $reserva->update(['estado' => 'no_show']);
+            }
+        } elseif ($fase === 'en_curso') {
+            $plazo = config('salas.plazo_confirmacion', 15);
+            $minutosDesdeInicio = Carbon::parse($fecha.' '.$inicio)->diffInMinutes(now());
+            // Si ya pasó el plazo de 15 min sin confirmar, en el sistema real ya habría
+            // quedado 'no_show' por la expiración perezosa — casi nunca debería seguir
+            // 'activa' sin confirmar a esta altura. Dentro del plazo es normal que
+            // todavía no todos hayan pasado por mesón, así que la probabilidad es menor.
+            $probabilidadConfirmada = $minutosDesdeInicio > $plazo ? 90 : 55;
+
+            if (random_int(0, 100) < $probabilidadConfirmada) {
+                $maxOffset = max(0, min(10, $minutosDesdeInicio));
+                $horaLlegada = Carbon::parse($fecha.' '.$inicio)->addMinutes(random_int(0, $maxOffset));
+                $reserva->update([
+                    'prestado_por' => 'Sistema (mockup)',
+                    'hora_prestamo_real' => $horaLlegada,
+                    'via' => random_int(0, 1) ? 'manual' : 'BC',
+                ]);
+            } elseif ($minutosDesdeInicio > $plazo) {
                 $reserva->update(['estado' => 'no_show']);
             }
         }

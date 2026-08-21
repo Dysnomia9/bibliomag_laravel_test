@@ -668,6 +668,9 @@ function formatFecha(iso: string | null) {
                     </span>
                     <span v-if="r.estado === 'en_cola' && r.posicion" class="block text-[11px] text-gray-400 mt-0.5">
                       Lugar #{{ r.posicion }} en la fila
+                      <template v-if="r.proxima_fecha_devolucion">
+                        · una copia debería devolverse el {{ formatFecha(r.proxima_fecha_devolucion) }}
+                      </template>
                     </span>
                   </td>
                   <td class="px-6 py-3">

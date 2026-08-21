@@ -55,6 +55,44 @@ class ReservaLibroColaTest extends TestCase
         $this->assertSame(2, $porUsuario[$segundo->id]['posicion']);
     }
 
+    public function test_index_incluye_la_proxima_fecha_de_devolucion_estimada(): void
+    {
+        Sanctum::actingAs(Staff::factory()->create());
+        $ejemplar = Ejemplar::factory()->for(Libro::factory())->create(['disponible' => false]);
+        $fechaDevolucion = now()->addDays(5);
+
+        Prestamo::factory()->create([
+            'usuario_id' => Usuario::factory()->create()->id,
+            'ejemplar_id' => $ejemplar->id,
+            'tipo_item' => 'libro',
+            'fecha_devolucion' => $fechaDevolucion,
+        ]);
+
+        $enCola = Usuario::factory()->create();
+        $this->postJson('/api/reservas-libro', ['usuario_id' => $enCola->id, 'codigo_barras' => $ejemplar->codigo_barras])->assertStatus(201);
+
+        $response = $this->getJson('/api/reservas-libro');
+
+        $response->assertStatus(200);
+        $reserva = collect($response->json())->firstWhere('usuario_id', $enCola->id);
+        $this->assertSame($fechaDevolucion->toDateString(), \Illuminate\Support\Carbon::parse($reserva['proxima_fecha_devolucion'])->toDateString());
+    }
+
+    /** Sin ningún préstamo activo sobre copias de ese libro, la estimación queda null en vez de fallar. */
+    public function test_proxima_fecha_de_devolucion_es_null_sin_prestamos_activos(): void
+    {
+        Sanctum::actingAs(Staff::factory()->create());
+        $ejemplar = Ejemplar::factory()->for(Libro::factory())->create(['disponible' => false]);
+
+        $enCola = Usuario::factory()->create();
+        $this->postJson('/api/reservas-libro', ['usuario_id' => $enCola->id, 'codigo_barras' => $ejemplar->codigo_barras])->assertStatus(201);
+
+        $response = $this->getJson('/api/reservas-libro');
+
+        $reserva = collect($response->json())->firstWhere('usuario_id', $enCola->id);
+        $this->assertNull($reserva['proxima_fecha_devolucion']);
+    }
+
     public function test_devolver_prestamo_promueve_al_primero_de_la_cola_en_vez_de_liberar_el_ejemplar(): void
     {
         Sanctum::actingAs(Staff::factory()->create());

@@ -25,6 +25,10 @@ const enviando = ref(false)
 // formato del identificador (un email siempre tiene "@", un RUT chileno nunca
 // lo tiene) y se delega al store correspondiente, sin duplicar la lógica de
 // login que ya vive en AuthController/UsuarioAuthController.
+function onOlvidoPassword() {
+  toast.info('Para recuperar tu contraseña, contacta a un administrador o acércate al mesón de la biblioteca.')
+}
+
 async function ingresar() {
   if (!identificador.value.trim() || !password.value) {
     toast.error('Ingresa tu email o RUT, y tu contraseña')
@@ -175,6 +179,10 @@ onMounted(() => {
             {{ enviando ? 'Ingresando…' : 'Ingresar' }}
           </button>
         </form>
+
+        <button type="button" @click="onOlvidoPassword" class="mt-3 w-full text-center text-sm text-acento-600 hover:text-acento-500 font-medium hover:underline">
+          ¿Olvidaste tu contraseña?
+        </button>
 
         <p class="mt-3 text-center text-xs text-biblioteca-400">
           Un solo acceso para personal de biblioteca y usuarios institucionales — se detecta

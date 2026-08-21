@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import LoginBrandPanel from '@/components/auth/LoginBrandPanel.vue'
 import logoUmag from '@/assets/logo-umag.png'
+import { useToast } from '@/composables/useToast'
 
 const email = ref('admin@umag.cl')
 const password = ref('')
@@ -11,10 +12,15 @@ const mostrarPassword = ref(false)
 const recordarme = ref(true)
 const auth = useAuthStore()
 const router = useRouter()
+const toast = useToast()
 
 async function onSubmit() {
   const ok = await auth.login(email.value, password.value)
   if (ok) router.push({ name: 'dashboard' })
+}
+
+function onOlvidoPassword() {
+  toast.info('Para recuperar tu contraseña, contacta a un administrador del sistema.')
 }
 </script>
 
@@ -112,6 +118,10 @@ async function onSubmit() {
             {{ auth.loading ? 'Ingresando…' : 'Iniciar sesión' }}
           </button>
         </form>
+
+        <button type="button" @click="onOlvidoPassword" class="mt-4 w-full text-center text-sm text-indigo-600 hover:text-indigo-700 font-medium hover:underline">
+          ¿Olvidaste tu contraseña?
+        </button>
 
         <div class="my-6 flex items-center gap-3">
           <div class="h-px flex-1 bg-gray-200"></div>
