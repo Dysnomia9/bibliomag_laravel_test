@@ -116,9 +116,17 @@ class SalaController extends Controller
         return response()->json($reserva, 201);
     }
 
+    /**
+     * Cancela la reserva sin borrar la fila (soft delete vía estado, no
+     * DB::delete()) — así queda historial de qué se canceló y cuándo, en vez de
+     * desaparecer sin dejar rastro. El resto del sistema (existeSolapamiento(),
+     * vistaDelDia(), etc.) ya excluye 'cancelada' de todo lo que importa: no
+     * bloquea el tramo, no cuenta para la cuota diaria, no aparece en la línea de
+     * tiempo.
+     */
     public function destroyReserva(Reserva $reserva)
     {
-        $reserva->delete();
+        $reserva->update(['estado' => 'cancelada']);
 
         return response()->json(null, 204);
     }

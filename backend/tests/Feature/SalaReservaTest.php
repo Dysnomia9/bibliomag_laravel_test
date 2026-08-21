@@ -495,4 +495,106 @@ class SalaReservaTest extends TestCase
         $this->assertSame(60, $service->duracionMaximaDisponible($sala->id, '2026-07-10', '15:00'));
         $this->assertSame(0, $service->duracionMaximaDisponible($sala->id, '2026-07-10', '16:30'));
     }
+
+    public function test_cancelar_reserva_no_borra_la_fila_solo_cambia_el_estado(): void
+    {
+        Sanctum::actingAs(Staff::factory()->create());
+        $reserva = Reserva::factory()->create(['fecha' => '2026-07-10', 'hora_inicio' => '10:00', 'hora_fin' => '11:00']);
+
+        $response = $this->deleteJson("/api/reservas/{$reserva->id}");
+
+        $response->assertStatus(204);
+        $this->assertDatabaseHas('reservas', ['id' => $reserva->id, 'estado' => 'cancelada']);
+    }
+
+    public function test_cancelar_reserva_libera_el_tramo_para_re_reservar_de_inmediato(): void
+    {
+        Sanctum::actingAs(Staff::factory()->create());
+        $sala = Sala::factory()->create();
+        $reserva = Reserva::factory()->conParticipantes(Usuario::factory()->count(2)->create())->create([
+            'sala_id' => $sala->id,
+            'fecha' => '2026-07-10',
+            'hora_inicio' => '10:00',
+            'hora_fin' => '11:00',
+            'cantidad_personas' => 2,
+        ]);
+
+        $this->deleteJson("/api/reservas/{$reserva->id}")->assertStatus(204);
+
+        $usuarios = Usuario::factory()->count(2)->create();
+        $response = $this->postJson('/api/reservas', [
+            'sala_id' => $sala->id,
+            'fecha' => '2026-07-10',
+            'hora_inicio' => '10:00',
+            'hora_fin' => '11:00',
+            'cantidad_personas' => 2,
+            'ruts' => $usuarios->pluck('rut')->all(),
+        ]);
+
+        $response->assertStatus(201);
+    }
+
+    public function test_reserva_cancelada_no_aparece_en_get_salas(): void
+    {
+        Sanctum::actingAs(Staff::factory()->create());
+        $reserva = Reserva::factory()->create(['fecha' => '2026-07-10', 'hora_inicio' => '10:00', 'hora_fin' => '11:00']);
+
+        $this->deleteJson("/api/reservas/{$reserva->id}")->assertStatus(204);
+
+        $response = $this->getJson('/api/salas?fecha=2026-07-10');
+        $sala = collect($response->json('salas'))->firstWhere('id', $reserva->sala_id);
+
+        $this->assertSame([], $sala['tramos']);
+    }
+
+    public function test_reserva_cancelada_no_cuenta_para_la_cuota_diaria(): void
+    {
+        Sanctum::actingAs(Staff::factory()->create());
+        $salaVieja = Sala::factory()->create();
+        $salaNueva = Sala::factory()->create();
+        $compartido = Usuario::factory()->create();
+        $otro = Usuario::factory()->create();
+
+        $reserva = Reserva::factory()->conParticipantes([$compartido, $otro])->create([
+            'sala_id' => $salaVieja->id,
+            'fecha' => '2026-07-10',
+            'hora_inicio' => '08:00',
+            'hora_fin' => '12:00',
+            'cantidad_personas' => 2,
+        ]);
+        $this->deleteJson("/api/reservas/{$reserva->id}")->assertStatus(204);
+
+        $response = $this->postJson('/api/reservas', [
+            'sala_id' => $salaNueva->id,
+            'fecha' => '2026-07-10',
+            'hora_inicio' => '14:00',
+            'hora_fin' => '16:00',
+            'cantidad_personas' => 2,
+            'ruts' => [$compartido->rut, $otro->rut],
+        ]);
+
+        $response->assertStatus(201);
+    }
+
+    public function test_no_se_puede_confirmar_llegada_de_una_reserva_cancelada(): void
+    {
+        Sanctum::actingAs(Staff::factory()->create());
+        $reserva = Reserva::factory()->create(['fecha' => '2026-07-10', 'hora_inicio' => '10:00', 'hora_fin' => '11:00']);
+        $this->deleteJson("/api/reservas/{$reserva->id}")->assertStatus(204);
+
+        $response = $this->patchJson("/api/reservas/{$reserva->id}/llegada");
+
+        $response->assertStatus(409);
+    }
+
+    public function test_no_se_puede_confirmar_devolucion_de_una_reserva_cancelada(): void
+    {
+        Sanctum::actingAs(Staff::factory()->create());
+        $reserva = Reserva::factory()->create(['fecha' => '2026-07-10', 'hora_inicio' => '10:00', 'hora_fin' => '11:00']);
+        $this->deleteJson("/api/reservas/{$reserva->id}")->assertStatus(204);
+
+        $response = $this->patchJson("/api/reservas/{$reserva->id}/devolver");
+
+        $response->assertStatus(409);
+    }
 }

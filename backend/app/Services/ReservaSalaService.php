@@ -66,6 +66,10 @@ class ReservaSalaService
      */
     public function registrarDevolucion(Reserva $reserva, Staff $staff): Reserva
     {
+        if ($reserva->estado !== 'activa') {
+            throw new \RuntimeException('Esta reserva no está activa (fue cancelada, finalizada, o no se presentaron a tiempo)');
+        }
+
         if ($reserva->hora_devolucion_real) {
             throw new \RuntimeException('Esta reserva ya tiene registrada su devolución');
         }
@@ -89,6 +93,10 @@ class ReservaSalaService
      */
     public function registrarLlegada(Reserva $reserva, Staff $staff): Reserva
     {
+        if ($reserva->estado !== 'activa') {
+            throw new \RuntimeException('Esta reserva no está activa (fue cancelada, finalizada, o no se presentaron a tiempo)');
+        }
+
         if ($reserva->hora_prestamo_real) {
             throw new \RuntimeException('Esta reserva ya tiene registrada su llegada');
         }
@@ -193,6 +201,16 @@ class ReservaSalaService
         return null;
     }
 
+    /**
+     * Solo 'activa'/'finalizada' bloquean un tramo nuevo — 'no_show' y 'cancelada'
+     * (ambas terminales, la sala nunca se usó o se liberó a propósito) no cuentan.
+     * Antes esta query no filtraba por estado en absoluto y dependía de que
+     * liberarSiVencida() recién convirtiera una 'activa' vencida a 'no_show' EN ESE
+     * MISMO request — una fila ya 'no_show' de un request anterior seguía bloqueando
+     * para siempre. Con 'cancelada' persistiendo la fila (soft delete, ver
+     * SalaController::destroyReserva()) ese mismo bug habría bloqueado cualquier
+     * tramo recién cancelado — de ahí el filtro explícito.
+     */
     public function existeSolapamiento(int $salaId, string $fecha, string $horaInicio, string $horaFin, ?int $ignorarReservaId = null): bool
     {
         $horaInicio = Carbon::parse($horaInicio)->format('H:i:s');
@@ -202,6 +220,7 @@ class ReservaSalaService
             ->where('fecha', $fecha)
             ->where('hora_inicio', '<', $horaFin)
             ->where('hora_fin', '>', $horaInicio)
+            ->whereIn('estado', ['activa', 'finalizada'])
             ->when($ignorarReservaId, fn ($query) => $query->where('id', '!=', $ignorarReservaId))
             ->get();
 
@@ -305,7 +324,7 @@ class ReservaSalaService
 
         $ocupadaAhora = Reserva::where('sala_id', $salaId)
             ->where('fecha', $fecha)
-            ->where('estado', '!=', 'no_show')
+            ->whereNotIn('estado', ['no_show', 'cancelada'])
             ->where('hora_inicio', '<=', $desde->format('H:i:s'))
             ->where('hora_fin', '>', $desde->format('H:i:s'))
             ->get()
@@ -317,7 +336,7 @@ class ReservaSalaService
 
         $siguiente = Reserva::where('sala_id', $salaId)
             ->where('fecha', $fecha)
-            ->where('estado', '!=', 'no_show')
+            ->whereNotIn('estado', ['no_show', 'cancelada'])
             ->where('hora_inicio', '>=', $desde->format('H:i:s'))
             ->get()
             ->reject(fn (Reserva $r) => $r->estado === 'activa' && $this->liberarSiVencida($r))
@@ -341,7 +360,7 @@ class ReservaSalaService
     {
         $reservas = Reserva::with('participantes:id,nombre,apellido,rut')
             ->where('fecha', $fecha)
-            ->where('estado', '!=', 'no_show')
+            ->whereNotIn('estado', ['no_show', 'cancelada'])
             ->get()
             ->reject(fn (Reserva $r) => $this->liberarSiVencida($r))
             ->values();
@@ -397,6 +416,7 @@ class ReservaSalaService
         $idsConflicto = Reserva::where('fecha', $fecha)
             ->where('hora_inicio', '<', $horaFin)
             ->where('hora_fin', '>', $horaInicio)
+            ->whereIn('estado', ['activa', 'finalizada'])
             ->when($ignorarReservaId, fn ($query) => $query->where('id', '!=', $ignorarReservaId))
             ->whereHas('participantes', fn ($q) => $q->whereIn('usuarios.id', $idPorRut->values()))
             ->with(['participantes' => fn ($q) => $q->whereIn('usuarios.id', $idPorRut->values())])

@@ -223,13 +223,14 @@ class PortalController extends Controller
         return response()->json($reserva, 201);
     }
 
+    /** Soft delete vía estado — ver SalaController::destroyReserva() para el detalle. */
     public function cancelarReservaSala(Request $request, Reserva $reserva)
     {
         if ($reserva->usuario_id !== $request->user()->id) {
             return response()->json(['message' => 'Solo puedes cancelar tus propias reservas'], 403);
         }
 
-        $reserva->delete();
+        $reserva->update(['estado' => 'cancelada']);
 
         return response()->json(null, 204);
     }

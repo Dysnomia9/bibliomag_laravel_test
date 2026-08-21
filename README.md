@@ -227,7 +227,7 @@ npm run dev
 
 ## Tests y benchmark de rendimiento
 
-Hay una suite de Feature tests (`backend/tests/Feature/`, 222 tests al
+Hay una suite de Feature tests (`backend/tests/Feature/`, 231 tests al
 2026-08-21) que cubre login de staff/usuario, registro de entradas (incluido
 el modo búsqueda por rango de fechas y RUT/nombre) y su historial, reservas
 de sala en horario continuo (inicio libre + duración de hasta 2 horas,

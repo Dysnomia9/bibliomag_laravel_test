@@ -400,11 +400,12 @@ frontend/
   `SalaDevolucionTest`, `SalaReservaTest`, `StaffAtribucionTest`,
   `TipoMaterialTest`, `UsuarioAuthTest`), corren contra una DB Postgres
   dedicada (`biblioteca_test`, ver `docker-entrypoint.sh`) con
-  `docker compose exec backend php artisan test` — 222 tests al
+  `docker compose exec backend php artisan test` — 231 tests al
   2026-08-21 (197 al 2026-08-19; ver las entradas de Gotchas fechadas
   2026-08-21 para el detalle de cada salto — horario continuo de salas,
-  el bloqueo de préstamos concurrentes, y el permiso de admin para
-  agendar en horas pasadas). La catalogación de libros, el split Libro/Ejemplar, el
+  el bloqueo de préstamos concurrentes, el permiso de admin para
+  agendar en horas pasadas, y el soft delete de reservas de sala). La
+  catalogación de libros, el split Libro/Ejemplar, el
   cambio masivo de estado y el flujo completo de confirmación de
   asistencia de sala ya tienen cobertura completa. **Ojo**: hasta
   2026-08-19 `phpunit.xml` declaraba un testsuite "Unit" apuntando a
@@ -1799,6 +1800,62 @@ frontend/
   Verificado además con `curl` real: login como staff no-admin (creado
   y borrado solo para la prueba) rechazado con 422, mismo intento como
   admin aceptado con 201.
+- **Cancelar una reserva de sala borraba la fila (hard delete) — pasó a
+  soft delete** (2026-08-21, mismo día que las entradas anteriores):
+  `SalaController::destroyReserva()` y `PortalController::
+  cancelarReservaSala()` hacían `$reserva->delete()` — la reserva
+  cancelada desaparecía sin dejar rastro, inconsistente con el resto del
+  sistema (`Usuario.activo`, `Equipo.activo`, `Staff.activo`, etc., todos
+  con baja lógica en vez de DELETE real). Ahora ambos hacen
+  `$reserva->update(['estado' => 'cancelada'])`. La ruta y el contrato
+  HTTP no cambiaron (`DELETE /reservas/{id}` y `DELETE /mi/reservas/{id}`
+  siguen devolviendo 204 sin body) — solo cambió qué pasa puertas
+  adentro.
+  - **`reservas.estado` nunca tuvo CHECK constraint** (a diferencia de
+    `prestamos.estado`/`reservas_libro.estado`/etc., ver
+    `EnumCheckConstraintsTest`) — quedó afuera del lote original por lo
+    visto. Se agregó ahora junto con `'cancelada'`
+    (`2026_08_21_000002_add_check_constraint_to_reservas_estado`, valores
+    válidos: `activa`, `finalizada`, `no_show`, `cancelada`).
+  - **Que la fila persista rompía todo lo que antes asumía "si no existe,
+    no bloquea"**: `existeSolapamiento()` y
+    `participanteConReservaSolapada()` no filtraban por `estado` en
+    absoluto (dependían de que el DELETE hiciera desaparecer lo que no
+    debía bloquear) — con `cancelada` persistiendo, una reserva recién
+    cancelada habría seguido bloqueando el mismo tramo para siempre. Se
+    agregó `whereIn('estado', ['activa', 'finalizada'])` a ambas — de
+    paso corrige un bug latente preexistente con `no_show` (una fila ya
+    `no_show` de un request *anterior* también bloqueaba para siempre;
+    antes solo se liberaba si `liberarSiVencida()` la convertía de
+    'activa' a 'no_show' *en el mismo request* que la consultaba). Mismo
+    criterio aplicado a `vistaDelDia()` y a las dos queries de
+    `duracionMaximaDisponible()` (antes excluían solo `no_show`, ahora
+    también `cancelada` vía `whereNotIn`). `participanteExcedeCuotaDiaria()`
+    no necesitó cambios — ya filtraba `whereIn(['activa','finalizada'])`
+    desde antes.
+  - **`registrarLlegada()`/`registrarDevolucion()` no chequeaban
+    `estado`** — antes esto no importaba porque una reserva cancelada ya
+    no existía (el route model binding de `{reserva}` habría dado 404
+    solo). Con la fila persistiendo, alguien podía en teoría confirmar
+    llegada o devolución sobre una reserva ya cancelada y corromper su
+    estado. Se agregó `if ($reserva->estado !== 'activa') throw ...` al
+    principio de ambos métodos.
+  - **`ReporteController` (tab `logias`) no filtraba por estado en
+    absoluto** — antes no hacía falta (cancelada = fila inexistente = no
+    contaba sola). Se agregó `->where('estado', '!=', 'cancelada')` para
+    preservar el comportamiento de reportería de siempre (una reserva
+    cancelada nunca debería contar como demanda real). `porSala`/
+    `porHoraPorSala` se derivan de la misma query, así que el fix les
+    llega gratis, sin tocarlos aparte.
+  - **`SalaConfirmacionAsistenciaTest`/`SalaReservaTest`/
+    `PortalReservaTest` no necesitaron ajustes** por este cambio en
+    particular (nada ahí asumía hard delete) — se agregaron tests nuevos
+    en vez de modificar los existentes.
+  - Verificado con `curl` real contra la BD de desarrollo (no solo
+    tests): crear → cancelar → confirmar que la fila sigue existiendo con
+    `estado = 'cancelada'` → confirmar que ya no aparece en `GET /salas`
+    → re-reservar el mismo tramo de inmediato con éxito. Migración
+    probada con `migrate` → `rollback` → `migrate` sin errores.
 
 ## Checklist antes de dar un módulo por terminado
 

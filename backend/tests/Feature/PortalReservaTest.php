@@ -20,6 +20,24 @@ class PortalReservaTest extends TestCase
         parent::tearDown();
     }
 
+    public function test_usuario_puede_cancelar_su_propia_reserva_y_no_se_borra_la_fila(): void
+    {
+        $usuario = Usuario::factory()->create();
+        $sala = Sala::factory()->create();
+        $reserva = Reserva::factory()->conParticipantes([$usuario])->create([
+            'sala_id' => $sala->id,
+            'usuario_id' => $usuario->id,
+            'rut_usuario' => $usuario->rut,
+            'cantidad_personas' => 1,
+        ]);
+
+        Sanctum::actingAs($usuario);
+        $response = $this->deleteJson("/api/mi/reservas/{$reserva->id}");
+
+        $response->assertStatus(204);
+        $this->assertDatabaseHas('reservas', ['id' => $reserva->id, 'estado' => 'cancelada']);
+    }
+
     public function test_usuario_no_puede_cancelar_reserva_que_no_le_pertenece(): void
     {
         $dueno = Usuario::factory()->create();

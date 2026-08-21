@@ -6,6 +6,7 @@ use App\Models\Ejemplar;
 use App\Models\Equipo;
 use App\Models\Libro;
 use App\Models\Prestamo;
+use App\Models\Reserva;
 use App\Models\ReservaLibro;
 use App\Models\Usuario;
 use Illuminate\Database\QueryException;
@@ -66,6 +67,18 @@ class EnumCheckConstraintsTest extends TestCase
     {
         $this->expectException(QueryException::class);
         ReservaLibro::factory()->create(['estado' => 'invalido']);
+    }
+
+    public function test_reservas_estado_invalido_falla_a_nivel_de_base_de_datos(): void
+    {
+        $this->expectException(QueryException::class);
+        Reserva::factory()->create(['estado' => 'invalido']);
+    }
+
+    public function test_reservas_estado_cancelada_es_valido(): void
+    {
+        $reserva = Reserva::factory()->create(['estado' => 'cancelada']);
+        $this->assertSame('cancelada', $reserva->estado);
     }
 
     public function test_equipos_tipo_invalido_falla_a_nivel_de_base_de_datos(): void

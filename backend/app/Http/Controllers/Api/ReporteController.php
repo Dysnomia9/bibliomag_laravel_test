@@ -58,7 +58,11 @@ class ReporteController extends Controller
                 ]);
             })(),
             'logias' => (function () use ($aplicarFiltros) {
-                $query = Reserva::with(['usuario', 'sala']);
+                // 'cancelada' se excluye a propósito: antes de que cancelar pasara a ser
+                // soft delete (ver SalaController::destroyReserva()), una reserva
+                // cancelada se borraba de la tabla y nunca aparecía acá — este filtro
+                // preserva ese mismo comportamiento ahora que la fila persiste.
+                $query = Reserva::with(['usuario', 'sala'])->where('estado', '!=', 'cancelada');
                 $aplicarFiltros($query);
 
                 return $query->get()->map(fn ($r) => [
